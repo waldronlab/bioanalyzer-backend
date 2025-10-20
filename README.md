@@ -321,18 +321,3 @@ curl -X GET "http://localhost:8000/health"
 4. Add tests
 5. Submit a pull request
 
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
-
-## Support
-
-- **Documentation**: https://github.com/your-repo/bioanalyzer-backend/docs
-- **Issues**: https://github.com/your-repo/bioanalyzer-backend/issues
-- **Email**: team@bioanalyzer.org
-
-## Acknowledgments
-
-- BugSigDB team for field requirements
-- Bioconductor community for inspiration
-- Waldron Lab for research support
