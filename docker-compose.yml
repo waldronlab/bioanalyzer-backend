@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  bioanalyzer-backend:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - UVICORN_RELOAD=false
+      - LOG_LEVEL=info
+    volumes:
+      - ./cache:/app/cache
+      - ./logs:/app/logs
+      - ./results:/app/results
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+
+  # Optional: Add a database service if needed
+  # redis:
+  #   image: redis:7-alpine
+  #   ports:
+  #     - "6379:6379"
+  #   volumes:
+  #     - redis_data:/data
+  #   restart: unless-stopped
+
+# volumes:
+#   redis_data:
