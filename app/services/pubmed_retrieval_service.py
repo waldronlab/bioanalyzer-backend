@@ -4,6 +4,10 @@ PubMed Full Text Retrieval Service
 
 This service provides comprehensive PubMed paper retrieval capabilities including
 full text extraction from PubMed Central (PMC) when available.
+
+The service acts as a high-level wrapper around the PubMedRetriever class,
+providing additional functionality like batch processing, file operations,
+and result formatting.
 """
 
 import logging
@@ -13,22 +17,50 @@ from typing import Dict, Any, Optional, List
 from pathlib import Path
 from datetime import datetime
 
-from app.services.data_retrieval import PubMedRetriever
-from app.utils.config import NCBI_API_KEY
+# Import with fallback configuration
+try:
+    from app.services.data_retrieval import PubMedRetriever
+    from app.utils.config import NCBI_API_KEY
+except ImportError:
+    # Fallback if config is not available
+    NCBI_API_KEY = None
+    PubMedRetriever = None
 
 logger = logging.getLogger(__name__)
+
+
+class PubMedRetrievalServiceError(Exception):
+    """Custom exception for PubMed retrieval service errors."""
+    pass
 
 
 class PubMedRetrievalService:
     """
     Service for retrieving full paper data from PubMed including metadata and full text.
+    
+    This service provides a high-level interface for paper retrieval with additional
+    features like batch processing, file operations, and result formatting.
     """
     
     def __init__(self, api_key: Optional[str] = None):
+        """
+        Initialize the PubMed retrieval service.
+        
+        Args:
+            api_key: Optional NCBI API key for higher rate limits
+        """
         self.api_key = api_key or NCBI_API_KEY
-        self.retriever = PubMedRetriever(api_key=self.api_key)
         self.results_dir = Path("results")
         self.results_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Initialize retriever with error handling
+        try:
+            if PubMedRetriever is None:
+                raise PubMedRetrievalServiceError("PubMedRetriever not available")
+            self.retriever = PubMedRetriever(api_key=self.api_key)
+        except Exception as e:
+            logger.error(f"Failed to initialize PubMedRetriever: {e}")
+            raise PubMedRetrievalServiceError(f"Service initialization failed: {e}")
     
     async def retrieve_paper(self, pmid: str, save_to_file: bool = False) -> Dict[str, Any]:
         """

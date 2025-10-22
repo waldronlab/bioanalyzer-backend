@@ -1,30 +1,68 @@
+"""
+PubMed Data Retrieval Service
+=============================
+
+This module provides comprehensive PubMed data retrieval capabilities including
+metadata extraction and full text retrieval from PubMed Central (PMC).
+"""
+
 import requests
 import time
 import asyncio
 import logging
 from typing import List, Dict, Any, Optional
 from xml.etree import ElementTree
-from app.utils.config import NCBI_RATE_LIMIT_DELAY, API_TIMEOUT, USE_FULLTEXT
+
+# Import configuration with fallback values
+try:
+    from app.utils.config import NCBI_RATE_LIMIT_DELAY, API_TIMEOUT, USE_FULLTEXT
+except ImportError:
+    # Fallback configuration if config module is not available
+    NCBI_RATE_LIMIT_DELAY = 0.34
+    API_TIMEOUT = 30
+    USE_FULLTEXT = True
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
+class PubMedRetrieverError(Exception):
+    """Custom exception for PubMed retrieval errors."""
+    pass
+
+
 class PubMedRetriever:
     """
     Retrieves paper metadata and abstracts from PubMed using the NCBI E-Utilities API.
-    Includes robust error handling and connectivity validation.
+    
+    This class provides comprehensive PubMed data retrieval capabilities including
+    metadata extraction, full text retrieval from PubMed Central, and robust error
+    handling for network issues and API limitations.
     """
 
     BASE_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
+    DEFAULT_TIMEOUT = 10
+    MAX_RETRIES = 3
 
     def __init__(self, api_key: Optional[str] = None, email: str = "bioanalyzer@example.com"):
+        """
+        Initialize the PubMed retriever.
+        
+        Args:
+            api_key: Optional NCBI API key for higher rate limits
+            email: Contact email for NCBI (required for API usage)
+        """
         self.api_key = api_key
         self.email = email
-        self.session = requests.Session()
-        self.session.headers.update({
+        self.session = self._create_session()
+        self._verify_connectivity()
+    
+    def _create_session(self) -> requests.Session:
+        """Create a configured requests session."""
+        session = requests.Session()
+        session.headers.update({
             "User-Agent": f"BioAnalyzer/1.0 (contact: {self.email})"
         })
-        self._verify_connectivity()
+        return session
 
     def _verify_connectivity(self, retries: int = 3) -> None:
         """
@@ -52,32 +90,81 @@ class PubMedRetriever:
                         "The app will continue with limited functionality (e.g., cached data only)."
                     )
 
-    def _get(self, endpoint: str, params: Dict[str, Any], retries: int = 3) -> Optional[str]:
+    def _make_request(self, endpoint: str, params: Dict[str, Any], retries: int = None) -> Optional[str]:
+        """
+        Make a request to NCBI E-utilities with retry logic and rate limiting.
+        
+        Args:
+            endpoint: The E-utilities endpoint to call
+            params: Parameters for the request
+            retries: Number of retry attempts (defaults to MAX_RETRIES)
+            
+        Returns:
+            Response text or None if all retries failed
+        """
+        if retries is None:
+            retries = self.MAX_RETRIES
+            
         url = f"{self.BASE_URL}/{endpoint}"
-        if self.api_key:
-            params["api_key"] = self.api_key
-        params["email"] = self.email
-        params["tool"] = "BioAnalyzer"
-
+        params = self._prepare_request_params(params)
+        
         for attempt in range(retries):
             try:
-                time.sleep(max(NCBI_RATE_LIMIT_DELAY, 0.0))
-                per_request_timeout = min(API_TIMEOUT or 30, 8)
-                response = self.session.get(url, params=params, timeout=(5, per_request_timeout))
+                self._apply_rate_limiting()
+                response = self._execute_request(url, params)
                 response.raise_for_status()
                 return response.text
             except requests.exceptions.RequestException as e:
-                status = getattr(e.response, "status_code", None) if hasattr(e, "response") else None
-                logger.warning(
-                    f"NCBI request failed (attempt {attempt+1}/{retries}): {e} "
-                    f"{'(rate limited)' if status == 429 else ''}"
-                )
-                if attempt < retries - 1:
-                    backoff = (2 ** attempt) * (1.0 if status != 429 else 2.0)
-                    time.sleep(backoff)
-                    continue
-                logger.error(f"❌ PubMed request failed after {retries} attempts: {e}")
-                return None
+                if not self._handle_request_error(e, attempt, retries):
+                    return None
+        
+        logger.error(f"All retry attempts failed for {endpoint}")
+        return None
+    
+    def _prepare_request_params(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Prepare request parameters with required fields."""
+        if self.api_key:
+            params["api_key"] = self.api_key
+        params.update({
+            "email": self.email,
+            "tool": "BioAnalyzer"
+        })
+        return params
+    
+    def _apply_rate_limiting(self):
+        """Apply NCBI rate limiting."""
+        delay = max(NCBI_RATE_LIMIT_DELAY, 0.0)
+        time.sleep(delay)
+    
+    def _execute_request(self, url: str, params: Dict[str, Any]) -> requests.Response:
+        """Execute the HTTP request."""
+        timeout = min(API_TIMEOUT or 30, 8)
+        return self.session.get(url, params=params, timeout=(5, timeout))
+    
+    def _handle_request_error(self, error: requests.exceptions.RequestException, 
+                            attempt: int, max_retries: int) -> bool:
+        """Handle request errors and determine if retry should continue."""
+        status = getattr(error.response, "status_code", None) if hasattr(error, "response") else None
+        is_rate_limited = status == 429
+        
+        logger.warning(
+            f"NCBI request failed (attempt {attempt+1}/{max_retries}): {error} "
+            f"{'(rate limited)' if is_rate_limited else ''}"
+        )
+        
+        if attempt < max_retries - 1:
+            backoff_time = self._calculate_backoff_time(attempt, is_rate_limited)
+            time.sleep(backoff_time)
+            return True
+        
+        logger.error(f"❌ PubMed request failed after {max_retries} attempts: {error}")
+        return False
+    
+    def _calculate_backoff_time(self, attempt: int, is_rate_limited: bool) -> float:
+        """Calculate backoff time for retries."""
+        base_time = 2 ** attempt
+        multiplier = 2.0 if is_rate_limited else 1.0
+        return base_time * multiplier
 
     @staticmethod
     def validate_field(field: Any) -> bool:
@@ -85,7 +172,7 @@ class PubMedRetriever:
         return bool(field and str(field).strip())
 
     def fetch_paper_metadata(self, pmid: str) -> Dict[str, Any]:
-        xml_data = self._get("efetch.fcgi", {"db": "pubmed", "id": pmid, "retmode": "xml"})
+        xml_data = self._make_request("efetch.fcgi", {"db": "pubmed", "id": pmid, "retmode": "xml"})
 
         if not xml_data:
             logger.error(f"❌ No data returned from PubMed for PMID {pmid}.")
@@ -127,7 +214,7 @@ class PubMedRetriever:
 
         # fallback to esummary
         try:
-            xml_sum = self._get("esummary.fcgi", {"db": "pubmed", "id": pmid, "retmode": "xml"})
+            xml_sum = self._make_request("esummary.fcgi", {"db": "pubmed", "id": pmid, "retmode": "xml"})
             if not xml_sum:
                 return {"error": "Failed to retrieve esummary fallback."}
             root = ElementTree.fromstring(xml_sum)
@@ -152,7 +239,7 @@ class PubMedRetriever:
             return {"error": "Fallback retrieval failed."}
 
     def search(self, query: str, max_results: int = 10) -> List[str]:
-        xml_data = self._get("esearch.fcgi", {
+        xml_data = self._make_request("esearch.fcgi", {
             "db": "pubmed", "term": query, "retmax": max_results, "retmode": "xml"
         })
         if not xml_data:
@@ -190,7 +277,7 @@ class PubMedRetriever:
     def _get_pmc_id_from_pmid(self, pmid: str) -> Optional[str]:
         """Get PMC ID from PMID using ELink."""
         try:
-            xml_data = self._get("elink.fcgi", {
+            xml_data = self._make_request("elink.fcgi", {
                 "dbfrom": "pubmed",
                 "db": "pmc",
                 "id": pmid,
@@ -220,7 +307,7 @@ class PubMedRetriever:
             # Remove PMC prefix if present
             clean_id = pmc_id.replace("PMC", "") if pmc_id.startswith("PMC") else pmc_id
             
-            xml_data = self._get("efetch.fcgi", {
+            xml_data = self._make_request("efetch.fcgi", {
                 "db": "pmc",
                 "id": clean_id,
                 "retmode": "xml"

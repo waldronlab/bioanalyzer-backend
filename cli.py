@@ -642,234 +642,142 @@ class BioAnalyzerCLI:
                            output_file: Optional[str] = None, save_to_file: bool = False):
         """Retrieve papers and return results."""
         try:
-            # Use standalone retriever to avoid dependency issues
-            retriever = self._create_standalone_retriever()
-            
-            results = []
-            total = len(pmids)
-            
-            print(f"📥 Retrieving {total} paper(s)...")
-            
-            # Retrieve papers
-            paper_data_list = []
-            for pmid in pmids:
-                try:
-                    paper_data = retriever.get_full_paper_data(pmid)
-                    paper_data_list.append(paper_data)
-                except Exception as e:
-                    paper_data_list.append({
-                        "pmid": pmid,
-                        "error": f"Retrieval failed: {str(e)}",
-                        "retrieval_timestamp": time.time()
-                    })
-            
-            for i, paper_data in enumerate(paper_data_list, 1):
-                pmid = paper_data.get('pmid', 'unknown')
-                print(f"[{i}/{total}] Retrieved PMID: {pmid}")
-                
-                if "error" in paper_data:
-                    print(f"❌ Retrieval failed for PMID {pmid}: {paper_data['error']}")
-                else:
-                    print(f"✅ Successfully retrieved PMID {pmid}")
-                    if paper_data.get('has_full_text'):
-                        print(f"   📖 Full text available")
-                    else:
-                        print(f"   📄 Abstract only")
-                
-                # Save individual file if requested
-                if save_to_file:
-                    self._save_individual_paper(paper_data)
-                
-                results.append(paper_data)
-            
-            if results:
-                if output_file:
-                    self.save_retrieval_results(results, output_file, output_format)
-                else:
-                    self.display_retrieval_results(results, output_format)
-            else:
-                print("❌ No results obtained.")
-                
+            retriever = self._get_pubmed_retriever()
+            results = self._fetch_papers_data(retriever, pmids)
+            self._process_retrieval_results(results, output_format, output_file, save_to_file)
         except Exception as e:
-            print(f"❌ Error: {e}")
-            print("Please check your internet connection and try again.")
+            self._handle_retrieval_error(e)
+    
+    def _get_pubmed_retriever(self):
+        """Get a PubMed retriever instance."""
+        try:
+            from app.services.standalone_pubmed_retriever import StandalonePubMedRetriever
+            return StandalonePubMedRetriever()
+        except ImportError:
+            # Fallback to inline implementation
+            return self._create_standalone_retriever()
+    
+    def _fetch_papers_data(self, retriever, pmids: List[str]) -> List[Dict[str, Any]]:
+        """Fetch paper data for all PMIDs."""
+        total = len(pmids)
+        print(f"📥 Retrieving {total} paper(s)...")
+        
+        results = []
+        for i, pmid in enumerate(pmids, 1):
+            paper_data = self._fetch_single_paper(retriever, pmid)
+            self._log_retrieval_progress(i, total, paper_data)
+            results.append(paper_data)
+        
+        return results
+    
+    def _fetch_single_paper(self, retriever, pmid: str) -> Dict[str, Any]:
+        """Fetch data for a single paper."""
+        try:
+            return retriever.get_full_paper_data(pmid)
+        except Exception as e:
+            return {
+                "pmid": pmid,
+                "error": f"Retrieval failed: {str(e)}",
+                "retrieval_timestamp": time.time()
+            }
+    
+    def _log_retrieval_progress(self, current: int, total: int, paper_data: Dict[str, Any]):
+        """Log the progress of paper retrieval."""
+        pmid = paper_data.get('pmid', 'unknown')
+        print(f"[{current}/{total}] Retrieved PMID: {pmid}")
+        
+        if "error" in paper_data:
+            print(f"❌ Retrieval failed for PMID {pmid}: {paper_data['error']}")
+        else:
+            print(f"✅ Successfully retrieved PMID {pmid}")
+            if paper_data.get('has_full_text'):
+                print(f"   📖 Full text available")
+            else:
+                print(f"   📄 Abstract only")
+    
+    def _process_retrieval_results(self, results: List[Dict[str, Any]], output_format: str, 
+                                 output_file: Optional[str], save_to_file: bool):
+        """Process and output the retrieval results."""
+        if not results:
+            print("❌ No results obtained.")
+            return
+        
+        if save_to_file:
+            self._save_individual_papers(results)
+        
+        if output_file:
+            self.save_retrieval_results(results, output_file, output_format)
+        else:
+            self.display_retrieval_results(results, output_format)
+    
+    def _save_individual_papers(self, results: List[Dict[str, Any]]):
+        """Save individual papers to separate files."""
+        for paper_data in results:
+            if "error" not in paper_data:
+                self._save_individual_paper(paper_data)
+    
+    def _handle_retrieval_error(self, error: Exception):
+        """Handle retrieval errors."""
+        print(f"❌ Error: {error}")
+        print("Please check your internet connection and try again.")
     
     def _create_standalone_retriever(self):
-        """Create a standalone PubMed retriever."""
+        """Create a fallback standalone PubMed retriever."""
+        # This is a minimal fallback implementation
+        # The main implementation is in standalone_pubmed_retriever.py
         import requests
         from xml.etree import ElementTree
         
-        class StandalonePubMedRetriever:
-            BASE_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
-            
-            def __init__(self, api_key: Optional[str] = None, email: str = "bioanalyzer@example.com"):
-                self.api_key = api_key
-                self.email = email
+        class FallbackRetriever:
+            def __init__(self):
                 self.session = requests.Session()
                 self.session.headers.update({
-                    "User-Agent": f"BioAnalyzer/1.0 (contact: {self.email})"
+                    "User-Agent": "BioAnalyzer/1.0 (contact: bioanalyzer@example.com)"
                 })
-            
-            def _get(self, endpoint: str, params: Dict[str, Any], retries: int = 3) -> Optional[str]:
-                url = f"{self.BASE_URL}/{endpoint}"
-                if self.api_key:
-                    params["api_key"] = self.api_key
-                params["email"] = self.email
-                params["tool"] = "BioAnalyzer"
-                
-                for attempt in range(retries):
-                    try:
-                        time.sleep(0.34)  # Rate limiting
-                        response = self.session.get(url, params=params, timeout=10)
-                        response.raise_for_status()
-                        return response.text
-                    except requests.exceptions.RequestException as e:
-                        if attempt < retries - 1:
-                            time.sleep(2 ** attempt)
-                            continue
-                        return None
-            
-            def fetch_paper_metadata(self, pmid: str) -> Dict[str, Any]:
-                xml_data = self._get("efetch.fcgi", {"db": "pubmed", "id": pmid, "retmode": "xml"})
-                
-                if not xml_data:
-                    return {"error": "PubMed unreachable or invalid response."}
-                
-                try:
-                    root = ElementTree.fromstring(xml_data)
-                    article = root.find(".//PubmedArticle/MedlineCitation/Article")
-                    if article is None:
-                        return {"error": "No article metadata found."}
-                    
-                    title = article.findtext("ArticleTitle", default="N/A")
-                    abstract = " ".join([t.text for t in article.findall(".//AbstractText") if t.text])
-                    journal = article.findtext("Journal/Title", default="N/A")
-                    authors = [
-                        f"{a.findtext('ForeName', default='')} {a.findtext('LastName', default='')}".strip()
-                        for a in article.findall(".//Author")
-                        if a.findtext("LastName") is not None
-                    ]
-                    
-                    metadata = {
-                        "pmid": pmid,
-                        "title": title,
-                        "abstract": abstract,
-                        "journal": journal,
-                        "authors": authors,
-                    }
-                    
-                    pub_date = article.findtext("Journal/JournalIssue/PubDate/Year") \
-                                   or article.findtext("ArticleDate/Year")
-                    if pub_date:
-                        metadata["publication_date"] = pub_date
-                    
-                    return metadata
-                    
-                except ElementTree.ParseError as e:
-                    return {"error": f"XML parsing failed: {e}"}
-            
-            def get_pmc_fulltext(self, pmid: str) -> str:
-                try:
-                    pmc_id = self._get_pmc_id_from_pmid(pmid)
-                    if not pmc_id:
-                        return ""
-                    return self._get_pmc_fulltext_by_id(pmc_id)
-                except Exception:
-                    return ""
-            
-            def _get_pmc_id_from_pmid(self, pmid: str) -> Optional[str]:
-                try:
-                    xml_data = self._get("elink.fcgi", {
-                        "dbfrom": "pubmed",
-                        "db": "pmc",
-                        "id": pmid,
-                        "retmode": "xml"
-                    })
-                    
-                    if not xml_data:
-                        return None
-                        
-                    root = ElementTree.fromstring(xml_data)
-                    for linksetdb in root.findall(".//LinkSetDb"):
-                        if linksetdb.get("DbTo") == "pmc":
-                            for id_elem in linksetdb.findall(".//Id"):
-                                pmc_id = id_elem.text
-                                if pmc_id and pmc_id.startswith("PMC"):
-                                    return pmc_id
-                    return None
-                except Exception:
-                    return None
-            
-            def _get_pmc_fulltext_by_id(self, pmc_id: str) -> str:
-                try:
-                    clean_id = pmc_id.replace("PMC", "") if pmc_id.startswith("PMC") else pmc_id
-                    xml_data = self._get("efetch.fcgi", {
-                        "db": "pmc",
-                        "id": clean_id,
-                        "retmode": "xml"
-                    })
-                    
-                    if not xml_data:
-                        return ""
-                        
-                    root = ElementTree.fromstring(xml_data)
-                    full_text_parts = []
-                    
-                    title = root.findtext(".//article-title")
-                    if title:
-                        full_text_parts.append(f"Title: {title}")
-                    
-                    abstract = root.findtext(".//abstract")
-                    if abstract:
-                        full_text_parts.append(f"Abstract: {abstract}")
-                    
-                    body = root.find(".//body")
-                    if body is not None:
-                        paragraphs = []
-                        for p in body.findall(".//p"):
-                            if p.text:
-                                paragraphs.append(p.text.strip())
-                        if paragraphs:
-                            full_text_parts.append(f"Full Text: {' '.join(paragraphs)}")
-                    
-                    return "\n\n".join(full_text_parts)
-                except Exception:
-                    return ""
             
             def get_full_paper_data(self, pmid: str) -> Dict[str, Any]:
                 try:
-                    metadata = self.fetch_paper_metadata(pmid)
-                    if "error" in metadata:
-                        return metadata
-                    
-                    full_text = self.get_pmc_fulltext(pmid)
-                    
-                    return {
-                        "pmid": pmid,
-                        "title": metadata.get("title", ""),
-                        "abstract": metadata.get("abstract", ""),
-                        "journal": metadata.get("journal", ""),
-                        "authors": metadata.get("authors", []),
-                        "publication_date": metadata.get("publication_date", ""),
-                        "full_text": full_text,
-                        "has_full_text": bool(full_text.strip()),
-                        "retrieval_timestamp": time.time()
+                    # Simple metadata retrieval as fallback
+                    url = f"https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi"
+                    params = {
+                        "db": "pubmed",
+                        "id": pmid,
+                        "retmode": "xml",
+                        "email": "bioanalyzer@example.com",
+                        "tool": "BioAnalyzer"
                     }
-                except Exception as e:
+                    
+                    response = self.session.get(url, params=params, timeout=10)
+                    response.raise_for_status()
+                    
+                    root = ElementTree.fromstring(response.text)
+                    article = root.find(".//PubmedArticle/MedlineCitation/Article")
+                    
+                    if article is None:
+                        return {"pmid": pmid, "error": "No article found"}
+                    
+                    title = article.findtext("ArticleTitle", default="N/A")
+                    journal = article.findtext("Journal/Title", default="N/A")
+                    
                     return {
                         "pmid": pmid,
-                        "error": f"Failed to retrieve paper data: {str(e)}",
-                        "title": "",
+                        "title": title,
                         "abstract": "",
-                        "journal": "",
+                        "journal": journal,
                         "authors": [],
                         "publication_date": "",
                         "full_text": "",
                         "has_full_text": False,
                         "retrieval_timestamp": time.time()
                     }
+                except Exception as e:
+                    return {
+                        "pmid": pmid,
+                        "error": f"Retrieval failed: {str(e)}",
+                        "retrieval_timestamp": time.time()
+                    }
         
-        return StandalonePubMedRetriever()
+        return FallbackRetriever()
     
     def _save_individual_paper(self, paper_data: Dict[str, Any]) -> str:
         """Save individual paper data to a JSON file."""
