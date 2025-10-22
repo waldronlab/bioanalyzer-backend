@@ -168,6 +168,154 @@ class PubMedRetriever:
     async def get_paper_metadata_async(self, pmid: str) -> Dict[str, Any]:
         return await asyncio.to_thread(self.fetch_paper_metadata, pmid)
 
+    def get_pmc_fulltext(self, pmid: str) -> str:
+        """
+        Retrieve full text from PubMed Central (PMC) if available.
+        This method attempts to find the PMC ID and retrieve the full text.
+        """
+        try:
+            # First, try to get PMC ID from PubMed
+            pmc_id = self._get_pmc_id_from_pmid(pmid)
+            if not pmc_id:
+                logger.info(f"No PMC ID found for PMID {pmid}")
+                return ""
+            
+            # Retrieve full text from PMC
+            return self._get_pmc_fulltext_by_id(pmc_id)
+            
+        except Exception as e:
+            logger.warning(f"Error retrieving full text for PMID {pmid}: {e}")
+            return ""
+
+    def _get_pmc_id_from_pmid(self, pmid: str) -> Optional[str]:
+        """Get PMC ID from PMID using ELink."""
+        try:
+            xml_data = self._get("elink.fcgi", {
+                "dbfrom": "pubmed",
+                "db": "pmc",
+                "id": pmid,
+                "retmode": "xml"
+            })
+            
+            if not xml_data:
+                return None
+                
+            root = ElementTree.fromstring(xml_data)
+            # Look for LinkSetDb with PMC links
+            for linksetdb in root.findall(".//LinkSetDb"):
+                if linksetdb.get("DbTo") == "pmc":
+                    for id_elem in linksetdb.findall(".//Id"):
+                        pmc_id = id_elem.text
+                        if pmc_id and pmc_id.startswith("PMC"):
+                            return pmc_id
+            return None
+            
+        except Exception as e:
+            logger.warning(f"Error getting PMC ID for PMID {pmid}: {e}")
+            return None
+
+    def _get_pmc_fulltext_by_id(self, pmc_id: str) -> str:
+        """Retrieve full text from PMC using PMC ID."""
+        try:
+            # Remove PMC prefix if present
+            clean_id = pmc_id.replace("PMC", "") if pmc_id.startswith("PMC") else pmc_id
+            
+            xml_data = self._get("efetch.fcgi", {
+                "db": "pmc",
+                "id": clean_id,
+                "retmode": "xml"
+            })
+            
+            if not xml_data:
+                return ""
+                
+            root = ElementTree.fromstring(xml_data)
+            
+            # Extract full text from PMC XML
+            full_text_parts = []
+            
+            # Get article title
+            title = root.findtext(".//article-title")
+            if title:
+                full_text_parts.append(f"Title: {title}")
+            
+            # Get abstract
+            abstract = root.findtext(".//abstract")
+            if abstract:
+                full_text_parts.append(f"Abstract: {abstract}")
+            
+            # Get body text
+            body = root.find(".//body")
+            if body is not None:
+                # Extract text from all paragraphs
+                paragraphs = []
+                for p in body.findall(".//p"):
+                    if p.text:
+                        paragraphs.append(p.text.strip())
+                if paragraphs:
+                    full_text_parts.append(f"Full Text: {' '.join(paragraphs)}")
+            
+            return "\n\n".join(full_text_parts)
+            
+        except Exception as e:
+            logger.warning(f"Error retrieving PMC full text for {pmc_id}: {e}")
+            return ""
+
+    async def get_pmc_fulltext_async(self, pmid: str) -> str:
+        """Async wrapper for PMC full text retrieval."""
+        return await asyncio.to_thread(self.get_pmc_fulltext, pmid)
+
+    def get_full_paper_data(self, pmid: str) -> Dict[str, Any]:
+        """
+        Retrieve complete paper data including metadata and full text.
+        This is the main method for comprehensive paper retrieval.
+        """
+        try:
+            logger.info(f"Retrieving full paper data for PMID: {pmid}")
+            
+            # Get metadata
+            metadata = self.fetch_paper_metadata(pmid)
+            if "error" in metadata:
+                return metadata
+            
+            # Get full text
+            full_text = self.get_pmc_fulltext(pmid)
+            
+            # Combine all data
+            paper_data = {
+                "pmid": pmid,
+                "title": metadata.get("title", ""),
+                "abstract": metadata.get("abstract", ""),
+                "journal": metadata.get("journal", ""),
+                "authors": metadata.get("authors", []),
+                "publication_date": metadata.get("publication_date", ""),
+                "full_text": full_text,
+                "has_full_text": bool(full_text.strip()),
+                "retrieval_timestamp": time.time()
+            }
+            
+            logger.info(f"Successfully retrieved paper data for PMID: {pmid}")
+            return paper_data
+            
+        except Exception as e:
+            logger.error(f"Error retrieving full paper data for PMID {pmid}: {e}")
+            return {
+                "pmid": pmid,
+                "error": f"Failed to retrieve paper data: {str(e)}",
+                "title": "",
+                "abstract": "",
+                "journal": "",
+                "authors": [],
+                "publication_date": "",
+                "full_text": "",
+                "has_full_text": False,
+                "retrieval_timestamp": time.time()
+            }
+
+    async def get_full_paper_data_async(self, pmid: str) -> Dict[str, Any]:
+        """Async wrapper for full paper data retrieval."""
+        return await asyncio.to_thread(self.get_full_paper_data, pmid)
+
     async def get_texts_for_analysis_async(self, pmid: str) -> Dict[str, str]:
         async def fetch_metadata():
             try:

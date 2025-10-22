@@ -76,6 +76,11 @@ class BioAnalyzerCLI:
    BioAnalyzer analyze --file <file>    Analyze papers from file
    BioAnalyzer fields                   Show field information
 
+📥 Retrieval Commands:
+   BioAnalyzer retrieve <pmid>          Retrieve full paper text and metadata
+   BioAnalyzer retrieve <pmid1,pmid2>   Retrieve multiple papers
+   BioAnalyzer retrieve --file <file>  Retrieve papers from file
+
 📊 Output Options:
    --format json|csv|table             Output format (default: table)
    --output <file>                     Save results to file
@@ -87,6 +92,9 @@ class BioAnalyzerCLI:
    BioAnalyzer analyze 12345678
    BioAnalyzer analyze 12345678,87654321
    BioAnalyzer analyze --file pmids.txt --format json
+   BioAnalyzer retrieve 12345678
+   BioAnalyzer retrieve 12345678,87654321 --save
+   BioAnalyzer retrieve --file pmids.txt --format json
    BioAnalyzer fields
    BioAnalyzer status
    BioAnalyzer stop
@@ -106,7 +114,7 @@ class BioAnalyzerCLI:
             subprocess.run(["docker", "--version"], capture_output=True, check=True)
             return True
         except (subprocess.CalledProcessError, FileNotFoundError):
-            print("❌ Error: Docker is not installed or not available.")
+            print(" Error: Docker is not installed or not available.")
             print("Please install Docker to use BioAnalyzer.")
             return False
     
@@ -144,11 +152,11 @@ class BioAnalyzerCLI:
                 ], cwd=frontend_dir, check=True)
                 print("✅ Frontend image built successfully!")
             
-            print("🎉 All containers built successfully!")
+            print(" All containers built successfully!")
             return True
             
         except subprocess.CalledProcessError as e:
-            print(f"❌ Error building containers: {e}")
+            print(f" Error building containers: {e}")
             return False
     
     def start_application(self):
@@ -630,6 +638,405 @@ class BioAnalyzerCLI:
    ❌ ABSENT: Information is missing
         """)
 
+    async def retrieve_papers(self, pmids: List[str], output_format: str = 'table', 
+                           output_file: Optional[str] = None, save_to_file: bool = False):
+        """Retrieve papers and return results."""
+        try:
+            # Use standalone retriever to avoid dependency issues
+            retriever = self._create_standalone_retriever()
+            
+            results = []
+            total = len(pmids)
+            
+            print(f"📥 Retrieving {total} paper(s)...")
+            
+            # Retrieve papers
+            paper_data_list = []
+            for pmid in pmids:
+                try:
+                    paper_data = retriever.get_full_paper_data(pmid)
+                    paper_data_list.append(paper_data)
+                except Exception as e:
+                    paper_data_list.append({
+                        "pmid": pmid,
+                        "error": f"Retrieval failed: {str(e)}",
+                        "retrieval_timestamp": time.time()
+                    })
+            
+            for i, paper_data in enumerate(paper_data_list, 1):
+                pmid = paper_data.get('pmid', 'unknown')
+                print(f"[{i}/{total}] Retrieved PMID: {pmid}")
+                
+                if "error" in paper_data:
+                    print(f"❌ Retrieval failed for PMID {pmid}: {paper_data['error']}")
+                else:
+                    print(f"✅ Successfully retrieved PMID {pmid}")
+                    if paper_data.get('has_full_text'):
+                        print(f"   📖 Full text available")
+                    else:
+                        print(f"   📄 Abstract only")
+                
+                # Save individual file if requested
+                if save_to_file:
+                    self._save_individual_paper(paper_data)
+                
+                results.append(paper_data)
+            
+            if results:
+                if output_file:
+                    self.save_retrieval_results(results, output_file, output_format)
+                else:
+                    self.display_retrieval_results(results, output_format)
+            else:
+                print("❌ No results obtained.")
+                
+        except Exception as e:
+            print(f"❌ Error: {e}")
+            print("Please check your internet connection and try again.")
+    
+    def _create_standalone_retriever(self):
+        """Create a standalone PubMed retriever."""
+        import requests
+        from xml.etree import ElementTree
+        
+        class StandalonePubMedRetriever:
+            BASE_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
+            
+            def __init__(self, api_key: Optional[str] = None, email: str = "bioanalyzer@example.com"):
+                self.api_key = api_key
+                self.email = email
+                self.session = requests.Session()
+                self.session.headers.update({
+                    "User-Agent": f"BioAnalyzer/1.0 (contact: {self.email})"
+                })
+            
+            def _get(self, endpoint: str, params: Dict[str, Any], retries: int = 3) -> Optional[str]:
+                url = f"{self.BASE_URL}/{endpoint}"
+                if self.api_key:
+                    params["api_key"] = self.api_key
+                params["email"] = self.email
+                params["tool"] = "BioAnalyzer"
+                
+                for attempt in range(retries):
+                    try:
+                        time.sleep(0.34)  # Rate limiting
+                        response = self.session.get(url, params=params, timeout=10)
+                        response.raise_for_status()
+                        return response.text
+                    except requests.exceptions.RequestException as e:
+                        if attempt < retries - 1:
+                            time.sleep(2 ** attempt)
+                            continue
+                        return None
+            
+            def fetch_paper_metadata(self, pmid: str) -> Dict[str, Any]:
+                xml_data = self._get("efetch.fcgi", {"db": "pubmed", "id": pmid, "retmode": "xml"})
+                
+                if not xml_data:
+                    return {"error": "PubMed unreachable or invalid response."}
+                
+                try:
+                    root = ElementTree.fromstring(xml_data)
+                    article = root.find(".//PubmedArticle/MedlineCitation/Article")
+                    if article is None:
+                        return {"error": "No article metadata found."}
+                    
+                    title = article.findtext("ArticleTitle", default="N/A")
+                    abstract = " ".join([t.text for t in article.findall(".//AbstractText") if t.text])
+                    journal = article.findtext("Journal/Title", default="N/A")
+                    authors = [
+                        f"{a.findtext('ForeName', default='')} {a.findtext('LastName', default='')}".strip()
+                        for a in article.findall(".//Author")
+                        if a.findtext("LastName") is not None
+                    ]
+                    
+                    metadata = {
+                        "pmid": pmid,
+                        "title": title,
+                        "abstract": abstract,
+                        "journal": journal,
+                        "authors": authors,
+                    }
+                    
+                    pub_date = article.findtext("Journal/JournalIssue/PubDate/Year") \
+                                   or article.findtext("ArticleDate/Year")
+                    if pub_date:
+                        metadata["publication_date"] = pub_date
+                    
+                    return metadata
+                    
+                except ElementTree.ParseError as e:
+                    return {"error": f"XML parsing failed: {e}"}
+            
+            def get_pmc_fulltext(self, pmid: str) -> str:
+                try:
+                    pmc_id = self._get_pmc_id_from_pmid(pmid)
+                    if not pmc_id:
+                        return ""
+                    return self._get_pmc_fulltext_by_id(pmc_id)
+                except Exception:
+                    return ""
+            
+            def _get_pmc_id_from_pmid(self, pmid: str) -> Optional[str]:
+                try:
+                    xml_data = self._get("elink.fcgi", {
+                        "dbfrom": "pubmed",
+                        "db": "pmc",
+                        "id": pmid,
+                        "retmode": "xml"
+                    })
+                    
+                    if not xml_data:
+                        return None
+                        
+                    root = ElementTree.fromstring(xml_data)
+                    for linksetdb in root.findall(".//LinkSetDb"):
+                        if linksetdb.get("DbTo") == "pmc":
+                            for id_elem in linksetdb.findall(".//Id"):
+                                pmc_id = id_elem.text
+                                if pmc_id and pmc_id.startswith("PMC"):
+                                    return pmc_id
+                    return None
+                except Exception:
+                    return None
+            
+            def _get_pmc_fulltext_by_id(self, pmc_id: str) -> str:
+                try:
+                    clean_id = pmc_id.replace("PMC", "") if pmc_id.startswith("PMC") else pmc_id
+                    xml_data = self._get("efetch.fcgi", {
+                        "db": "pmc",
+                        "id": clean_id,
+                        "retmode": "xml"
+                    })
+                    
+                    if not xml_data:
+                        return ""
+                        
+                    root = ElementTree.fromstring(xml_data)
+                    full_text_parts = []
+                    
+                    title = root.findtext(".//article-title")
+                    if title:
+                        full_text_parts.append(f"Title: {title}")
+                    
+                    abstract = root.findtext(".//abstract")
+                    if abstract:
+                        full_text_parts.append(f"Abstract: {abstract}")
+                    
+                    body = root.find(".//body")
+                    if body is not None:
+                        paragraphs = []
+                        for p in body.findall(".//p"):
+                            if p.text:
+                                paragraphs.append(p.text.strip())
+                        if paragraphs:
+                            full_text_parts.append(f"Full Text: {' '.join(paragraphs)}")
+                    
+                    return "\n\n".join(full_text_parts)
+                except Exception:
+                    return ""
+            
+            def get_full_paper_data(self, pmid: str) -> Dict[str, Any]:
+                try:
+                    metadata = self.fetch_paper_metadata(pmid)
+                    if "error" in metadata:
+                        return metadata
+                    
+                    full_text = self.get_pmc_fulltext(pmid)
+                    
+                    return {
+                        "pmid": pmid,
+                        "title": metadata.get("title", ""),
+                        "abstract": metadata.get("abstract", ""),
+                        "journal": metadata.get("journal", ""),
+                        "authors": metadata.get("authors", []),
+                        "publication_date": metadata.get("publication_date", ""),
+                        "full_text": full_text,
+                        "has_full_text": bool(full_text.strip()),
+                        "retrieval_timestamp": time.time()
+                    }
+                except Exception as e:
+                    return {
+                        "pmid": pmid,
+                        "error": f"Failed to retrieve paper data: {str(e)}",
+                        "title": "",
+                        "abstract": "",
+                        "journal": "",
+                        "authors": [],
+                        "publication_date": "",
+                        "full_text": "",
+                        "has_full_text": False,
+                        "retrieval_timestamp": time.time()
+                    }
+        
+        return StandalonePubMedRetriever()
+    
+    def _save_individual_paper(self, paper_data: Dict[str, Any]) -> str:
+        """Save individual paper data to a JSON file."""
+        try:
+            pmid = paper_data.get("pmid", "unknown")
+            timestamp = time.strftime("%Y%m%d_%H%M%S")
+            filename = f"paper_data_{pmid}_{timestamp}.json"
+            filepath = Path("results") / filename
+            filepath.parent.mkdir(parents=True, exist_ok=True)
+            
+            with open(filepath, 'w', encoding='utf-8') as f:
+                json.dump(paper_data, f, indent=2, ensure_ascii=False)
+            
+            print(f"   💾 Saved to: {filepath}")
+            return str(filepath)
+            
+        except Exception as e:
+            print(f"   ❌ Error saving paper data: {e}")
+            return ""
+
+    def display_retrieval_results(self, results: List[Dict[str, Any]], output_format: str):
+        """Display retrieval results in the specified format."""
+        if output_format == 'json':
+            print(json.dumps(results, indent=2, ensure_ascii=False))
+        elif output_format == 'csv':
+            self.display_csv_retrieval_results(results)
+        else:
+            self.display_table_retrieval_results(results)
+
+    def display_table_retrieval_results(self, results: List[Dict[str, Any]]):
+        """Display retrieval results in table format."""
+        if not results:
+            print("No results to display.")
+            return
+        
+        print("\n" + "="*80)
+        print("📥 BIOANALYZER - PUBMED PAPER RETRIEVAL RESULTS")
+        print("="*80)
+        
+        for result in results:
+            if "error" in result:
+                print(f"\n❌ PMID: {result.get('pmid', 'N/A')}")
+                print(f"Error: {result['error']}")
+                continue
+            
+            print(f"\n📄 PMID: {result.get('pmid', 'N/A')}")
+            print(f"📝 Title: {result.get('title', 'N/A')}")
+            print(f"📰 Journal: {result.get('journal', 'N/A')}")
+            print(f"👥 Authors: {', '.join(result.get('authors', [])[:3])}{' et al.' if len(result.get('authors', [])) > 3 else ''}")
+            print(f"📅 Publication Date: {result.get('publication_date', 'N/A')}")
+            print(f"📖 Full Text: {'✅ Available' if result.get('has_full_text') else '❌ Not available'}")
+            
+            # Show abstract preview
+            abstract = result.get('abstract', '')
+            if abstract:
+                preview = abstract[:200] + "..." if len(abstract) > 200 else abstract
+                print(f"📋 Abstract Preview: {preview}")
+            
+            # Show full text preview if available
+            if result.get('has_full_text'):
+                full_text = result.get('full_text', '')
+                if full_text:
+                    preview = full_text[:300] + "..." if len(full_text) > 300 else full_text
+                    print(f"📄 Full Text Preview: {preview}")
+            
+            print("-" * 60)
+
+    def display_csv_retrieval_results(self, results: List[Dict[str, Any]]):
+        """Display retrieval results in CSV format."""
+        if not results:
+            print("No results to display.")
+            return
+        
+        import io
+        output = io.StringIO()
+        writer = csv.writer(output)
+        
+        # Header
+        headers = ['PMID', 'Title', 'Journal', 'Authors', 'Publication Date', 
+                  'Has Full Text', 'Abstract Length', 'Full Text Length', 'Error']
+        writer.writerow(headers)
+        
+        # Data rows
+        for result in results:
+            row = [
+                result.get('pmid', ''),
+                result.get('title', ''),
+                result.get('journal', ''),
+                '; '.join(result.get('authors', [])),
+                result.get('publication_date', ''),
+                'Yes' if result.get('has_full_text') else 'No',
+                len(result.get('abstract', '')),
+                len(result.get('full_text', '')),
+                result.get('error', '')
+            ]
+            writer.writerow(row)
+        
+        print(output.getvalue())
+
+    def save_retrieval_results(self, results: List[Dict[str, Any]], filename: str, output_format: str):
+        """Save retrieval results to a file."""
+        if output_format == 'json':
+            content = json.dumps(results, indent=2, ensure_ascii=False)
+        elif output_format == 'csv':
+            content = self.get_csv_retrieval_content(results)
+        else:
+            content = self.get_table_retrieval_content(results)
+        
+        with open(filename, 'w', encoding='utf-8') as f:
+            f.write(content)
+        
+        print(f"💾 Retrieval results saved to: {filename}")
+
+    def get_csv_retrieval_content(self, results: List[Dict[str, Any]]) -> str:
+        """Get CSV content for retrieval results."""
+        import io
+        output = io.StringIO()
+        writer = csv.writer(output)
+        
+        # Header
+        headers = ['PMID', 'Title', 'Journal', 'Authors', 'Publication Date', 
+                  'Has Full Text', 'Abstract Length', 'Full Text Length', 'Error']
+        writer.writerow(headers)
+        
+        # Data rows
+        for result in results:
+            row = [
+                result.get('pmid', ''),
+                result.get('title', ''),
+                result.get('journal', ''),
+                '; '.join(result.get('authors', [])),
+                result.get('publication_date', ''),
+                'Yes' if result.get('has_full_text') else 'No',
+                len(result.get('abstract', '')),
+                len(result.get('full_text', '')),
+                result.get('error', '')
+            ]
+            writer.writerow(row)
+        
+        return output.getvalue()
+
+    def get_table_retrieval_content(self, results: List[Dict[str, Any]]) -> str:
+        """Get table content for retrieval results."""
+        content = "BIOANALYZER - PUBMED PAPER RETRIEVAL RESULTS\n"
+        content += "=" * 50 + "\n\n"
+        
+        for result in results:
+            if "error" in result:
+                content += f"PMID: {result.get('pmid', 'N/A')}\n"
+                content += f"Error: {result['error']}\n\n"
+                continue
+            
+            content += f"PMID: {result.get('pmid', 'N/A')}\n"
+            content += f"Title: {result.get('title', 'N/A')}\n"
+            content += f"Journal: {result.get('journal', 'N/A')}\n"
+            content += f"Authors: {', '.join(result.get('authors', [])[:3])}{' et al.' if len(result.get('authors', [])) > 3 else ''}\n"
+            content += f"Publication Date: {result.get('publication_date', 'N/A')}\n"
+            content += f"Full Text: {'Available' if result.get('has_full_text') else 'Not available'}\n"
+            
+            abstract = result.get('abstract', '')
+            if abstract:
+                content += f"Abstract: {abstract[:200]}{'...' if len(abstract) > 200 else ''}\n"
+            
+            content += "\n" + "-" * 40 + "\n\n"
+        
+        return content
+
 
 def main():
     """Main CLI function."""
@@ -643,6 +1050,8 @@ Examples:
   BioAnalyzer start                   # Start application
   BioAnalyzer analyze 12345678        # Analyze single paper
   BioAnalyzer analyze 12345678,87654321  # Analyze multiple papers
+  BioAnalyzer retrieve 12345678       # Retrieve single paper
+  BioAnalyzer retrieve 12345678,87654321 --save  # Retrieve multiple papers and save
   BioAnalyzer fields                  # Show field information
   BioAnalyzer status                  # Check status
   BioAnalyzer stop                    # Stop application
@@ -684,6 +1093,18 @@ Examples:
     # Fields command
     fields_parser = subparsers.add_parser('fields', help='Show field information')
     
+    # Retrieve command
+    retrieve_parser = subparsers.add_parser('retrieve', help='Retrieve full paper text and metadata')
+    retrieve_parser.add_argument('pmids', nargs='*', help='PubMed IDs to retrieve')
+    retrieve_parser.add_argument('--file', '-f', help='File containing PMIDs')
+    retrieve_parser.add_argument('--format', choices=['table', 'json', 'csv'], 
+                                default='table', help='Output format')
+    retrieve_parser.add_argument('--output', '-o', help='Output file')
+    retrieve_parser.add_argument('--save', '-s', action='store_true',
+                               help='Save individual paper data to files')
+    retrieve_parser.add_argument('--verbose', '-v', action='store_true',
+                               help='Verbose output')
+    
     args = parser.parse_args()
     
     cli = BioAnalyzerCLI()
@@ -719,6 +1140,50 @@ Examples:
     
     if args.command == 'fields':
         cli.show_fields_info()
+        return
+    
+    if args.command == 'retrieve':
+        pmids = []
+        
+        # Get PMIDs from different sources
+        if args.pmids:
+            # Handle comma-separated PMIDs
+            for pmid in args.pmids:
+                if ',' in pmid:
+                    pmids.extend([p.strip() for p in pmid.split(',') if p.strip()])
+                else:
+                    pmids.append(pmid)
+        
+        if args.file:
+            try:
+                with open(args.file, 'r') as f:
+                    file_pmids = [line.strip() for line in f if line.strip()]
+                    pmids.extend(file_pmids)
+            except Exception as e:
+                print(f"❌ Error reading file: {e}")
+                return
+        
+        if not pmids:
+            print("❌ Error: No PMIDs provided.")
+            print("Usage: BioAnalyzer retrieve <pmid1> [pmid2] ...")
+            print("   or: BioAnalyzer retrieve <pmid1,pmid2,pmid3>")
+            print("   or: BioAnalyzer retrieve --file <file>")
+            return
+        
+        # Remove duplicates while preserving order
+        seen = set()
+        unique_pmids = []
+        for pmid in pmids:
+            if pmid not in seen:
+                seen.add(pmid)
+                unique_pmids.append(pmid)
+        
+        asyncio.run(cli.retrieve_papers(
+            unique_pmids, 
+            args.format, 
+            args.output,
+            args.save
+        ))
         return
     
     if args.command == 'analyze':
