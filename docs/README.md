@@ -1,39 +1,38 @@
-# BugSigDB Analyzer
+# BioAnalyzer Backend Documentation
 
 [![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://python.org)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.104+-green.svg)](https://fastapi.tiangolo.com)
 [![Docker](https://img.shields.io/badge/Docker-20.0+-blue.svg)](https://docker.com)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-An automated system for identifying microbial signatures in publications. This tool uses machine learning and natural language processing to screen PubMed papers and predict whether they contain microbial differential abundance signatures for curation.  In summery, This tool is to help in identifying curatable papers from PUBMED. 
+Comprehensive documentation for BioAnalyzer Backend - an AI-powered system for analyzing scientific papers and retrieving full text content from PubMed for BugSigDB curation readiness assessment. 
 
 ## 🚀 Features
 
-- **Automated Paper Analysis**: Analyze scientific papers for microbial signature content
-- **PubMed Integration**: Fetch and analyze papers directly from PubMed using PMIDs or DOIs
-- **AI-Powered Analysis**: Uses Google Gemini AI for intelligent paper evaluation
-- **Methods Scoring**: Quantitative assessment of experimental and analytical methods quality
-- **Web Interface**: Modern, responsive web application with real-time analysis
-- **Batch Processing**: Analyze multiple papers simultaneously
-- **Curation Readiness**: Determine if papers are ready for BugSigDB curation
-- **WebSocket Support**: Real-time communication for interactive analysis
-- **Comprehensive API**: RESTful API for programmatic access
-- **Docker Support**: Containerized deployment with Nginx reverse proxy
-- **Production Ready**: Scalable architecture with monitoring and health checks
+- **🔬 Paper Analysis**: Extract 6 essential BugSigDB fields using AI
+- **📥 Full Text Retrieval**: Comprehensive PubMed and PMC data retrieval
+- **🌐 REST API**: Clean, well-documented REST endpoints
+- **💻 CLI Tool**: User-friendly command-line interface
+- **📊 Multiple Formats**: JSON, CSV, and table output formats
+- **⚡ Batch Processing**: Analyze multiple papers simultaneously
+- **🔧 Docker Support**: Containerized deployment
+- **📈 Monitoring**: Health checks and performance metrics
+- **🤖 AI-Powered**: Google Gemini integration for intelligent analysis
+- **🔄 Caching**: Built-in caching for improved performance
+- **🛡️ Error Handling**: Comprehensive error handling and recovery
+- **📚 Documentation**: Extensive documentation and examples
 
 ## 🏗️ Architecture
 
-The project consists of several key components:
+The project follows a layered architecture with clear separation of concerns:
 
-- **Web Application** (`web/`): FastAPI-based web server with HTML/JS frontend
-- **Models** (`models/`): AI models and QA systems for paper analysis
-- **Data Retrieval** (`retrieve/`): PubMed data fetching and processing
-- **Utilities** (`utils/`): Text processing, configuration, and helper functions
-- **Processing** (`process/`): Data processing and analysis pipelines
-- **Classification** (`classify/`): Machine learning classification models
-- **Nginx** (`nginx/`): Reverse proxy and load balancer
-- **Redis**: Caching and session management
-- **Monitoring**: Prometheus metrics and health checks
+- **API Layer** (`app/api/`): FastAPI-based REST API with comprehensive endpoints
+- **Service Layer** (`app/services/`): Business logic and data processing services
+- **Model Layer** (`app/models/`): AI models and analysis engines
+- **Utility Layer** (`app/utils/`): Shared utilities and helper functions
+- **CLI Interface** (`cli.py`): Command-line interface for direct user interaction
+- **Docker Support**: Containerized deployment with multi-stage builds
+- **Monitoring**: Health checks, logging, and performance metrics
 
 ## 📋 Prerequisites
 
@@ -157,10 +156,61 @@ DEFAULT_MODEL=gemini (Optional)
 
 ## 🚀 Running the Application
 
-### Quick Start
+### Quick Start with CLI
 
 ```bash
-python3 start.py
+# 1. Build containers
+BioAnalyzer build
+
+# 2. Start application
+BioAnalyzer start
+
+# 3. Analyze a paper
+BioAnalyzer analyze 12345678
+
+# 4. Retrieve full paper data
+BioAnalyzer retrieve 12345678
+
+# 5. Check status
+BioAnalyzer status
+
+# 6. Stop when done
+BioAnalyzer stop
+```
+
+### Available CLI Commands
+
+#### System Management
+```bash
+BioAnalyzer build                    # Build Docker containers
+BioAnalyzer start                    # Start the application
+BioAnalyzer stop                     # Stop the application
+BioAnalyzer restart                  # Restart the application
+BioAnalyzer status                   # Check system status
+```
+
+#### Paper Analysis
+```bash
+BioAnalyzer analyze 12345678         # Analyze single paper
+BioAnalyzer analyze 12345678,87654321 # Analyze multiple papers
+BioAnalyzer analyze --file pmids.txt # Analyze from file
+BioAnalyzer fields                   # Show field information
+```
+
+#### Paper Retrieval (NEW!)
+```bash
+BioAnalyzer retrieve 12345678        # Retrieve single paper
+BioAnalyzer retrieve 12345678,87654321 # Retrieve multiple papers
+BioAnalyzer retrieve --file pmids.txt # Retrieve from file
+BioAnalyzer retrieve 12345678 --save  # Save individual files
+BioAnalyzer retrieve 12345678 --format json # JSON output
+BioAnalyzer retrieve 12345678 --output results.csv # Save to file
+```
+
+### Direct API Server
+
+```bash
+python3 main.py
 ```
 
 The application will start on `http://127.0.0.1:8000`
@@ -203,38 +253,44 @@ Once running, open your browser and navigate to:
 
 ### Core Endpoints
 
-#### Analyze Paper by PMID
+#### Paper Analysis
 ```bash
-GET /analyze/{pmid}
+GET /api/v1/analyze/{pmid}           # Analyze paper for BugSigDB fields
+POST /api/v1/analyze/batch           # Batch analysis
+GET /api/v1/fields                   # Get field information
 ```
 
-#### Ask Questions About a Paper
+#### Paper Retrieval (NEW!)
 ```bash
-POST /ask_question/{pmid}
-{
-  "question": "What are the main findings?"
-}
+GET /api/v1/retrieve/{pmid}          # Retrieve full paper data
+POST /api/v1/retrieve/batch          # Batch retrieval
+GET /api/v1/retrieve/search?q=query # Search papers
 ```
 
-#### Batch Analysis
+#### System Endpoints
 ```bash
-POST /analyze_batch
-{
-  "pmids": ["12345", "67890", "11111"],
-  "page": 1,
-  "page_size": 20
-}
+GET /health                          # Health check
+GET /metrics                         # Performance metrics
+GET /docs                            # API documentation
 ```
 
-#### Upload Paper File
+### Example API Calls
+
+#### Analyze a Paper
 ```bash
-POST /upload_paper
-# Multipart form with file and optional username
+curl -X GET "http://localhost:8000/api/v1/analyze/12345678"
 ```
 
-#### Fetch Paper by DOI
+#### Retrieve Paper Data
 ```bash
-GET /fetch_by_doi?doi=10.1000/example
+curl -X GET "http://localhost:8000/api/v1/retrieve/12345678"
+```
+
+#### Batch Retrieval
+```bash
+curl -X POST "http://localhost:8000/api/v1/retrieve/batch" \
+  -H "Content-Type: application/json" \
+  -d '{"pmids": ["12345678", "87654321"]}'
 ```
 
 ### WebSocket Endpoint

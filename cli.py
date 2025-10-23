@@ -52,7 +52,7 @@ class BioAnalyzerCLI:
         """Print the BioAnalyzer banner."""
         print("""
 🧬 =============================================== 🧬
-   BioAnalyzer - BugSigDB Field Analysis Tool
+   BioAnalyzer - Curatable Signature Analysis Tool
 🧬 =============================================== 🧬
         """)
     
@@ -76,6 +76,11 @@ class BioAnalyzerCLI:
    BioAnalyzer analyze --file <file>    Analyze papers from file
    BioAnalyzer fields                   Show field information
 
+📥 Retrieval Commands:
+   BioAnalyzer retrieve <pmid>          Retrieve full paper text and metadata
+   BioAnalyzer retrieve <pmid1,pmid2>   Retrieve multiple papers
+   BioAnalyzer retrieve --file <file>  Retrieve papers from file
+
 📊 Output Options:
    --format json|csv|table             Output format (default: table)
    --output <file>                     Save results to file
@@ -87,6 +92,9 @@ class BioAnalyzerCLI:
    BioAnalyzer analyze 12345678
    BioAnalyzer analyze 12345678,87654321
    BioAnalyzer analyze --file pmids.txt --format json
+   BioAnalyzer retrieve 12345678
+   BioAnalyzer retrieve 12345678,87654321 --save
+   BioAnalyzer retrieve --file pmids.txt --format json
    BioAnalyzer fields
    BioAnalyzer status
    BioAnalyzer stop
@@ -106,7 +114,7 @@ class BioAnalyzerCLI:
             subprocess.run(["docker", "--version"], capture_output=True, check=True)
             return True
         except (subprocess.CalledProcessError, FileNotFoundError):
-            print("❌ Error: Docker is not installed or not available.")
+            print(" Error: Docker is not installed or not available.")
             print("Please install Docker to use BioAnalyzer.")
             return False
     
@@ -144,11 +152,11 @@ class BioAnalyzerCLI:
                 ], cwd=frontend_dir, check=True)
                 print("✅ Frontend image built successfully!")
             
-            print("🎉 All containers built successfully!")
+            print(" All containers built successfully!")
             return True
             
         except subprocess.CalledProcessError as e:
-            print(f"❌ Error building containers: {e}")
+            print(f" Error building containers: {e}")
             return False
     
     def start_application(self):
@@ -442,6 +450,8 @@ class BioAnalyzerCLI:
             print(json.dumps(results, indent=2, ensure_ascii=False))
         elif output_format == 'csv':
             self.display_csv_results(results)
+        elif output_format == 'xml':
+            self.display_xml_results(results)
         else:
             self.display_table_results(results)
     
@@ -452,7 +462,7 @@ class BioAnalyzerCLI:
             return
         
         print("\n" + "="*80)
-        print("🧬 BIOANALYZER - BugSigDB FIELD ANALYSIS RESULTS")
+        print("🧬 BIOANALYZER - CURATABLE SIGNATURE ANALYSIS RESULTS")
         print("="*80)
         
         for result in results:
@@ -534,12 +544,60 @@ class BioAnalyzerCLI:
         
         print(output.getvalue())
     
+    def display_xml_results(self, results: List[Dict[str, Any]]):
+        """Display results in XML format."""
+        if not results:
+            print("No results to display.")
+            return
+        
+        print('<?xml version="1.0" encoding="UTF-8"?>')
+        print('<BioAnalyzerResults>')
+        
+        for result in results:
+            print(f'  <Analysis>')
+            print(f'    <PMID>{result.get("pmid", "")}</PMID>')
+            print(f'    <Title>{result.get("title", "")}</Title>')
+            print(f'    <Journal>{result.get("journal", "")}</Journal>')
+            print(f'    <ProcessingTime>{result.get("processing_time", 0)}</ProcessingTime>')
+            
+            fields = result.get('fields', {})
+            print(f'    <Fields>')
+            
+            field_names = {
+                'host_species': 'HostSpecies',
+                'body_site': 'BodySite', 
+                'condition': 'Condition',
+                'sequencing_type': 'SequencingType',
+                'taxa_level': 'TaxaLevel',
+                'sample_size': 'SampleSize'
+            }
+            
+            for field_key, field_name in field_names.items():
+                field_data = fields.get(field_key, {})
+                status = field_data.get('status', 'UNKNOWN')
+                value = field_data.get('value', 'N/A')
+                confidence = field_data.get('confidence', 0.0)
+                
+                print(f'      <{field_name}>')
+                print(f'        <Status>{status}</Status>')
+                print(f'        <Value><![CDATA[{value}]]></Value>')
+                print(f'        <Confidence>{confidence:.2f}</Confidence>')
+                print(f'      </{field_name}>')
+            
+            print(f'    </Fields>')
+            print(f'    <Summary><![CDATA[{result.get("curation_summary", "")}]]></Summary>')
+            print(f'  </Analysis>')
+        
+        print('</BioAnalyzerResults>')
+    
     def save_results(self, results: List[Dict[str, Any]], filename: str, output_format: str):
         """Save results to a file."""
         if output_format == 'json':
             content = json.dumps(results, indent=2, ensure_ascii=False)
         elif output_format == 'csv':
             content = self.get_csv_content(results)
+        elif output_format == 'xml':
+            content = self.get_xml_content(results)
         else:
             content = self.get_table_content(results)
         
@@ -587,6 +645,52 @@ class BioAnalyzerCLI:
         
         return output.getvalue()
     
+    def get_xml_content(self, results: List[Dict[str, Any]]) -> str:
+        """Get XML content for results."""
+        if not results:
+            return '<?xml version="1.0" encoding="UTF-8"?>\n<BioAnalyzerResults></BioAnalyzerResults>'
+        
+        xml_content = ['<?xml version="1.0" encoding="UTF-8"?>']
+        xml_content.append('<BioAnalyzerResults>')
+        
+        for result in results:
+            xml_content.append('  <Analysis>')
+            xml_content.append(f'    <PMID>{result.get("pmid", "")}</PMID>')
+            xml_content.append(f'    <Title>{result.get("title", "")}</Title>')
+            xml_content.append(f'    <Journal>{result.get("journal", "")}</Journal>')
+            xml_content.append(f'    <ProcessingTime>{result.get("processing_time", 0)}</ProcessingTime>')
+            
+            fields = result.get('fields', {})
+            xml_content.append('    <Fields>')
+            
+            field_names = {
+                'host_species': 'HostSpecies',
+                'body_site': 'BodySite', 
+                'condition': 'Condition',
+                'sequencing_type': 'SequencingType',
+                'taxa_level': 'TaxaLevel',
+                'sample_size': 'SampleSize'
+            }
+            
+            for field_key, field_name in field_names.items():
+                field_data = fields.get(field_key, {})
+                status = field_data.get('status', 'UNKNOWN')
+                value = field_data.get('value', 'N/A')
+                confidence = field_data.get('confidence', 0.0)
+                
+                xml_content.append(f'      <{field_name}>')
+                xml_content.append(f'        <Status>{status}</Status>')
+                xml_content.append(f'        <Value><![CDATA[{value}]]></Value>')
+                xml_content.append(f'        <Confidence>{confidence:.2f}</Confidence>')
+                xml_content.append(f'      </{field_name}>')
+            
+            xml_content.append('    </Fields>')
+            xml_content.append(f'    <Summary><![CDATA[{result.get("curation_summary", "")}]]></Summary>')
+            xml_content.append('  </Analysis>')
+        
+        xml_content.append('</BioAnalyzerResults>')
+        return '\n'.join(xml_content)
+    
     def get_table_content(self, results: List[Dict[str, Any]]) -> str:
         """Get table content for results."""
         # Implementation similar to display_table_results but return string
@@ -630,6 +734,313 @@ class BioAnalyzerCLI:
    ❌ ABSENT: Information is missing
         """)
 
+    async def retrieve_papers(self, pmids: List[str], output_format: str = 'table', 
+                           output_file: Optional[str] = None, save_to_file: bool = False):
+        """Retrieve papers and return results."""
+        try:
+            retriever = self._get_pubmed_retriever()
+            results = self._fetch_papers_data(retriever, pmids)
+            self._process_retrieval_results(results, output_format, output_file, save_to_file)
+        except Exception as e:
+            self._handle_retrieval_error(e)
+    
+    def _get_pubmed_retriever(self):
+        """Get a PubMed retriever instance."""
+        try:
+            from app.services.standalone_pubmed_retriever import StandalonePubMedRetriever
+            return StandalonePubMedRetriever()
+        except ImportError:
+            # Fallback to inline implementation
+            return self._create_standalone_retriever()
+    
+    def _fetch_papers_data(self, retriever, pmids: List[str]) -> List[Dict[str, Any]]:
+        """Fetch paper data for all PMIDs."""
+        total = len(pmids)
+        print(f"📥 Retrieving {total} paper(s)...")
+        
+        results = []
+        for i, pmid in enumerate(pmids, 1):
+            paper_data = self._fetch_single_paper(retriever, pmid)
+            self._log_retrieval_progress(i, total, paper_data)
+            results.append(paper_data)
+        
+        return results
+    
+    def _fetch_single_paper(self, retriever, pmid: str) -> Dict[str, Any]:
+        """Fetch data for a single paper."""
+        try:
+            return retriever.get_full_paper_data(pmid)
+        except Exception as e:
+            return {
+                "pmid": pmid,
+                "error": f"Retrieval failed: {str(e)}",
+                "retrieval_timestamp": time.time()
+            }
+    
+    def _log_retrieval_progress(self, current: int, total: int, paper_data: Dict[str, Any]):
+        """Log the progress of paper retrieval."""
+        pmid = paper_data.get('pmid', 'unknown')
+        print(f"[{current}/{total}] Retrieved PMID: {pmid}")
+        
+        if "error" in paper_data:
+            print(f"❌ Retrieval failed for PMID {pmid}: {paper_data['error']}")
+        else:
+            print(f"✅ Successfully retrieved PMID {pmid}")
+            if paper_data.get('has_full_text'):
+                print(f"   📖 Full text available")
+            else:
+                print(f"   📄 Abstract only")
+    
+    def _process_retrieval_results(self, results: List[Dict[str, Any]], output_format: str, 
+                                 output_file: Optional[str], save_to_file: bool):
+        """Process and output the retrieval results."""
+        if not results:
+            print("❌ No results obtained.")
+            return
+        
+        if save_to_file:
+            self._save_individual_papers(results)
+        
+        if output_file:
+            self.save_retrieval_results(results, output_file, output_format)
+        else:
+            self.display_retrieval_results(results, output_format)
+    
+    def _save_individual_papers(self, results: List[Dict[str, Any]]):
+        """Save individual papers to separate files."""
+        for paper_data in results:
+            if "error" not in paper_data:
+                self._save_individual_paper(paper_data)
+    
+    def _handle_retrieval_error(self, error: Exception):
+        """Handle retrieval errors."""
+        print(f"❌ Error: {error}")
+        print("Please check your internet connection and try again.")
+    
+    def _create_standalone_retriever(self):
+        """Create a fallback standalone PubMed retriever."""
+        # This is a minimal fallback implementation
+        # The main implementation is in standalone_pubmed_retriever.py
+        import requests
+        from xml.etree import ElementTree
+        
+        class FallbackRetriever:
+            def __init__(self):
+                self.session = requests.Session()
+                self.session.headers.update({
+                    "User-Agent": "BioAnalyzer/1.0 (contact: bioanalyzer@example.com)"
+                })
+            
+            def get_full_paper_data(self, pmid: str) -> Dict[str, Any]:
+                try:
+                    # Simple metadata retrieval as fallback
+                    url = f"https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi"
+                    params = {
+                        "db": "pubmed",
+                        "id": pmid,
+                        "retmode": "xml",
+                        "email": "bioanalyzer@example.com",
+                        "tool": "BioAnalyzer"
+                    }
+                    
+                    response = self.session.get(url, params=params, timeout=10)
+                    response.raise_for_status()
+                    
+                    root = ElementTree.fromstring(response.text)
+                    article = root.find(".//PubmedArticle/MedlineCitation/Article")
+                    
+                    if article is None:
+                        return {"pmid": pmid, "error": "No article found"}
+                    
+                    title = article.findtext("ArticleTitle", default="N/A")
+                    journal = article.findtext("Journal/Title", default="N/A")
+                    
+                    return {
+                        "pmid": pmid,
+                        "title": title,
+                        "abstract": "",
+                        "journal": journal,
+                        "authors": [],
+                        "publication_date": "",
+                        "full_text": "",
+                        "has_full_text": False,
+                        "retrieval_timestamp": time.time()
+                    }
+                except Exception as e:
+                    return {
+                        "pmid": pmid,
+                        "error": f"Retrieval failed: {str(e)}",
+                        "retrieval_timestamp": time.time()
+                    }
+        
+        return FallbackRetriever()
+    
+    def _save_individual_paper(self, paper_data: Dict[str, Any]) -> str:
+        """Save individual paper data to a JSON file."""
+        try:
+            pmid = paper_data.get("pmid", "unknown")
+            timestamp = time.strftime("%Y%m%d_%H%M%S")
+            filename = f"paper_data_{pmid}_{timestamp}.json"
+            filepath = Path("results") / filename
+            filepath.parent.mkdir(parents=True, exist_ok=True)
+            
+            with open(filepath, 'w', encoding='utf-8') as f:
+                json.dump(paper_data, f, indent=2, ensure_ascii=False)
+            
+            print(f"   💾 Saved to: {filepath}")
+            return str(filepath)
+            
+        except Exception as e:
+            print(f"   ❌ Error saving paper data: {e}")
+            return ""
+
+    def display_retrieval_results(self, results: List[Dict[str, Any]], output_format: str):
+        """Display retrieval results in the specified format."""
+        if output_format == 'json':
+            print(json.dumps(results, indent=2, ensure_ascii=False))
+        elif output_format == 'csv':
+            self.display_csv_retrieval_results(results)
+        else:
+            self.display_table_retrieval_results(results)
+
+    def display_table_retrieval_results(self, results: List[Dict[str, Any]]):
+        """Display retrieval results in table format."""
+        if not results:
+            print("No results to display.")
+            return
+        
+        print("\n" + "="*80)
+        print("📥 BIOANALYZER - PUBMED PAPER RETRIEVAL RESULTS")
+        print("="*80)
+        
+        for result in results:
+            if "error" in result:
+                print(f"\n❌ PMID: {result.get('pmid', 'N/A')}")
+                print(f"Error: {result['error']}")
+                continue
+            
+            print(f"\n📄 PMID: {result.get('pmid', 'N/A')}")
+            print(f"📝 Title: {result.get('title', 'N/A')}")
+            print(f"📰 Journal: {result.get('journal', 'N/A')}")
+            print(f"👥 Authors: {', '.join(result.get('authors', [])[:3])}{' et al.' if len(result.get('authors', [])) > 3 else ''}")
+            print(f"📅 Publication Date: {result.get('publication_date', 'N/A')}")
+            print(f"📖 Full Text: {'✅ Available' if result.get('has_full_text') else '❌ Not available'}")
+            
+            # Show abstract preview
+            abstract = result.get('abstract', '')
+            if abstract:
+                preview = abstract[:200] + "..." if len(abstract) > 200 else abstract
+                print(f"📋 Abstract Preview: {preview}")
+            
+            # Show full text preview if available
+            if result.get('has_full_text'):
+                full_text = result.get('full_text', '')
+                if full_text:
+                    preview = full_text[:300] + "..." if len(full_text) > 300 else full_text
+                    print(f"📄 Full Text Preview: {preview}")
+            
+            print("-" * 60)
+
+    def display_csv_retrieval_results(self, results: List[Dict[str, Any]]):
+        """Display retrieval results in CSV format."""
+        if not results:
+            print("No results to display.")
+            return
+        
+        import io
+        output = io.StringIO()
+        writer = csv.writer(output)
+        
+        # Header
+        headers = ['PMID', 'Title', 'Journal', 'Authors', 'Publication Date', 
+                  'Has Full Text', 'Abstract Length', 'Full Text Length', 'Error']
+        writer.writerow(headers)
+        
+        # Data rows
+        for result in results:
+            row = [
+                result.get('pmid', ''),
+                result.get('title', ''),
+                result.get('journal', ''),
+                '; '.join(result.get('authors', [])),
+                result.get('publication_date', ''),
+                'Yes' if result.get('has_full_text') else 'No',
+                len(result.get('abstract', '')),
+                len(result.get('full_text', '')),
+                result.get('error', '')
+            ]
+            writer.writerow(row)
+        
+        print(output.getvalue())
+
+    def save_retrieval_results(self, results: List[Dict[str, Any]], filename: str, output_format: str):
+        """Save retrieval results to a file."""
+        if output_format == 'json':
+            content = json.dumps(results, indent=2, ensure_ascii=False)
+        elif output_format == 'csv':
+            content = self.get_csv_retrieval_content(results)
+        else:
+            content = self.get_table_retrieval_content(results)
+        
+        with open(filename, 'w', encoding='utf-8') as f:
+            f.write(content)
+        
+        print(f"💾 Retrieval results saved to: {filename}")
+
+    def get_csv_retrieval_content(self, results: List[Dict[str, Any]]) -> str:
+        """Get CSV content for retrieval results."""
+        import io
+        output = io.StringIO()
+        writer = csv.writer(output)
+        
+        # Header
+        headers = ['PMID', 'Title', 'Journal', 'Authors', 'Publication Date', 
+                  'Has Full Text', 'Abstract Length', 'Full Text Length', 'Error']
+        writer.writerow(headers)
+        
+        # Data rows
+        for result in results:
+            row = [
+                result.get('pmid', ''),
+                result.get('title', ''),
+                result.get('journal', ''),
+                '; '.join(result.get('authors', [])),
+                result.get('publication_date', ''),
+                'Yes' if result.get('has_full_text') else 'No',
+                len(result.get('abstract', '')),
+                len(result.get('full_text', '')),
+                result.get('error', '')
+            ]
+            writer.writerow(row)
+        
+        return output.getvalue()
+
+    def get_table_retrieval_content(self, results: List[Dict[str, Any]]) -> str:
+        """Get table content for retrieval results."""
+        content = "BIOANALYZER - PUBMED PAPER RETRIEVAL RESULTS\n"
+        content += "=" * 50 + "\n\n"
+        
+        for result in results:
+            if "error" in result:
+                content += f"PMID: {result.get('pmid', 'N/A')}\n"
+                content += f"Error: {result['error']}\n\n"
+                continue
+            
+            content += f"PMID: {result.get('pmid', 'N/A')}\n"
+            content += f"Title: {result.get('title', 'N/A')}\n"
+            content += f"Journal: {result.get('journal', 'N/A')}\n"
+            content += f"Authors: {', '.join(result.get('authors', [])[:3])}{' et al.' if len(result.get('authors', [])) > 3 else ''}\n"
+            content += f"Publication Date: {result.get('publication_date', 'N/A')}\n"
+            content += f"Full Text: {'Available' if result.get('has_full_text') else 'Not available'}\n"
+            
+            abstract = result.get('abstract', '')
+            if abstract:
+                content += f"Abstract: {abstract[:200]}{'...' if len(abstract) > 200 else ''}\n"
+            
+            content += "\n" + "-" * 40 + "\n\n"
+        
+        return content
+
 
 def main():
     """Main CLI function."""
@@ -643,6 +1054,8 @@ Examples:
   BioAnalyzer start                   # Start application
   BioAnalyzer analyze 12345678        # Analyze single paper
   BioAnalyzer analyze 12345678,87654321  # Analyze multiple papers
+  BioAnalyzer retrieve 12345678       # Retrieve single paper
+  BioAnalyzer retrieve 12345678,87654321 --save  # Retrieve multiple papers and save
   BioAnalyzer fields                  # Show field information
   BioAnalyzer status                  # Check status
   BioAnalyzer stop                    # Stop application
@@ -675,7 +1088,7 @@ Examples:
     analyze_parser = subparsers.add_parser('analyze', help='Analyze papers')
     analyze_parser.add_argument('pmids', nargs='*', help='PubMed IDs to analyze')
     analyze_parser.add_argument('--file', '-f', help='File containing PMIDs')
-    analyze_parser.add_argument('--format', choices=['table', 'json', 'csv'], 
+    analyze_parser.add_argument('--format', choices=['table', 'json', 'csv', 'xml'], 
                               default='table', help='Output format')
     analyze_parser.add_argument('--output', '-o', help='Output file')
     analyze_parser.add_argument('--verbose', '-v', action='store_true',
@@ -683,6 +1096,18 @@ Examples:
     
     # Fields command
     fields_parser = subparsers.add_parser('fields', help='Show field information')
+    
+    # Retrieve command
+    retrieve_parser = subparsers.add_parser('retrieve', help='Retrieve full paper text and metadata')
+    retrieve_parser.add_argument('pmids', nargs='*', help='PubMed IDs to retrieve')
+    retrieve_parser.add_argument('--file', '-f', help='File containing PMIDs')
+    retrieve_parser.add_argument('--format', choices=['table', 'json', 'csv', 'xml'], 
+                                default='table', help='Output format')
+    retrieve_parser.add_argument('--output', '-o', help='Output file')
+    retrieve_parser.add_argument('--save', '-s', action='store_true',
+                               help='Save individual paper data to files')
+    retrieve_parser.add_argument('--verbose', '-v', action='store_true',
+                               help='Verbose output')
     
     args = parser.parse_args()
     
@@ -719,6 +1144,50 @@ Examples:
     
     if args.command == 'fields':
         cli.show_fields_info()
+        return
+    
+    if args.command == 'retrieve':
+        pmids = []
+        
+        # Get PMIDs from different sources
+        if args.pmids:
+            # Handle comma-separated PMIDs
+            for pmid in args.pmids:
+                if ',' in pmid:
+                    pmids.extend([p.strip() for p in pmid.split(',') if p.strip()])
+                else:
+                    pmids.append(pmid)
+        
+        if args.file:
+            try:
+                with open(args.file, 'r') as f:
+                    file_pmids = [line.strip() for line in f if line.strip()]
+                    pmids.extend(file_pmids)
+            except Exception as e:
+                print(f"❌ Error reading file: {e}")
+                return
+        
+        if not pmids:
+            print("❌ Error: No PMIDs provided.")
+            print("Usage: BioAnalyzer retrieve <pmid1> [pmid2] ...")
+            print("   or: BioAnalyzer retrieve <pmid1,pmid2,pmid3>")
+            print("   or: BioAnalyzer retrieve --file <file>")
+            return
+        
+        # Remove duplicates while preserving order
+        seen = set()
+        unique_pmids = []
+        for pmid in pmids:
+            if pmid not in seen:
+                seen.add(pmid)
+                unique_pmids.append(pmid)
+        
+        asyncio.run(cli.retrieve_papers(
+            unique_pmids, 
+            args.format, 
+            args.output,
+            args.save
+        ))
         return
     
     if args.command == 'analyze':

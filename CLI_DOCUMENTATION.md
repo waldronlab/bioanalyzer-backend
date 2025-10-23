@@ -1,6 +1,6 @@
 # BioAnalyzer CLI - User-Friendly Command Reference
 
-## 🧬 BioAnalyzer - BugSigDB Field Analysis Tool
+## 🧬 BioAnalyzer - Curatable Signature Analysis Tool
 
 BioAnalyzer is a user-friendly command-line tool for analyzing scientific papers for BugSigDB curation requirements. It provides simple, intuitive commands that make it easy to analyze papers for the 6 essential BugSigDB fields.
 
