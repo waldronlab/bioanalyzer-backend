@@ -5,7 +5,7 @@
 [![Docker](https://img.shields.io/badge/Docker-20.0+-blue.svg)](https://docker.com)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-A comprehensive AI-powered backend system for analyzing scientific papers and retrieving full text content from PubMed for BugSigDB curation readiness assessment.
+A comprehensive AI-powered backend system for analyzing and Identifying scientific papers that contain curatable microbiome Signatures  (curation readiness assessment.)
 
 ## 🧬 Overview
 
@@ -17,7 +17,7 @@ BioAnalyzer Backend is a specialized system that combines advanced AI analysis w
 - **📥 Full Text Retrieval**: Comprehensive PubMed and PMC data retrieval
 - **🌐 REST API**: Clean, well-documented REST endpoints
 - **💻 CLI Tool**: User-friendly command-line interface
-- **📊 Multiple Formats**: JSON, CSV, and table output formats
+- **📊 Multiple Formats**: JSON, CSV,XML and table output formats
 - **⚡ Batch Processing**: Analyze multiple papers simultaneously
 - **🔧 Docker Support**: Containerized deployment
 - **📈 Monitoring**: Health checks and performance metrics
