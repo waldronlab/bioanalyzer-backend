@@ -168,7 +168,7 @@ Once started, access:
 
 | Variable | Description | Required | Default |
 |----------|-------------|----------|---------|
-| `NCBI_API_KEY` | NCBI API key for higher rate limits | No | - |
+| `NCBI_API_KEY` | NCBI API key for higher rate limits | Yes | - |
 | `GEMINI_API_KEY` | Google Gemini API key for AI analysis | Yes | - |
 | `EMAIL` | Contact email for API requests | Yes | bioanalyzer@example.com |
 | `USE_FULLTEXT` | Enable full text retrieval | No | true |
@@ -194,7 +194,7 @@ The system analyzes papers for these critical fields:
 
 ### Field Status Values
 
-- **✅ PRESENT**: Information is complete and clear
+- **✅ PRESENT**: Information about the microbiom signtaure is complete and clear
 - **⚠️ PARTIALLY_PRESENT**: Some information available but incomplete
 - **❌ ABSENT**: Information is missing
 
