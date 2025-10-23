@@ -1,129 +1,170 @@
 # 🚀 Quick Start Guide
 
-Get BugSigDB Analyzer up and running in 5 minutes!
+Get BioAnalyzer Backend up and running in 5 minutes!
 
 ## ⚡ Prerequisites Check
 
 Make sure you have:
-- ✅ Python 3.8+ installed
-- ✅ Git installed
-- ✅ Internet connection
+- ✅ **Docker** (recommended) - Version 20.0+ with Docker Compose support
+- ✅ **Python 3.8+** (for local installation, optional)
+- ✅ **Internet connection**
+- ✅ **Git** (for cloning)
 
-## 🚀 5-Minute Setup
+## 🚀 5-Minute Setup (Tested & Verified)
 
-### Option 1: Automated Setup (Recommended)
+### ✅ **Method 1: Docker Setup (Recommended)**
 
-#### Linux/Mac Users
-```bash
-git clone https://github.com/waldronlab/BugsigdbAnalyzer.git
-cd BugsigdbAnalyzer
-chmod +x setup.sh
-./setup.sh
-```
-
-#### Windows Users
-```bash
-git clone https://github.com/waldronlab/BugsigdbAnalyzer.git
-cd BugsigdbAnalyzer
-setup.bat
-```
-
-### Option 2: Manual Setup
+This is the **tested and verified** approach that works on modern Linux systems.
 
 #### 1. Clone & Navigate (1 min)
 ```bash
-git clone https://github.com/waldronlab/BugsigdbAnalyzer.git
-cd BugsigdbAnalyzer
+git clone https://github.com/waldronlab/bioanalyzer-backend.git
+cd bioanalyzer-backend
+```
+
+#### 2. Install CLI Commands (1 min)
+```bash
+chmod +x install.sh
+./install.sh
+```
+
+#### 3. Build & Start (2 min)
+```bash
+# Build Docker image
+docker compose build
+
+# Start application
+docker compose up -d
+```
+
+#### 4. Verify Setup (1 min)
+```bash
+# Check status
+docker compose ps
+
+# Test API
+curl http://localhost:8000/health
+
+# Test CLI
+export PATH="$PATH:/home/ronald/.local/bin"
+BioAnalyzer fields
+```
+
+🎉 **Done!** Open http://localhost:8000/docs for API documentation
+
+### **Method 2: Local Python Setup**
+
+⚠️ **Note**: This may encounter issues with externally managed Python environments.
+
+#### 1. Clone & Navigate (1 min)
+```bash
+git clone https://github.com/waldronlab/bioanalyzer-backend.git
+cd bioanalyzer-backend
 ```
 
 #### 2. Setup Environment (2 min)
 ```bash
+# Install python3-venv if needed
+sudo apt install python3.12-venv python3-full
+
 # Create virtual environment
 python3 -m venv .venv
-
-# Activate it (Linux/Mac)
 source .venv/bin/activate
 
-# OR Activate it (Windows)
-# .venv\Scripts\activate
-
 # Install dependencies
-pip install -r requirements.txt
+pip install -r config/requirements.txt
+pip install -e .
 ```
 
-#### 3. Get API Keys (2 min)
-
-##### NCBI API Key (PubMed access)
-1. Go to [NCBI Account](https://ncbiinsights.ncbi.nlm.nih.gov/2017/11/02/new-api-keys-for-the-e-utilities/)
-2. Sign in → Generate API key
-3. Copy the key
-
-##### Model API Key (for automated analysis)
-1. Go to [Google AI Studio](https://makersuite.google.com/app/apikey)
-2. Sign in → Create API key
-3. Copy the key
-
-#### 4. Configure (30 seconds)
+#### 3. Configure API Keys (1 min)
 ```bash
 # Create environment file
 cat > .env << EOF
 NCBI_API_KEY=your_ncbi_key_here
-GEMINI_API_KEY=your_model_key_here
+GEMINI_API_KEY=your_gemini_key_here
 EMAIL=your_email@example.com
-DEFAULT_MODEL=gemini
 EOF
-
-# Edit with your actual keys
-nano .env  # or use any text editor
 ```
 
-#### 5. Run! (30 seconds)
+#### 4. Run! (1 min)
 ```bash
-python3 start.py
+python main.py
 ```
-
-🎉 **Done!** Open http://127.0.0.1:8000 in your browser
 
 ## 🔍 Test It Works
 
-1. **Visit**: http://127.0.0.1:8000
-2. **Enter a PMID**: Try `12345` (or any valid PMID)
-3. **Click Analyze**: Watch the AI analyze the paper!
+### Docker Method
+1. **Visit**: http://localhost:8000/docs
+2. **Test Health**: http://localhost:8000/health
+3. **CLI Test**: `BioAnalyzer fields`
 
-## 🆘 Common Issues
+### Local Method
+1. **Visit**: http://localhost:8000/docs
+2. **Test Health**: http://localhost:8000/health
+3. **CLI Test**: `python cli.py fields`
 
-### "Module not found" errors?
+## 🆘 Common Issues & Solutions
+
+### "externally-managed-environment" error?
 ```bash
-# Make sure virtual environment is active
-source .venv/bin/activate
+# Solution: Use Docker (recommended)
+docker compose build
+docker compose up -d
 
-# Reinstall dependencies
-pip install -r requirements.txt --force-reinstall
+# OR install python3-venv
+sudo apt install python3.12-venv python3-full
+```
+
+### "docker-compose command not found"?
+```bash
+# Use newer Docker Compose syntax
+docker compose build    # Instead of docker-compose build
+docker compose up -d    # Instead of docker-compose up -d
+```
+
+### "BioAnalyzer command not found"?
+```bash
+# Add to PATH
+export PATH="$PATH:/home/ronald/.local/bin"
+# Or restart terminal after running ./install.sh
 ```
 
 ### "Port already in use"?
 ```bash
-# Use different port
-python3 start.py --port 8001
+# Check what's using port 8000
+sudo lsof -i :8000
 
-# Then visit http://127.0.0.1:8001
+# Use different port in docker-compose.yml
+# Or stop other services
 ```
 
-### API key errors?
+### API not responding?
 ```bash
-# Check your .env file
-cat .env
+# Check container status
+docker compose ps
 
-# Make sure keys are correct and no extra spaces
+# Check logs
+docker compose logs
+
+# Restart if needed
+docker compose restart
 ```
+
+## 📊 Verification Checklist
+
+- ✅ Docker container running
+- ✅ API responding at http://localhost:8000/health
+- ✅ CLI commands working (`BioAnalyzer fields`)
+- ✅ API documentation accessible at http://localhost:8000/docs
+- ✅ System status shows all green (`BioAnalyzer status`)
 
 ## 📚 Next Steps
 
-- 📖 Read the [full README](README.md)
-- 🔌 Explore the [API documentation](http://127.0.0.1:8000/docs)
-- 🧪 Run the [test suite](README.md#testing)
-- 🚀 Deploy to production
+- 📖 Read the [Complete Setup Guide](../SETUP_GUIDE.md)
+- 🔌 Explore the [API documentation](http://localhost:8000/docs)
+- 🧪 Test with real PMIDs
+- 🚀 Configure API keys for full functionality
 
 ---
 
-**Need help?** Check the [troubleshooting section](README.md#troubleshooting) in the main README! 
+**Need help?** Check the [troubleshooting section](../README.md#troubleshooting) in the main README! 

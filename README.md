@@ -7,6 +7,8 @@
 
 A comprehensive AI-powered backend system for analyzing and Identifying scientific papers that contain curatable microbiome Signatures  (curation readiness assessment.)
 
+> **✅ Tested Setup**: This project has been successfully built and tested on Ubuntu Linux with Docker. See [SETUP_GUIDE.md](SETUP_GUIDE.md) for verified setup steps.
+
 ## 🧬 Overview
 
 BioAnalyzer Backend is a specialized system that combines advanced AI analysis with comprehensive PubMed data retrieval to evaluate scientific papers for BugSigDB curation readiness. The system extracts 6 essential fields required for microbial signature curation and provides full text retrieval capabilities.
@@ -70,42 +72,81 @@ BioAnalyzer Backend is a specialized system that combines advanced AI analysis w
 
 ### Prerequisites
 
-- Python 3.8 or higher
-- Docker (optional)
-- NCBI API key (recommended)
-- Google Gemini API key (for analysis)
+- **Docker** (recommended) - Version 20.0+ with Docker Compose support
+- **Python 3.8+** (for local installation)
+- **NCBI API key** (optional, for higher rate limits)
+- **Google Gemini API key** (optional, for AI analysis)
 
-### Installation
+### Installation & Setup
 
-#### Option 1: Docker (Recommended)
+#### ✅ **Method 1: Docker Installation (Recommended & Tested)**
+
+This is the **recommended approach** as it avoids Python environment conflicts and provides a clean, isolated setup.
 
 ```bash
-# Clone the repository
-git clone https://github.com/waldronlab/bioanalyzer-backend.git
-cd bioanalyzer-backend
+# 1. Navigate to the project directory
+cd /path/to/bioanalyzer-backend
 
-# Build and start
-BioAnalyzer build
-BioAnalyzer start
+# 2. Install CLI commands system-wide
+chmod +x install.sh
+./install.sh
 
-# Test the system
-BioAnalyzer status
+# 3. Build Docker image
+docker compose build
+
+# 4. Start the application
+docker compose up -d
+
+# 5. Verify installation
+docker compose ps
+curl http://localhost:8000/health
 ```
 
-#### Option 2: Local Installation
+**Expected Output:**
+```json
+{"status":"healthy","timestamp":"2025-10-23T17:52:40.249451+00:00","version":"1.0.0"}
+```
+
+#### **Method 2: Local Python Installation**
+
+⚠️ **Note**: This method may encounter issues with externally managed Python environments on modern Linux distributions.
 
 ```bash
 # Clone and setup
 git clone https://github.com/waldronlab/bioanalyzer-backend.git
 cd bioanalyzer-backend
 
+# Create virtual environment (if python3-venv is available)
+python3 -m venv .venv
+source .venv/bin/activate
+
 # Install dependencies
 pip install -r config/requirements.txt
 pip install -e .
 
-# Set up environment
+# Set up environment (optional)
 cp .env.example .env
 # Edit .env with your API keys
+```
+
+### 🧪 **Verification Steps**
+
+After installation, verify the system is working:
+
+```bash
+# 1. Check Docker container status
+docker compose ps
+
+# 2. Test API health
+curl http://localhost:8000/health
+
+# 3. Test CLI commands (add to PATH first)
+export PATH="$PATH:/home/ronald/.local/bin"
+BioAnalyzer fields
+BioAnalyzer status
+
+# 4. View API documentation
+# Open browser: http://localhost:8000/docs
 ```
 
 ## 📖 Usage
@@ -465,37 +506,52 @@ pytest
 
 ## 🐛 Troubleshooting
 
-### Common Issues
+### Common Issues & Solutions
 
-#### Import Errors
+#### **Python Environment Issues**
 ```bash
-# Ensure virtual environment is activated
+# Error: externally-managed-environment
+# Solution: Use Docker (recommended) or install python3-venv
+sudo apt install python3.12-venv python3-full
+python3 -m venv .venv
 source .venv/bin/activate
-
-# Reinstall dependencies
-pip install -r config/requirements.txt --force-reinstall
 ```
 
-#### API Key Issues
+#### **Docker Compose Issues**
 ```bash
-# Check environment variables
-echo $GEMINI_API_KEY
-echo $NCBI_API_KEY
-
-# Verify .env file
-cat .env
+# Error: docker-compose command not found
+# Solution: Use newer Docker Compose syntax
+docker compose build    # Instead of docker-compose build
+docker compose up -d    # Instead of docker-compose up -d
 ```
 
-#### Docker Issues
+#### **CLI Command Not Found**
 ```bash
-# Check container logs
-docker-compose logs
+# Error: BioAnalyzer command not found
+# Solution: Add to PATH
+export PATH="$PATH:/home/ronald/.local/bin"
+# Or restart terminal after running ./install.sh
+```
 
-# Restart services
-docker-compose restart
+#### **API Not Responding**
+```bash
+# Check container status
+docker compose ps
 
-# Clean up resources
-docker system prune -a
+# Check logs
+docker compose logs
+
+# Restart if needed
+docker compose restart
+```
+
+#### **Missing API Keys**
+```bash
+# Warning: GeminiQA not initialized
+# This is normal - system works without API keys
+# For full functionality, set environment variables:
+export GEMINI_API_KEY="your_gemini_key"
+export NCBI_API_KEY="your_ncbi_key"
 ```
 
 ### Debug Mode
@@ -508,11 +564,11 @@ python main.py
 
 ## 📚 Documentation
 
-- **API Documentation**: http://localhost:8000/docs
-- **Architecture Guide**: [ARCHITECTURE.md](docs/ARCHITECTURE.md)
-- **Docker Guide**: [DOCKER_DEPLOYMENT.md](docs/DOCKER_DEPLOYMENT.md)
-- **Quick Start**: [QUICKSTART.md](docs/QUICKSTART.md)
-- **Refactoring Summary**: [REFACTORING_SUMMARY.md](REFACTORING_SUMMARY.md)
+- **🚀 Quick Start**: [QUICKSTART.md](docs/QUICKSTART.md) - Get running in 5 minutes
+- **📖 Complete Setup Guide**: [SETUP_GUIDE.md](SETUP_GUIDE.md) - Detailed setup steps (tested & verified)
+- **🏗️ Architecture Guide**: [ARCHITECTURE.md](docs/ARCHITECTURE.md)
+- **🐳 Docker Guide**: [DOCKER_DEPLOYMENT.md](docs/DOCKER_DEPLOYMENT.md)
+- **🔧 API Documentation**: http://localhost:8000/docs (when running)
 
 ## 🤝 Contributing
 
