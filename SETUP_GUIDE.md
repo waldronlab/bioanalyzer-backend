@@ -115,7 +115,7 @@ curl http://localhost:8000/health
 #### Test CLI Commands
 ```bash
 # Add CLI to PATH
-export PATH="$PATH:/home/ronald/.local/bin"
+export PATH="$PATH:/home/<computer_user_name>/.local/bin"
 
 # Test fields command
 BioAnalyzer fields
