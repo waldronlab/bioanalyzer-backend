@@ -18,7 +18,7 @@ This guide documents the **actual steps taken** to successfully build and run th
 
 ```bash
 # Navigate to project directory
-cd /home/ronald/Desktop/new/bioanalyzer-backend
+cd /home/<computer_user_bame>/Desktop/new/bioanalyzer-backend
 
 # Verify project structure
 ls -la
@@ -40,8 +40,8 @@ chmod +x install.sh
 🧬 BioAnalyzer System Installation
 ==================================
 [INFO] Installing BioAnalyzer for current user.
-[INFO] Creating installation directory: /home/ronald/.local/bin
-[INFO] BioAnalyzer backend directory: /home/ronald/Desktop/new/bioanalyzer-backend
+[INFO] Creating installation directory: /home/<computer_user_bame>/.local/bin
+[INFO] BioAnalyzer backend directory: /home/<computer_user_bame>/Desktop/new/bioanalyzer-backend
 [INFO] Installing BioAnalyzer command...
 [SUCCESS] BioAnalyzer command installed successfully!
 ```
@@ -233,7 +233,7 @@ docker compose up -d    # Instead of docker-compose up -d
 **Problem**: `BioAnalyzer command not found`
 **Solution**: Add to PATH
 ```bash
-export PATH="$PATH:/home/ronald/.local/bin"
+export PATH="$PATH:/home/<computer_user_bame>/.local/bin"
 # Or restart terminal after running ./install.sh
 ```
 
