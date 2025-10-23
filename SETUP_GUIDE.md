@@ -6,7 +6,7 @@ This guide documents the **actual steps taken** to successfully build and run th
 
 ## 🎯 System Requirements
 
-- **OS**: Ubuntu Linux (tested on 6.14.0-33-generic)
+- **OS**: Mac, Windows and Ubuntu Linux (tested on 6.14.0-33-generic)
 - **Docker**: Version 28.5.1+ with Docker Compose support
 - **Python**: 3.8+ (for local installation, optional)
 - **Memory**: Minimum 2GB RAM recommended
