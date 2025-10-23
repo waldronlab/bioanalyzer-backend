@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Simple starter script for BugSigDB Analyzer.
+Starter script for BiAnalyzer.
 This script uses python -m to run the web app, which should handle imports correctly.
 """
 
