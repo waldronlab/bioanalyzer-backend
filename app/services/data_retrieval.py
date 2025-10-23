@@ -290,11 +290,19 @@ class PubMedRetriever:
             root = ElementTree.fromstring(xml_data)
             # Look for LinkSetDb with PMC links
             for linksetdb in root.findall(".//LinkSetDb"):
-                if linksetdb.get("DbTo") == "pmc":
-                    for id_elem in linksetdb.findall(".//Id"):
-                        pmc_id = id_elem.text
-                        if pmc_id and pmc_id.startswith("PMC"):
-                            return pmc_id
+                # Check if DbTo child element equals "pmc"
+                db_to_elem = linksetdb.find("DbTo")
+                if db_to_elem is not None and db_to_elem.text == "pmc":
+                    # Look for the direct PMC link (not references)
+                    link_name_elem = linksetdb.find("LinkName")
+                    if link_name_elem is not None and link_name_elem.text == "pubmed_pmc":
+                        for id_elem in linksetdb.findall(".//Id"):
+                            pmc_id = id_elem.text
+                            if pmc_id:
+                                # Add PMC prefix if not present
+                                if not pmc_id.startswith("PMC"):
+                                    pmc_id = f"PMC{pmc_id}"
+                                return pmc_id
             return None
             
         except Exception as e:

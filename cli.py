@@ -450,6 +450,8 @@ class BioAnalyzerCLI:
             print(json.dumps(results, indent=2, ensure_ascii=False))
         elif output_format == 'csv':
             self.display_csv_results(results)
+        elif output_format == 'xml':
+            self.display_xml_results(results)
         else:
             self.display_table_results(results)
     
@@ -542,12 +544,60 @@ class BioAnalyzerCLI:
         
         print(output.getvalue())
     
+    def display_xml_results(self, results: List[Dict[str, Any]]):
+        """Display results in XML format."""
+        if not results:
+            print("No results to display.")
+            return
+        
+        print('<?xml version="1.0" encoding="UTF-8"?>')
+        print('<BioAnalyzerResults>')
+        
+        for result in results:
+            print(f'  <Analysis>')
+            print(f'    <PMID>{result.get("pmid", "")}</PMID>')
+            print(f'    <Title>{result.get("title", "")}</Title>')
+            print(f'    <Journal>{result.get("journal", "")}</Journal>')
+            print(f'    <ProcessingTime>{result.get("processing_time", 0)}</ProcessingTime>')
+            
+            fields = result.get('fields', {})
+            print(f'    <Fields>')
+            
+            field_names = {
+                'host_species': 'HostSpecies',
+                'body_site': 'BodySite', 
+                'condition': 'Condition',
+                'sequencing_type': 'SequencingType',
+                'taxa_level': 'TaxaLevel',
+                'sample_size': 'SampleSize'
+            }
+            
+            for field_key, field_name in field_names.items():
+                field_data = fields.get(field_key, {})
+                status = field_data.get('status', 'UNKNOWN')
+                value = field_data.get('value', 'N/A')
+                confidence = field_data.get('confidence', 0.0)
+                
+                print(f'      <{field_name}>')
+                print(f'        <Status>{status}</Status>')
+                print(f'        <Value><![CDATA[{value}]]></Value>')
+                print(f'        <Confidence>{confidence:.2f}</Confidence>')
+                print(f'      </{field_name}>')
+            
+            print(f'    </Fields>')
+            print(f'    <Summary><![CDATA[{result.get("curation_summary", "")}]]></Summary>')
+            print(f'  </Analysis>')
+        
+        print('</BioAnalyzerResults>')
+    
     def save_results(self, results: List[Dict[str, Any]], filename: str, output_format: str):
         """Save results to a file."""
         if output_format == 'json':
             content = json.dumps(results, indent=2, ensure_ascii=False)
         elif output_format == 'csv':
             content = self.get_csv_content(results)
+        elif output_format == 'xml':
+            content = self.get_xml_content(results)
         else:
             content = self.get_table_content(results)
         
@@ -594,6 +644,52 @@ class BioAnalyzerCLI:
             writer.writerow(row)
         
         return output.getvalue()
+    
+    def get_xml_content(self, results: List[Dict[str, Any]]) -> str:
+        """Get XML content for results."""
+        if not results:
+            return '<?xml version="1.0" encoding="UTF-8"?>\n<BioAnalyzerResults></BioAnalyzerResults>'
+        
+        xml_content = ['<?xml version="1.0" encoding="UTF-8"?>']
+        xml_content.append('<BioAnalyzerResults>')
+        
+        for result in results:
+            xml_content.append('  <Analysis>')
+            xml_content.append(f'    <PMID>{result.get("pmid", "")}</PMID>')
+            xml_content.append(f'    <Title>{result.get("title", "")}</Title>')
+            xml_content.append(f'    <Journal>{result.get("journal", "")}</Journal>')
+            xml_content.append(f'    <ProcessingTime>{result.get("processing_time", 0)}</ProcessingTime>')
+            
+            fields = result.get('fields', {})
+            xml_content.append('    <Fields>')
+            
+            field_names = {
+                'host_species': 'HostSpecies',
+                'body_site': 'BodySite', 
+                'condition': 'Condition',
+                'sequencing_type': 'SequencingType',
+                'taxa_level': 'TaxaLevel',
+                'sample_size': 'SampleSize'
+            }
+            
+            for field_key, field_name in field_names.items():
+                field_data = fields.get(field_key, {})
+                status = field_data.get('status', 'UNKNOWN')
+                value = field_data.get('value', 'N/A')
+                confidence = field_data.get('confidence', 0.0)
+                
+                xml_content.append(f'      <{field_name}>')
+                xml_content.append(f'        <Status>{status}</Status>')
+                xml_content.append(f'        <Value><![CDATA[{value}]]></Value>')
+                xml_content.append(f'        <Confidence>{confidence:.2f}</Confidence>')
+                xml_content.append(f'      </{field_name}>')
+            
+            xml_content.append('    </Fields>')
+            xml_content.append(f'    <Summary><![CDATA[{result.get("curation_summary", "")}]]></Summary>')
+            xml_content.append('  </Analysis>')
+        
+        xml_content.append('</BioAnalyzerResults>')
+        return '\n'.join(xml_content)
     
     def get_table_content(self, results: List[Dict[str, Any]]) -> str:
         """Get table content for results."""
@@ -992,7 +1088,7 @@ Examples:
     analyze_parser = subparsers.add_parser('analyze', help='Analyze papers')
     analyze_parser.add_argument('pmids', nargs='*', help='PubMed IDs to analyze')
     analyze_parser.add_argument('--file', '-f', help='File containing PMIDs')
-    analyze_parser.add_argument('--format', choices=['table', 'json', 'csv'], 
+    analyze_parser.add_argument('--format', choices=['table', 'json', 'csv', 'xml'], 
                               default='table', help='Output format')
     analyze_parser.add_argument('--output', '-o', help='Output file')
     analyze_parser.add_argument('--verbose', '-v', action='store_true',
@@ -1005,7 +1101,7 @@ Examples:
     retrieve_parser = subparsers.add_parser('retrieve', help='Retrieve full paper text and metadata')
     retrieve_parser.add_argument('pmids', nargs='*', help='PubMed IDs to retrieve')
     retrieve_parser.add_argument('--file', '-f', help='File containing PMIDs')
-    retrieve_parser.add_argument('--format', choices=['table', 'json', 'csv'], 
+    retrieve_parser.add_argument('--format', choices=['table', 'json', 'csv', 'xml'], 
                                 default='table', help='Output format')
     retrieve_parser.add_argument('--output', '-o', help='Output file')
     retrieve_parser.add_argument('--save', '-s', action='store_true',
