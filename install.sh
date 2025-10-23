@@ -111,7 +111,7 @@ if command -v xdg-desktop-menu &> /dev/null; then
 Version=1.0
 Type=Application
 Name=BioAnalyzer CLI
-Comment=BugSigDB Field Analysis Tool
+Comment=Curatable Signatures Analysis Tool
 Exec=$INSTALL_DIR/BioAnalyzer fields
 Icon=applications-science
 Terminal=true

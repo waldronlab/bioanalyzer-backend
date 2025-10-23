@@ -3,7 +3,7 @@ BioAnalyzer Backend API - Standalone FastAPI Application
 ========================================================
 
 This is the main FastAPI application for the BioAnalyzer Backend.
-It provides REST API endpoints for BugSigDB field analysis without
+It provides REST API endpoints for BioAnaler without
 frontend dependencies.
 """
 from fastapi import FastAPI
@@ -98,7 +98,7 @@ async def root():
     return {
         "message": "BioAnalyzer Backend API",
         "version": "1.0.0",
-        "description": "AI-powered BugSigDB field analysis API",
+        "description": "AI-powered Curatable Signature analysis API",
         "documentation": "/docs",
         "health_check": "/health",
         "metrics": "/metrics"

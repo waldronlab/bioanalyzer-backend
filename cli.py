@@ -52,7 +52,7 @@ class BioAnalyzerCLI:
         """Print the BioAnalyzer banner."""
         print("""
 🧬 =============================================== 🧬
-   BioAnalyzer - BugSigDB Field Analysis Tool
+   BioAnalyzer - Curatable Signature Analysis Tool
 🧬 =============================================== 🧬
         """)
     
@@ -462,7 +462,7 @@ class BioAnalyzerCLI:
             return
         
         print("\n" + "="*80)
-        print("🧬 BIOANALYZER - BugSigDB FIELD ANALYSIS RESULTS")
+        print("🧬 BIOANALYZER - CURATABLE SIGNATURE ANALYSIS RESULTS")
         print("="*80)
         
         for result in results:
