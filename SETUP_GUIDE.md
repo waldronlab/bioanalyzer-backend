@@ -269,14 +269,5 @@ docker compose logs --tail=20
 3. **Explore Documentation**: Visit http://localhost:8000/docs for interactive API documentation
 4. **Batch Processing**: Test analyzing multiple papers at once
 
-## 📝 Notes
-
-- The system works **without API keys** but with limited functionality
-- Docker approach is **recommended** to avoid Python environment conflicts
-- All 6 essential BugSigDB fields are supported
-- The system is ready for production use after setup
-
----
 
 **Setup completed successfully! 🧬**  
-The BioAnalyzer Backend is now fully operational and ready to analyze scientific papers for BugSigDB curation readiness.
