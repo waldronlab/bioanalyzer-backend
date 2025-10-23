@@ -1,0 +1,88 @@
+#!/usr/bin/env python3
+"""
+BioAnalyzer Global Command - User-Friendly Entry Point
+
+This script provides a global command interface for BioAnalyzer.
+It can be installed system-wide or used as a standalone command.
+
+Usage:
+    BioAnalyzer help                    # Show help
+    BioAnalyzer build                   # Build containers
+    BioAnalyzer start                   # Start application
+    BioAnalyzer analyze <pmid>          # Analyze single paper
+    BioAnalyzer analyze <pmid1,pmid2>   # Analyze multiple papers
+    BioAnalyzer fields                  # Show field information
+    BioAnalyzer status                  # Check status
+    BioAnalyzer stop                    # Stop application
+"""
+
+import sys
+import os
+from pathlib import Path
+
+# Find the BioAnalyzer backend directory
+def find_bioanalyzer_backend():
+    """Find the BioAnalyzer backend directory."""
+    # Try different possible locations
+    possible_paths = [
+        Path(__file__).parent,  # Current directory
+        Path(__file__).parent / "BioAnalyzer-Backend",  # Adjacent directory
+        Path.home() / "Desktop" / "BioAnalyzer-Backend",  # Desktop
+        Path("/opt/bioanalyzer"),  # System installation
+        Path("/usr/local/bin/bioanalyzer"),  # Local installation
+    ]
+    
+    for path in possible_paths:
+        cli_path = path / "cli.py"
+        if cli_path.exists():
+            return path
+    
+    return None
+
+def main():
+    """Main entry point for BioAnalyzer command."""
+    # Find the backend directory
+    backend_dir = find_bioanalyzer_backend()
+    
+    if not backend_dir:
+        print("""
+❌ Error: BioAnalyzer backend not found!
+
+Please ensure BioAnalyzer-Backend is installed and accessible.
+
+Possible solutions:
+1. Run from the BioAnalyzer-Backend directory
+2. Install BioAnalyzer system-wide: ./install.sh
+3. Set BIOANALYZER_PATH environment variable
+
+For help, visit: https://github.com/your-repo/bioanalyzer-backend
+        """)
+        sys.exit(1)
+    
+    # Add the backend directory to Python path
+    sys.path.insert(0, str(backend_dir))
+    
+    # Change to the backend directory
+    os.chdir(backend_dir)
+    
+    # Import and run the CLI
+    try:
+        from cli import main as cli_main
+        cli_main()
+    except ImportError as e:
+        print(f"""
+❌ Error importing BioAnalyzer CLI: {e}
+
+Please ensure all dependencies are installed:
+   pip install -r config/requirements.txt
+
+Or use Docker:
+   ./docker-setup.sh
+        """)
+        sys.exit(1)
+    except Exception as e:
+        print(f"❌ Error running BioAnalyzer: {e}")
+        sys.exit(1)
+
+if __name__ == "__main__":
+    main()
