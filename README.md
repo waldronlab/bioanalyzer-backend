@@ -272,7 +272,7 @@ The system analyzes papers for these critical fields:
 ```
 Input (PMID) → Retrieval → Analysis → Processing → Output
      ↓            ↓          ↓          ↓         ↓
-   CLI/API   PubMedRetriever  GeminiQA  Formatter  JSON/CSV/Table
+   CLI/API   PubMedRetriever  GeminiQA  Formatter  JSON/CSV/Table/XML
 ```
 
 ### Error Handling Strategy
@@ -529,7 +529,7 @@ docker compose up -d    # Instead of docker-compose up -d
 ```bash
 # Error: BioAnalyzer command not found
 # Solution: Add to PATH
-export PATH="$PATH:/home/ronald/.local/bin"
+export PATH="$PATH:/home/<copmuter_name>/.local/bin"
 # Or restart terminal after running ./install.sh
 ```
 
