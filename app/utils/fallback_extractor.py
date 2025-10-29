@@ -2,8 +2,6 @@ import re
 import logging
 from typing import Dict, List, Optional
 
-from app.services.bugsigdb_classifier import MicrobeSigClassifier
-
 logger = logging.getLogger(__name__)
 
 
@@ -22,6 +20,22 @@ class BasicFieldExtractor:
     }
 
     TAXA_LEVEL_KEYWORDS = ['phylum', 'class', 'order', 'family', 'genus', 'species']
+    
+    BODY_SITE_KEYWORDS = {
+        'gut': ['gut', 'intestinal', 'stool', 'fecal', 'gastrointestinal', 'colon'],
+        'oral': ['oral', 'mouth', 'dental', 'tongue', 'saliva'],
+        'skin': ['skin', 'cutaneous', 'epidermal'],
+        'respiratory': ['lung', 'respiratory', 'nasal', 'nose'],
+        'vaginal': ['vaginal', 'vagina'],
+        'urinary': ['urine', 'bladder', 'urethral'],
+    }
+    
+    SEQUENCING_TYPE_KEYWORDS = {
+        '16s': ['16s', '16s rrna', '16s ribosomal'],
+        'metagenomics': ['metagenomics', 'metagenomic', 'whole genome', 'shotgun'],
+        'its': ['its', 'internal transcribed spacer'],
+        'amplicon': ['amplicon', 'pcr', 'targeted'],
+    }
 
     SAMPLE_SIZE_REGEX = [
         r"n\s*=\s*(\d{2,4})",
@@ -31,13 +45,8 @@ class BasicFieldExtractor:
     ]
 
     def __init__(self):
-        # Initialize classifier for metadata-based extraction
-        try:
-            self.classifier = MicrobeSigClassifier()
-            logger.info("BasicFieldExtractor: MicrobeSigClassifier initialized successfully.")
-        except Exception as e:
-            logger.warning(f"Could not initialize MicrobeSigClassifier: {e}")
-            self.classifier = None
+        # Classifier removed - using keyword-based extraction only
+        self.classifier = None
 
     def extract(self, text: str) -> Dict[str, Dict]:
         """Extract BugSigDB-relevant fields from text using heuristics and classifier."""
@@ -52,19 +61,10 @@ class BasicFieldExtractor:
                 break
         fields['host_species'] = self._mk_field(host_value)
 
-        # --- Classifier-based body site, condition, sequencing type ---
-        body_site_value = None
-        condition_value = None
-        seq_value = None
-
-        if self.classifier:
-            try:
-                prediction = self.classifier.analyze_text(t)
-                body_site_value = prediction.get("body_site")
-                condition_value = prediction.get("condition")
-                seq_value = prediction.get("sequencing_type")
-            except Exception as e:
-                logger.error(f"Classifier analysis failed: {e}")
+        # --- Keyword-based extraction for body site, condition, sequencing type ---
+        body_site_value = self._extract_body_site(t)
+        condition_value = self._extract_condition(t)
+        seq_value = self._extract_sequencing_type(t)
 
         fields['body_site'] = self._mk_field(body_site_value)
         fields['condition'] = self._mk_field(condition_value)
@@ -104,3 +104,37 @@ class BasicFieldExtractor:
             'reason_if_missing': None,
             'suggestions': None,
         }
+    
+    def _extract_body_site(self, text: str) -> Optional[str]:
+        """Extract body site using keyword matching."""
+        for site, keywords in self.BODY_SITE_KEYWORDS.items():
+            if any(kw in text for kw in keywords):
+                return site
+        return None
+    
+    def _extract_condition(self, text: str) -> Optional[str]:
+        """Extract condition/disease using common patterns."""
+        # Look for common patterns like "disease", "disorder", "syndrome", etc.
+        condition_patterns = [
+            r"(inflammatory\s+bowel\s+disease|ibd)",
+            r"(crohn['\"]s?\s+disease)",
+            r"(ulcerative\s+colitis)",
+            r"(irritable\s+bowel\s+syndrome|ibs)",
+            r"(diabetes)",
+            r"(obes[ei]ty)",
+            r"(autoimmune\s+disease)",
+        ]
+        
+        for pattern in condition_patterns:
+            match = re.search(pattern, text, re.IGNORECASE)
+            if match:
+                return match.group(1)
+        
+        return None
+    
+    def _extract_sequencing_type(self, text: str) -> Optional[str]:
+        """Extract sequencing type using keyword matching."""
+        for seq_type, keywords in self.SEQUENCING_TYPE_KEYWORDS.items():
+            if any(kw in text for kw in keywords):
+                return seq_type
+        return None
