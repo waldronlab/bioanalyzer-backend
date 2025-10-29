@@ -172,6 +172,37 @@ class BioAnalyzerCLI:
                 return False
         
         try:
+            # Check if container already exists
+            check_result = subprocess.run(
+                ["docker", "ps", "-a", "--filter", f"name={self.container_name}", "--format", "{{.Names}}"],
+                capture_output=True,
+                text=True,
+                check=False
+            )
+            
+            if check_result.stdout.strip():
+                # Container exists - check if it's running
+                ps_result = subprocess.run(
+                    ["docker", "ps", "--filter", f"name={self.container_name}", "--format", "{{.Names}}"],
+                    capture_output=True,
+                    text=True,
+                    check=False
+                )
+                
+                if ps_result.stdout.strip():
+                    # Container is already running
+                    print(f"⚠️  Container '{self.container_name}' is already running!")
+                    print(f"✅ Backend API is available at http://localhost:8000")
+                    return True
+                else:
+                    # Container exists but is stopped - remove it first
+                    print(f"🧹 Removing existing stopped container '{self.container_name}'...")
+                    subprocess.run(
+                        ["docker", "rm", self.container_name],
+                        capture_output=True,
+                        check=False
+                    )
+            
             # Start backend container
             print("🔧 Starting backend API...")
             subprocess.run([
@@ -192,12 +223,47 @@ class BioAnalyzerCLI:
             # Start frontend if available
             frontend_dir = project_root.parent / "BioAnalyzer-Frontend"
             if frontend_dir.exists():
-                print("🌐 Starting frontend...")
-                subprocess.run([
-                    "docker", "run", "-d", "--name", "bioanalyzer-frontend",
-                    "-p", "3000:80", "bioanalyzer-frontend"
-                ], check=True)
-                print("✅ Frontend is running at http://localhost:3000")
+                frontend_name = "bioanalyzer-frontend"
+                # Check if frontend container already exists
+                frontend_check = subprocess.run(
+                    ["docker", "ps", "-a", "--filter", f"name={frontend_name}", "--format", "{{.Names}}"],
+                    capture_output=True,
+                    text=True,
+                    check=False
+                )
+                
+                if frontend_check.stdout.strip():
+                    # Container exists - check if it's running
+                    frontend_ps = subprocess.run(
+                        ["docker", "ps", "--filter", f"name={frontend_name}", "--format", "{{.Names}}"],
+                        capture_output=True,
+                        text=True,
+                        check=False
+                    )
+                    
+                    if frontend_ps.stdout.strip():
+                        print(f"⚠️  Frontend container '{frontend_name}' is already running!")
+                    else:
+                        # Container exists but is stopped - remove it first
+                        print(f"🧹 Removing existing stopped frontend container...")
+                        subprocess.run(
+                            ["docker", "rm", frontend_name],
+                            capture_output=True,
+                            check=False
+                        )
+                        print("🌐 Starting frontend...")
+                        subprocess.run([
+                            "docker", "run", "-d", "--name", frontend_name,
+                            "-p", "3000:80", "bioanalyzer-frontend"
+                        ], check=True)
+                        print("✅ Frontend is running at http://localhost:3000")
+                else:
+                    print("🌐 Starting frontend...")
+                    subprocess.run([
+                        "docker", "run", "-d", "--name", frontend_name,
+                        "-p", "3000:80", "bioanalyzer-frontend"
+                    ], check=True)
+                    print("✅ Frontend is running at http://localhost:3000")
             
             print("\n🎉 BioAnalyzer is now running!")
             print("📱 Web Interface: http://localhost:3000")
