@@ -47,6 +47,40 @@ class BioAnalyzerCLI:
         self.container_name = "bioanalyzer-api"
         self.image_name = "bioanalyzer-backend"
         self.verbose = False
+        # Critical runtime environment variables the backend may rely on
+        self.required_env_vars = [
+            "GEMINI_API_KEY",
+            "NCBI_API_KEY",
+            "EMAIL",
+        ]
+        # Optional tuning envs
+        self.optional_env_vars = [
+            "API_TIMEOUT",
+            "NCBI_RATE_LIMIT_DELAY",
+            "USE_FULLTEXT",
+            "LOG_LEVEL",
+            "UVICORN_RELOAD",
+        ]
+
+    def _collect_env_flags(self) -> list:
+        """Collect docker -e flags for known env vars if present in the host environment."""
+        flags = []
+        for key in self.required_env_vars + self.optional_env_vars:
+            val = os.environ.get(key)
+            if val is not None and str(val) != "":
+                flags.extend(["-e", f"{key}={val}"])
+        return flags
+
+    def _validate_environment(self):
+        """Warn about missing critical env vars before starting containers."""
+        missing = [k for k in self.required_env_vars if not os.environ.get(k)]
+        if missing:
+            print("⚠️  Missing critical environment variables:")
+            for k in missing:
+                print(f"   - {k}")
+            print("   The backend may start, but analysis quality/availability can be impacted.")
+            print("   Set them in your shell before 'BioAnalyzer start', e.g.:")
+            print("     export GEMINI_API_KEY=...; export NCBI_API_KEY=...; export EMAIL=you@example.com")
     
     def print_banner(self):
         """Print the BioAnalyzer banner."""
@@ -172,6 +206,8 @@ class BioAnalyzerCLI:
                 return False
         
         try:
+            # Preflight env validation
+            self._validate_environment()
             # Check if container already exists
             check_result = subprocess.run(
                 ["docker", "ps", "-a", "--filter", f"name={self.container_name}", "--format", "{{.Names}}"],
@@ -203,12 +239,14 @@ class BioAnalyzerCLI:
                         check=False
                     )
             
-            # Start backend container
+            # Start backend container (pass through env vars when available)
             print("🔧 Starting backend API...")
-            subprocess.run([
+            env_flags = self._collect_env_flags()
+            run_cmd = [
                 "docker", "run", "-d", "--name", self.container_name,
-                "-p", "8000:8000", self.image_name
-            ], check=True)
+                "-p", "8000:8000",
+            ] + env_flags + [self.image_name]
+            subprocess.run(run_cmd, check=True)
             
             # Wait for backend to be ready
             print("⏳ Waiting for backend to be ready...")
