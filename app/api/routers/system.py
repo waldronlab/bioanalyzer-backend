@@ -24,7 +24,6 @@ from app.services.data_retrieval import PubMedRetriever
 from app.utils.performance_logger import perf_logger
 from app.api.models.api_models import HealthResponse, ConfigResponse, MetricsResponse
 from app.api.utils.api_utils import get_current_timestamp
-from app.services.data_retrieval import PubMedRetriever
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1", tags=["System"])
