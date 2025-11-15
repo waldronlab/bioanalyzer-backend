@@ -3,24 +3,52 @@ import logging
 import os
 from typing import Dict, List, Optional, Union
 
-from .gemini_qa import GeminiQA
+# Try to import Paper-QA first, fallback to GeminiQA if not available
+try:
+    from .paperqa_agent import PaperQAAgent
+    PAPERQA_AVAILABLE = True
+except ImportError:
+    PAPERQA_AVAILABLE = False
+    logger = logging.getLogger(__name__)
+    logger.warning("Paper-QA not available, falling back to GeminiQA")
+    from .gemini_qa import GeminiQA
 
 logger = logging.getLogger(__name__)
 
 
 class UnifiedQA:
-    """Unified QA system that wraps an external model interface for conversational interactions."""
+    """
+    Unified QA system that wraps Paper-QA agent (preferred) or GeminiQA (fallback).
+    
+    Paper-QA is preferred because it:
+    - Supports multiple LLMs including Gemini
+    - Provides agent-based reasoning
+    - Offers better paper analysis capabilities
+    """
 
-    def __init__(self, use_gemini: bool = True, gemini_api_key: Optional[str] = None):
+    def __init__(
+        self, 
+        use_gemini: bool = True, 
+        gemini_api_key: Optional[str] = None,
+        use_paperqa: bool = True
+    ):
         """
         Initialize the unified QA system.
 
+        Args:
+            use_gemini: Whether to use Gemini (via Paper-QA or direct API)
+            gemini_api_key: API key for Gemini
+            use_paperqa: Whether to use Paper-QA agent (default: True)
+                          If False or Paper-QA unavailable, falls back to GeminiQA
+
         Behavior:
+        - If use_paperqa=True and Paper-QA is available, use PaperQAAgent
+        - Otherwise, fall back to GeminiQA (direct API calls)
         - If gemini_api_key provided (non-empty), use it.
         - Else fall back to environment variable GEMINI_API_KEY.
-        - If neither present and use_gemini=True, log a warning but keep the wrapper available.
         """
         self.use_gemini = bool(use_gemini)
+        self.use_paperqa = bool(use_paperqa) and PAPERQA_AVAILABLE
 
         # Prefer explicit param, otherwise environment variable
         api_key_candidate = None
@@ -33,15 +61,30 @@ class UnifiedQA:
 
         if self.use_gemini and api_key_candidate:
             try:
-                self.qa_system = GeminiQA(api_key=api_key_candidate)
-                logger.info("UnifiedQA: GeminiQA initialized successfully.")
+                if self.use_paperqa:
+                    # Use Paper-QA agent (preferred)
+                    self.qa_system = PaperQAAgent(api_key=api_key_candidate)
+                    logger.info("UnifiedQA: PaperQAAgent initialized successfully.")
+                else:
+                    # Fallback to direct Gemini API
+                    from .gemini_qa import GeminiQA
+                    self.qa_system = GeminiQA(api_key=api_key_candidate)
+                    logger.info("UnifiedQA: GeminiQA initialized successfully (Paper-QA not used).")
             except Exception as e:
                 self.qa_system = None
-                logger.error(f"UnifiedQA: failed to initialize GeminiQA: {e}")
+                logger.error(f"UnifiedQA: failed to initialize QA system: {e}")
+                # Try fallback if Paper-QA failed
+                if self.use_paperqa:
+                    try:
+                        from .gemini_qa import GeminiQA
+                        self.qa_system = GeminiQA(api_key=api_key_candidate)
+                        logger.info("UnifiedQA: Fallback to GeminiQA after Paper-QA failure.")
+                    except Exception as e2:
+                        logger.error(f"UnifiedQA: Fallback to GeminiQA also failed: {e2}")
         else:
             self.qa_system = None
             logger.warning(
-                "UnifiedQA: GeminiQA not initialized. "
+                "UnifiedQA: QA system not initialized. "
                 f"use_gemini={self.use_gemini}, api_key_provided={bool(api_key_candidate)}. "
                 "Chat functionality will be limited."
             )
@@ -64,11 +107,22 @@ class UnifiedQA:
         Adapter used by paper_analysis.py and other routers.
         Ensures a common response shape: {'answer': str, 'confidence': float}
         """
+        if not self.qa_system:
+            return {"answer": "Model not available. Check GEMINI_API_KEY.", "confidence": 0.0, "pmid": pmid}
+        
+        # Use PaperQA's ask_question if available (more optimized for context+question)
+        if self.use_paperqa and hasattr(self.qa_system, 'ask_question'):
+            try:
+                return await self.qa_system.ask_question(question, context, pmid)
+            except Exception as e:
+                logger.error(f"UnifiedQA.ask_question (PaperQA) error: {e}")
+                # Fall through to generic chat method
+        
+        # Fallback to generic chat method
         prompt = question
         if context:
             prompt = f"Context: {context[:2000]}\n\nQuestion: {question}"
 
-        # Use chat() under the hood; normalized output
         try:
             resp = await self.chat(prompt)
             text = resp.get("text") or resp.get("answer") or ""
