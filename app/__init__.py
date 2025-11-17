@@ -10,7 +10,14 @@ __author__ = "WaldronLab"
 __description__ = "A comprehensive tool for identifying curatable microbiome signatures"
 
 # Import main components for easy access
-from .api.app import app
+# Lazy import to avoid requiring FastAPI when only using models
+try:
+    from .api.app import app
+    _has_fastapi = True
+except ImportError:
+    app = None
+    _has_fastapi = False
+
 from .utils.config import *
 
 __all__ = ["app"] + [name for name in dir() if not name.startswith('_')] 

@@ -8,13 +8,14 @@ import logging
 import os
 import tempfile
 from pathlib import Path
-from typing import Dict, Optional, Union
+from typing import Dict, Optional, Union, List
 import asyncio
 import json
 
 # Paper-QA imports
 try:
-    from paperqa import Docs, Settings, AgentSettings
+    from paperqa import Docs, Settings
+    from paperqa.settings import AgentSettings
     from paperqa.agents import agent_query
     from paperqa.types import AnswerResponse
     PAPERQA_AVAILABLE = True

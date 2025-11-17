@@ -313,3 +313,59 @@ async def ping():
         "message": "pong",
         "timestamp": get_current_timestamp()
     }
+
+
+@router.post("/qa")
+async def ask_question(request: Dict[str, Any]):
+    """
+    **Ask a question and get an AI-powered answer.**
+    
+    This endpoint uses Paper-QA agent (or GeminiQA fallback) to answer questions.
+    Questions can be about anything - general knowledge, scientific concepts, etc.
+    
+    **Request Body:**
+    - `question` (str): The question to ask
+    
+    **Response:**
+    - `answer` (str): The answer text
+    - `confidence` (float): Confidence score (0.0-1.0)
+    - `timestamp` (str): Response timestamp
+    
+    **Example:**
+    ```json
+    {
+        "question": "What is the microbiome?"
+    }
+    ```
+    """
+    try:
+        question = request.get("question", "").strip()
+        
+        if not question:
+            raise HTTPException(status_code=400, detail="Question is required")
+        
+        logger.info(f"Q&A request: {question[:100]}...")
+        
+        # Use UnifiedQA to get the answer
+        response = await unified_qa.chat(question)
+        
+        answer = response.get('text', '')
+        confidence = response.get('confidence', 0.8)
+        
+        if not answer:
+            raise HTTPException(
+                status_code=500, 
+                detail="No answer generated. Please check GEMINI_API_KEY and try again."
+            )
+        
+        return {
+            "answer": answer,
+            "confidence": confidence,
+            "timestamp": get_current_timestamp()
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in Q&A endpoint: {e}")
+        raise HTTPException(status_code=500, detail=f"Error processing question: {str(e)}")
