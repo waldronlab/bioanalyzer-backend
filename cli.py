@@ -115,6 +115,11 @@ class BioAnalyzerCLI:
    BioAnalyzer retrieve <pmid1,pmid2>   Retrieve multiple papers
    BioAnalyzer retrieve --file <file>  Retrieve papers from file
 
+💬 Q&A Commands:
+   BioAnalyzer qa <question>             Ask a question and get an answer
+   BioAnalyzer qa --interactive          Start interactive Q&A mode
+   BioAnalyzer qa                        Start interactive Q&A mode (default)
+
 📊 Output Options:
    --format json|csv|table             Output format (default: table)
    --output <file>                     Save results to file
@@ -130,6 +135,8 @@ class BioAnalyzerCLI:
    BioAnalyzer retrieve 12345678,87654321 --save
    BioAnalyzer retrieve --file pmids.txt --format json
    BioAnalyzer fields
+   BioAnalyzer qa "What is the microbiome?"
+   BioAnalyzer qa --interactive
    BioAnalyzer status
    BioAnalyzer stop
 
@@ -837,6 +844,120 @@ class BioAnalyzerCLI:
    ⚠️  PARTIALLY_PRESENT: Some information available but incomplete
    ❌ ABSENT: Information is missing
         """)
+    
+    def interactive_qa(self):
+        """Start interactive Q&A mode."""
+        self.print_banner()
+        print("💬 Interactive Q&A Mode")
+        print("=" * 40)
+        print("Ask any question and get AI-powered answers!")
+        print("Type 'help' for commands, 'quit' to exit")
+        print()
+        
+        # Initialize UnifiedQA
+        try:
+            from app.models.unified_qa import UnifiedQA
+            from app.utils.config import GEMINI_API_KEY
+            qa_system = UnifiedQA(use_gemini=True, gemini_api_key=GEMINI_API_KEY)
+            
+            if not qa_system.qa_system:
+                print("⚠️  Warning: QA system not available. Please set GEMINI_API_KEY environment variable.")
+                print("   You can still use other BioAnalyzer features.")
+                return
+        except Exception as e:
+            print(f"❌ Error initializing QA system: {e}")
+            print("   Please check your GEMINI_API_KEY and try again.")
+            return
+        
+        print("✅ QA system ready! Ask your questions below.\n")
+        
+        while True:
+            try:
+                user_input = input("BioAnalyzer Q&A> ").strip()
+                
+                if user_input.lower() in ['quit', 'exit', 'q']:
+                    print("👋 Goodbye!")
+                    break
+                elif user_input.lower() == 'help':
+                    print("""
+📋 Available commands:
+   <question>                 Ask any question
+   help                       Show this help
+   quit                       Exit interactive mode
+   
+💡 Examples:
+   "What is the microbiome?"
+   "Explain 16S rRNA sequencing"
+   "What are the differences between metagenomics and 16S sequencing?"
+                    """)
+                    continue
+                elif not user_input:
+                    continue
+                
+                # Ask the question
+                print("\n🤔 Thinking...")
+                try:
+                    response = asyncio.run(qa_system.chat(user_input))
+                    answer = response.get('text', '')
+                    confidence = response.get('confidence', 0.0)
+                    
+                    if answer:
+                        print(f"\n💡 Answer (confidence: {confidence:.2f}):")
+                        print("-" * 60)
+                        print(answer)
+                        print("-" * 60)
+                    else:
+                        print("❌ No answer received. Please try rephrasing your question.")
+                except Exception as e:
+                    print(f"❌ Error getting answer: {e}")
+                    print("   Please try again or check your API key.")
+                
+                print()  # Empty line for readability
+                
+            except KeyboardInterrupt:
+                print("\n👋 Goodbye!")
+                break
+            except Exception as e:
+                print(f"❌ Error: {e}")
+    
+    async def ask_question(self, question: str) -> Optional[str]:
+        """
+        Ask a single question and return the answer.
+        
+        Args:
+            question: The question to ask
+            
+        Returns:
+            The answer text or None if error
+        """
+        try:
+            from app.models.unified_qa import UnifiedQA
+            from app.utils.config import GEMINI_API_KEY
+            
+            qa_system = UnifiedQA(use_gemini=True, gemini_api_key=GEMINI_API_KEY)
+            
+            if not qa_system.qa_system:
+                print("⚠️  Warning: QA system not available. Please set GEMINI_API_KEY environment variable.")
+                return None
+            
+            print("🤔 Thinking...")
+            response = await qa_system.chat(question)
+            answer = response.get('text', '')
+            confidence = response.get('confidence', 0.0)
+            
+            if answer:
+                print(f"\n💡 Answer (confidence: {confidence:.2f}):")
+                print("-" * 60)
+                print(answer)
+                print("-" * 60)
+                return answer
+            else:
+                print("❌ No answer received.")
+                return None
+                
+        except Exception as e:
+            print(f"❌ Error: {e}")
+            return None
 
     async def retrieve_papers(self, pmids: List[str], output_format: str = 'table', 
                            output_file: Optional[str] = None, save_to_file: bool = False):
@@ -1161,6 +1282,8 @@ Examples:
   BioAnalyzer retrieve 12345678       # Retrieve single paper
   BioAnalyzer retrieve 12345678,87654321 --save  # Retrieve multiple papers and save
   BioAnalyzer fields                  # Show field information
+  BioAnalyzer qa "What is 16S sequencing?"  # Ask a question
+  BioAnalyzer qa --interactive         # Interactive Q&A mode
   BioAnalyzer status                  # Check status
   BioAnalyzer stop                    # Stop application
         """
@@ -1200,6 +1323,12 @@ Examples:
     
     # Fields command
     fields_parser = subparsers.add_parser('fields', help='Show field information')
+    
+    # Q&A command
+    qa_parser = subparsers.add_parser('qa', help='Ask questions and get AI-powered answers')
+    qa_parser.add_argument('question', nargs='?', help='Question to ask (optional, will start interactive mode if not provided)')
+    qa_parser.add_argument('--interactive', '-i', action='store_true',
+                          help='Start interactive Q&A mode')
     
     # Retrieve command
     retrieve_parser = subparsers.add_parser('retrieve', help='Retrieve full paper text and metadata')
@@ -1248,6 +1377,13 @@ Examples:
     
     if args.command == 'fields':
         cli.show_fields_info()
+        return
+    
+    if args.command == 'qa':
+        if args.interactive or not args.question:
+            cli.interactive_qa()
+        else:
+            asyncio.run(cli.ask_question(args.question))
         return
     
     if args.command == 'retrieve':
