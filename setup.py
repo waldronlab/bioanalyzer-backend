@@ -5,8 +5,20 @@ with open("README.md", "r", encoding="utf-8") as fh:
     long_description = fh.read()
 
 # Read requirements
+# Filter out PyTorch CPU-specific versions and pip options that aren't valid in install_requires
+requirements = []
 with open("config/requirements.txt", "r", encoding="utf-8") as fh:
-    requirements = [line.strip() for line in fh if line.strip() and not line.startswith("#")]
+    for line in fh:
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        # Skip pip-specific options
+        if line.startswith("--extra-index-url") or line.startswith("--index-url"):
+            continue
+        # Convert PyTorch CPU versions to standard versions
+        if "+cpu" in line:
+            line = line.replace("+cpu", "")
+        requirements.append(line)
 
 setup(
     name="bioanalyzer-backend",
