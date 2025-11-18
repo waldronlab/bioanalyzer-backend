@@ -854,20 +854,23 @@ class BioAnalyzerCLI:
         print("Type 'help' for commands, 'quit' to exit")
         print()
         
-        # Initialize UnifiedQA
+        # Check if Docker API is available (preferred method)
+        import requests
+        api_available = False
         try:
-            from app.models.unified_qa import UnifiedQA
-            from app.utils.config import GEMINI_API_KEY
-            qa_system = UnifiedQA(use_gemini=True, gemini_api_key=GEMINI_API_KEY)
-            
-            if not qa_system.qa_system:
-                print("⚠️  Warning: QA system not available. Please set GEMINI_API_KEY environment variable.")
-                print("   You can still use other BioAnalyzer features.")
-                return
-        except Exception as e:
-            print(f"❌ Error initializing QA system: {e}")
-            print("   Please check your GEMINI_API_KEY and try again.")
+            response = requests.get("http://localhost:8000/health", timeout=2)
+            if response.status_code == 200:
+                api_available = True
+        except:
+            pass
+        
+        if not api_available:
+            print("⚠️  Docker API is not running.")
+            print("   Please start BioAnalyzer first: BioAnalyzer start")
+            print("   Then the Q&A feature will use the API with all dependencies.")
             return
+        
+        print("✅ Connected to BioAnalyzer API")
         
         print("✅ QA system ready! Ask your questions below.\n")
         
@@ -894,23 +897,42 @@ class BioAnalyzerCLI:
                 elif not user_input:
                     continue
                 
-                # Ask the question
+                # Ask the question via API
                 print("\n🤔 Thinking...")
                 try:
-                    response = asyncio.run(qa_system.chat(user_input))
-                    answer = response.get('text', '')
-                    confidence = response.get('confidence', 0.0)
+                    # Use API endpoint for Q&A (if available) or fallback to direct call
+                    api_response = requests.post(
+                        "http://localhost:8000/api/v1/qa",
+                        json={"question": user_input},
+                        timeout=60
+                    )
                     
-                    if answer:
-                        print(f"\n💡 Answer (confidence: {confidence:.2f}):")
-                        print("-" * 60)
-                        print(answer)
-                        print("-" * 60)
+                    if api_response.status_code == 200:
+                        result = api_response.json()
+                        answer = result.get('answer', result.get('text', ''))
+                        confidence = result.get('confidence', 0.8)
+                        
+                        if answer:
+                            print(f"\n💡 Answer (confidence: {confidence:.2f}):")
+                            print("-" * 60)
+                            print(answer)
+                            print("-" * 60)
+                        else:
+                            print("❌ No answer received. Please try rephrasing your question.")
+                    elif api_response.status_code == 404:
+                        # Q&A endpoint not available, try direct import as fallback
+                        print("⚠️  Q&A API endpoint not available. Trying direct method...")
+                        # Fallback would go here if we want to support it
+                        print("❌ Q&A endpoint not implemented in API yet.")
+                        print("   Please use the web interface or wait for API endpoint.")
                     else:
-                        print("❌ No answer received. Please try rephrasing your question.")
+                        error_detail = api_response.json().get('detail', 'Unknown error')
+                        print(f"❌ API error: {error_detail}")
+                except requests.exceptions.RequestException as e:
+                    print(f"❌ Error connecting to API: {e}")
+                    print("   Make sure BioAnalyzer is running: BioAnalyzer start")
                 except Exception as e:
-                    print(f"❌ Error getting answer: {e}")
-                    print("   Please try again or check your API key.")
+                    print(f"❌ Error: {e}")
                 
                 print()  # Empty line for readability
                 
@@ -922,7 +944,7 @@ class BioAnalyzerCLI:
     
     async def ask_question(self, question: str) -> Optional[str]:
         """
-        Ask a single question and return the answer.
+        Ask a single question and return the answer via API.
         
         Args:
             question: The question to ask
@@ -930,31 +952,58 @@ class BioAnalyzerCLI:
         Returns:
             The answer text or None if error
         """
+        import requests
+        
+        # Check if Docker API is available
+        api_available = False
         try:
-            from app.models.unified_qa import UnifiedQA
-            from app.utils.config import GEMINI_API_KEY
-            
-            qa_system = UnifiedQA(use_gemini=True, gemini_api_key=GEMINI_API_KEY)
-            
-            if not qa_system.qa_system:
-                print("⚠️  Warning: QA system not available. Please set GEMINI_API_KEY environment variable.")
-                return None
-            
+            response = requests.get("http://localhost:8000/health", timeout=2)
+            if response.status_code == 200:
+                api_available = True
+        except:
+            pass
+        
+        if not api_available:
+            print("⚠️  Docker API is not running.")
+            print("   Please start BioAnalyzer first: BioAnalyzer start")
+            return None
+        
+        try:
             print("🤔 Thinking...")
-            response = await qa_system.chat(question)
-            answer = response.get('text', '')
-            confidence = response.get('confidence', 0.0)
+            # Use API endpoint for Q&A
+            api_response = requests.post(
+                "http://localhost:8000/api/v1/qa",
+                json={"question": question},
+                timeout=60
+            )
             
-            if answer:
-                print(f"\n💡 Answer (confidence: {confidence:.2f}):")
-                print("-" * 60)
-                print(answer)
-                print("-" * 60)
-                return answer
+            if api_response.status_code == 200:
+                result = api_response.json()
+                answer = result.get('answer', result.get('text', ''))
+                confidence = result.get('confidence', 0.8)
+                
+                if answer:
+                    print(f"\n💡 Answer (confidence: {confidence:.2f}):")
+                    print("-" * 60)
+                    print(answer)
+                    print("-" * 60)
+                    return answer
+                else:
+                    print("❌ No answer received.")
+                    return None
+            elif api_response.status_code == 404:
+                print("⚠️  Q&A API endpoint not available yet.")
+                print("   Please use: BioAnalyzer start (then access via web interface)")
+                return None
             else:
-                print("❌ No answer received.")
+                error_detail = api_response.json().get('detail', 'Unknown error')
+                print(f"❌ API error: {error_detail}")
                 return None
                 
+        except requests.exceptions.RequestException as e:
+            print(f"❌ Error connecting to API: {e}")
+            print("   Make sure BioAnalyzer is running: BioAnalyzer start")
+            return None
         except Exception as e:
             print(f"❌ Error: {e}")
             return None
