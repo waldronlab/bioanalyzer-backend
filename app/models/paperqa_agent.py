@@ -17,7 +17,7 @@ try:
     from paperqa import Docs, Settings
     from paperqa.settings import AgentSettings
     from paperqa.agents import agent_query
-    from paperqa.types import AnswerResponse
+    from paperqa.agents.models import AnswerResponse
     PAPERQA_AVAILABLE = True
 except ImportError as e:
     PAPERQA_AVAILABLE = False
