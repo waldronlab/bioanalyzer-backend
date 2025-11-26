@@ -58,3 +58,6 @@ pytz>=2023.3
 # Development dependencies (optional - can be commented out for production)
 # pytest>=7.4.0
 # pytest-cov>=4.1.0
+
+# Vector database (optional - for persistent storage)
+qdrant-client>=1.7.0

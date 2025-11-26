@@ -16,7 +16,7 @@ import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 # Import routers
-from app.api.routers import bugsigdb_analysis, system
+from app.api.routers import bugsigdb_analysis, system, study_analysis
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -89,6 +89,7 @@ app.add_middleware(
 
 # Include routers
 app.include_router(bugsigdb_analysis.router)
+app.include_router(study_analysis.router)
 app.include_router(system.router)
 
 # Root endpoint
