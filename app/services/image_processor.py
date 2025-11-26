@@ -1,29 +1,43 @@
 """
 Image Processor Service for BioAnalyzer
 
-Uses Paper-QA's ParsedMedia pattern for image handling and visual LLM integration.
+Self-contained image downloader/converter that avoids optional
+Paper-QA dependencies while still providing visual LLM support.
 """
-import asyncio
+import base64
 import logging
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
 import aiohttp
-from paperqa.types import ParsedMedia
-from paperqa.readers import parse_image
-from lmi.utils import encode_image_as_url
 
 logger = logging.getLogger(__name__)
 
 
+@dataclass
+class ProcessedImage:
+    """Lightweight representation of a downloaded image."""
+
+    path: Path
+    index: int
+    source_url: str
+    mime_type: str = "image/png"
+    info: dict = field(default_factory=dict)
+
+    def to_image_url(self) -> str:
+        """Return a RFC 2397 data URL for use with visual LLMs."""
+        data = self.path.read_bytes()
+        encoded = base64.b64encode(data).decode("utf-8")
+        return f"data:{self.mime_type};base64,{encoded}"
+
+
 class ImageProcessorService:
     """
-    Image processor using Paper-QA's ParsedMedia pattern.
-    
-    Handles image downloading, validation, and conversion to formats
-    suitable for visual LLM processing.
+    Image processor that downloads remote images, caches them locally,
+    and generates LLM-friendly data URLs.
     """
-    
+
     def __init__(
         self,
         cache_dir: str = "cache/images",
@@ -31,7 +45,7 @@ class ImageProcessorService:
     ):
         """
         Initialize the image processor.
-        
+
         Args:
             cache_dir: Directory to cache downloaded images
             max_image_size_mb: Maximum image size in MB
@@ -39,150 +53,120 @@ class ImageProcessorService:
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.max_image_size = max_image_size_mb * 1024 * 1024
-    
+
     async def process_image_url(
         self,
         image_url: str,
         index: int = 0
-    ) -> Optional[ParsedMedia]:
+    ) -> Optional[ProcessedImage]:
         """
-        Download and process an image URL into ParsedMedia format.
-        
-        Args:
-            image_url: URL of the image
-            index: Index of the image (for ordering)
-            
-        Returns:
-            ParsedMedia object or None if processing fails
+        Download an image URL and prepare it for downstream processing.
         """
         try:
-            logger.info(f"Processing image: {image_url}")
-            
-            # Download image
-            image_path = await self._download_image(image_url)
-            if not image_path:
+            logger.info("Processing image: %s", image_url)
+            download = await self._download_image(image_url)
+            if not download:
                 return None
-            
-            # Parse using Paper-QA's parse_image function
-            parsed_text = await parse_image(image_path)
-            
-            # Extract ParsedMedia from ParsedText
-            # ParsedText.content is dict[str, tuple[str, list[ParsedMedia]]]
-            if isinstance(parsed_text.content, dict):
-                for page_content in parsed_text.content.values():
-                    if isinstance(page_content, tuple) and len(page_content) > 1:
-                        media_list = page_content[1]
-                        if media_list:
-                            parsed_media = media_list[0]
-                            # Update index and add source URL to info
-                            parsed_media.index = index
-                            parsed_media.info["source_url"] = image_url
-                            return parsed_media
-            
-            logger.warning(f"Could not extract ParsedMedia from {image_url}")
+
+            image_path, mime_type = download
+            processed = ProcessedImage(
+                path=image_path,
+                index=index,
+                source_url=image_url,
+                mime_type=mime_type or "image/png"
+            )
+            processed.info["source_url"] = image_url
+            return processed
+
+        except Exception as exc:
+            logger.error("Error processing image %s: %s", image_url, exc)
             return None
-            
-        except Exception as e:
-            logger.error(f"Error processing image {image_url}: {e}")
-            return None
-    
-    async def _download_image(self, image_url: str) -> Optional[Path]:
+
+    async def _download_image(self, image_url: str) -> Optional[tuple[Path, str]]:
         """Download image from URL to cache directory."""
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.get(image_url, timeout=30) as response:
                     response.raise_for_status()
-                    
-                    # Check size
-                    content_length = response.headers.get('content-length')
+
+                    content_length = response.headers.get("content-length")
                     if content_length and int(content_length) > self.max_image_size:
                         logger.warning(
-                            f"Skipping {image_url}: image too large "
-                            f"({int(content_length) / 1024 / 1024:.2f} MB)"
+                            "Skipping %s: image too large (%.2f MB)",
+                            image_url,
+                            int(content_length) / 1024 / 1024
                         )
                         return None
-                    
-                    # Generate filename from URL
+
                     import hashlib
+
                     url_hash = hashlib.md5(image_url.encode()).hexdigest()[:16]
-                    
-                    # Get extension from URL or content-type
-                    extension = self._get_image_extension(
-                        image_url,
-                        response.headers.get('content-type', '')
-                    )
-                    
+                    mime_type = response.headers.get("content-type", "").lower()
+                    extension = self._get_image_extension(image_url, mime_type)
+
                     filename = f"{url_hash}{extension}"
                     image_path = self.cache_dir / filename
-                    
-                    # Download if not cached
+
                     if not image_path.exists():
                         content = await response.read()
                         image_path.write_bytes(content)
-                        logger.info(f"Downloaded image: {filename}")
+                        logger.info("Downloaded image: %s", filename)
                     else:
-                        logger.info(f"Using cached image: {filename}")
-                    
-                    return image_path
-                    
-        except Exception as e:
-            logger.error(f"Error downloading image {image_url}: {e}")
+                        logger.info("Using cached image: %s", filename)
+
+                    return image_path, self._infer_mime_type(extension, mime_type)
+
+        except Exception as exc:
+            logger.error("Error downloading image %s: %s", image_url, exc)
             return None
-    
+
+    def _infer_mime_type(self, extension: str, fallback: str) -> str:
+        mapping = {
+            ".png": "image/png",
+            ".jpg": "image/jpeg",
+            ".jpeg": "image/jpeg",
+            ".gif": "image/gif",
+            ".svg": "image/svg+xml",
+            ".webp": "image/webp",
+        }
+        if extension in mapping:
+            return mapping[extension]
+        return fallback or "image/png"
+
     def _get_image_extension(self, url: str, content_type: str) -> str:
         """Determine image extension from URL or content-type."""
-        # Try URL first
         from urllib.parse import urlparse
+
         parsed = urlparse(url)
         path = parsed.path.lower()
-        
-        for ext in ['.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp']:
+
+        for ext in [".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp"]:
             if path.endswith(ext):
                 return ext
-        
-        # Try content-type
+
         content_type_map = {
-            'image/png': '.png',
-            'image/jpeg': '.jpg',
-            'image/jpg': '.jpg',
-            'image/gif': '.gif',
-            'image/svg+xml': '.svg',
-            'image/webp': '.webp'
+            "image/png": ".png",
+            "image/jpeg": ".jpg",
+            "image/jpg": ".jpg",
+            "image/gif": ".gif",
+            "image/svg+xml": ".svg",
+            "image/webp": ".webp",
         }
-        
-        return content_type_map.get(content_type.lower(), '.png')
-    
-    def get_image_url_for_llm(self, parsed_media: ParsedMedia) -> str:
-        """
-        Convert ParsedMedia to image URL for visual LLM.
-        
-        Uses Paper-QA's to_image_url() method which creates
-        RFC 2397 data URL format.
-        
-        Args:
-            parsed_media: ParsedMedia object
-            
-        Returns:
-            Data URL string suitable for visual LLM input
-        """
+
+        return content_type_map.get(content_type.lower(), ".png")
+
+    def get_image_url_for_llm(self, parsed_media: ProcessedImage) -> str:
+        """Return a data URL suitable for visual LLM input."""
         return parsed_media.to_image_url()
-    
+
     async def describe_image_with_llm(
         self,
-        parsed_media: ParsedMedia,
+        parsed_media: ProcessedImage,
         llm_service,
         prompt: Optional[str] = None
     ) -> str:
         """
-        Generate description of image using visual LLM.
-        
-        Args:
-            parsed_media: ParsedMedia object
-            llm_service: LLM service with visual capabilities
-            prompt: Optional custom prompt
-            
-        Returns:
-            Image description text
+        Generate description of image using a visual LLM.
         """
         if prompt is None:
             prompt = (
@@ -194,31 +178,27 @@ class ImageProcessorService:
                 "4. Scientific findings or patterns visible\n"
                 "5. Experimental methods or conditions shown"
             )
-        
-        # Get image URL for LLM
+
         image_url = self.get_image_url_for_llm(parsed_media)
-        
-        # Call LLM with image
+
         try:
             description = await llm_service.analyze_image(image_url, prompt)
-            
-            # Store description in ParsedMedia info
             parsed_media.info["enriched_description"] = description
-            
             logger.info(
-                f"Generated description for image {parsed_media.index}: "
-                f"{len(description)} chars"
+                "Generated description for image %s (%d chars)",
+                parsed_media.index,
+                len(description)
             )
-            
             return description
-            
-        except Exception as e:
-            logger.error(f"Error describing image: {e}")
+
+        except Exception as exc:
+            logger.error("Error describing image: %s", exc)
             return ""
-    
+
     def cleanup_cache(self):
         """Clean up cached images."""
         import shutil
+
         if self.cache_dir.exists():
             shutil.rmtree(self.cache_dir)
-            logger.info(f"Cleaned up image cache: {self.cache_dir}")
+            logger.info("Cleaned up image cache: %s", self.cache_dir)

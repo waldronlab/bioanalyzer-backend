@@ -29,6 +29,7 @@ from typing import List, Optional, Dict, Any
 import logging
 
 import requests
+from dotenv import dotenv_values
 
 # Add the project root to Python path
 project_root = Path(__file__).parent
@@ -72,6 +73,18 @@ class BioAnalyzerCLI:
         if env_path.exists():
             return str(env_path.resolve())  # Use absolute path for Docker
         return None
+
+    def _get_env_file_values(self) -> Dict[str, str]:
+        """Return key/value pairs from .env if present."""
+        env_file = self._get_env_file_path()
+        if not env_file:
+            return {}
+        try:
+            values = dotenv_values(env_file)
+            return {k: v for k, v in (values or {}).items() if v}
+        except Exception as exc:
+            logger.warning(f"Unable to read env file {env_file}: {exc}")
+            return {}
     
     def _collect_env_flags(self) -> list:
         """Collect docker -e flags for known env vars if present in the host environment."""
@@ -99,25 +112,39 @@ class BioAnalyzerCLI:
 
     def _validate_environment(self):
         """Warn about missing critical env vars before starting containers."""
-        # Check if .env file exists
         env_file = self._get_env_file_path()
-        
-        # Check host environment variables
-        missing = [k for k in self.required_env_vars if not os.environ.get(k)]
-        
-        # If .env file exists, we'll load it in the container, so the warning is less critical
-        # but still show it to inform the user
-        if missing:
+        env_file_values = self._get_env_file_values()
+
+        missing_from_env = []
+        missing_from_everywhere = []
+
+        for key in self.required_env_vars:
+            host_value = os.environ.get(key)
+            file_value = env_file_values.get(key)
+            if not host_value and not file_value:
+                missing_from_everywhere.append(key)
+            elif not host_value and file_value:
+                missing_from_env.append(key)
+
+        if not missing_from_env and not missing_from_everywhere:
+            return
+
+        if missing_from_env:
+            print("⚠️  Environment variables will be loaded from .env only:")
+            for key in missing_from_env:
+                print(f"   - {key} (present in .env but not current shell)")
+            print("   This is fine, but export them if you need them on the host as well.")
+
+        if missing_from_everywhere:
             print("⚠️  Missing critical environment variables:")
-            for k in missing:
-                print(f"   - {k}")
+            for key in missing_from_everywhere:
+                print(f"   - {key}")
             if env_file:
-                print(f"   Note: .env file found at {env_file} - it will be loaded in the container.")
+                print(f"   Note: .env file found at {env_file}. Update it to include the keys above.")
             else:
-                print("   The backend may start, but analysis quality/availability can be impacted.")
-                print("   Set them in your shell before 'BioAnalyzer start', e.g.:")
+                print("   Create a .env file in the project root or export them before running.")
+                print("   Example:")
                 print("     export GEMINI_API_KEY=...; export NCBI_API_KEY=...; export EMAIL=you@example.com")
-                print("   Or create a .env file in the project root with these variables.")
     
     def print_banner(self):
         """Print the BioAnalyzer banner."""

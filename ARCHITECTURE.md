@@ -57,7 +57,7 @@ graph TB
         
         subgraph "URL Workflow"
             SCRAPER[WebScraperService<br/>html2text]
-            IMG_PROC[ImageProcessorService<br/>ParsedMedia]
+            IMG_PROC[ImageProcessorService<br/>Processed Image Data]
             CONVERTER[ConverterService]
             CHUNKER[ChunkingService]
             VECTOR[VectorStoreService<br/>Numpy/Qdrant]
@@ -200,7 +200,7 @@ sequenceDiagram
     API->>ImageProc: Process images
     ImageProc->>LLM: Describe images
     LLM-->>ImageProc: Descriptions
-    ImageProc-->>API: ParsedMedia objects
+    ImageProc-->>API: Processed image objects
     
     Note over API,LLM: Step 4: Conversion
     API->>Converter: Merge content
@@ -270,10 +270,10 @@ curl -X POST http://localhost:8000/api/v1/analyze-url \
 
 #### ImageProcessorService
 - **Purpose:** Process images for visual LLM
-- **Technology:** Paper-QA's `ParsedMedia` class
+- **Technology:** Lightweight processed-image dataclass + base64 data URLs
 - **Features:**
   - Image downloading and caching
-  - `to_image_url()` for LLM input (base64 data URLs)
+  - RFC 2397 data URL generation for LLM input
   - Visual LLM description generation
 
 #### ConverterService
@@ -389,7 +389,7 @@ WebScraperService
     ↓
 ImageProcessorService
     ├→ Download Images
-    ├→ Create ParsedMedia
+    ├→ Create processed image objects
     └→ Visual LLM Description
     ↓
 ConverterService
@@ -691,7 +691,7 @@ GET /api/v1/config
 - **OLLAMA:** Local LLM option
 
 ### Paper-QA Integration
-- `ParsedMedia` - Image handling
+- Processed image dataclass - Image handling
 - `agent_query` - Orchestration
 - `embedding_model_factory` - Embeddings
 - `chunk_text` - Text chunking

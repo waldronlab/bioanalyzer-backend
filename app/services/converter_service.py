@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Optional
 
 from paperqa.readers import parse_text, chunk_text
-from paperqa.types import Doc, ParsedMedia, ParsedText
+from paperqa.types import Doc, ParsedText
 
 logger = logging.getLogger(__name__)
 
