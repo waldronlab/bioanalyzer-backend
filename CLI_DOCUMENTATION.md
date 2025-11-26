@@ -271,6 +271,33 @@ $ BioAnalyzer fields
    ❌ ABSENT: Information is missing
 ```
 
+### `BioAnalyzer analyze-url <url>`
+Analyze complete studies from URLs using the enhanced workflow.
+
+```bash
+BioAnalyzer analyze-url https://example.org/study-001
+BioAnalyzer analyze-url https://study.com/one --format json
+BioAnalyzer analyze-url https://study.com/one --embedding-model ollama/nomic-embed-text
+BioAnalyzer analyze-url --file urls.txt --output url_results.txt
+```
+
+**Options:**
+- `--embedding-model`: Embedding backend (default: `gemini/text-embedding-004`)
+- `--llm-model`: LLM for extraction (default: `gemini/gemini-2.0-flash`)
+- `--poll-interval`: Seconds between status checks (default: 5)
+- `--timeout`: Max seconds to wait per job (default: 300)
+- `--format`: `table` (default) or `json`
+- `--output`: Save aggregated results to a file
+
+**Sample Flow:**
+```bash
+BioAnalyzer analyze-url https://journals.org/doi/10.1016/j.sample --format table
+```
+- Starts a background job via `POST /api/v1/analyze-url`
+- Polls `/api/v1/analysis-status/{job_id}`
+- Fetches detailed experiments from `/api/v1/analysis-result/{job_id}`
+- Displays number of experiments, signatures, readiness, and metadata
+
 ## 📊 Output Options
 
 ### Output Formats

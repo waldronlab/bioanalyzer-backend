@@ -28,6 +28,8 @@ from pathlib import Path
 from typing import List, Optional, Dict, Any
 import logging
 
+import requests
+
 # Add the project root to Python path
 project_root = Path(__file__).parent
 sys.path.insert(0, str(project_root))
@@ -48,6 +50,7 @@ class BioAnalyzerCLI:
         self.image_name = "bioanalyzer-backend"
         self.network_name = "bioanalyzer-network"
         self.verbose = False
+        self.api_base_url = os.getenv("BIOANALYZER_API_URL", "http://localhost:8000/api/v1")
         # Critical runtime environment variables the backend may rely on
         self.required_env_vars = [
             "GEMINI_API_KEY",
@@ -87,6 +90,12 @@ class BioAnalyzerCLI:
                 flags.extend(["-e", f"{key}={val}"])
         
         return flags
+
+    def _build_api_url(self, path: str) -> str:
+        """Construct a BioAnalyzer API URL relative to the configured base."""
+        base = self.api_base_url.rstrip("/")
+        suffix = path.lstrip("/")
+        return f"{base}/{suffix}" if suffix else base
 
     def _validate_environment(self):
         """Warn about missing critical env vars before starting containers."""
@@ -753,6 +762,236 @@ class BioAnalyzerCLI:
             print(f'  </Analysis>')
         
         print('</BioAnalyzerResults>')
+    
+    def _collect_urls(self, inline_urls: List[str], file_path: Optional[str]) -> List[str]:
+        """Collect URLs from CLI arguments and optional file."""
+        urls = []
+        
+        for value in inline_urls or []:
+            if ',' in value:
+                urls.extend([item.strip() for item in value.split(',') if item.strip()])
+            else:
+                urls.append(value.strip())
+        
+        if file_path:
+            try:
+                with open(file_path, 'r', encoding='utf-8') as handle:
+                    urls.extend(line.strip() for line in handle if line.strip())
+            except Exception as exc:
+                print(f"❌ Error reading URL file: {exc}")
+        
+        # Remove duplicates while preserving order
+        cleaned_urls = []
+        seen = set()
+        for url in urls:
+            if url and url not in seen:
+                seen.add(url)
+                cleaned_urls.append(url)
+        return cleaned_urls
+    
+    def handle_url_analysis(
+        self,
+        urls: List[str],
+        file_path: Optional[str],
+        embedding_model: str,
+        llm_model: str,
+        output_format: str,
+        output_file: Optional[str],
+        poll_interval: int,
+        timeout: int
+    ):
+        """Entry point for the analyze-url command."""
+        all_urls = self._collect_urls(urls, file_path)
+        if not all_urls:
+            print("❌ Error: No URLs provided.")
+            print("Usage: BioAnalyzer analyze-url <url1> [url2]")
+            print("   or: BioAnalyzer analyze-url --file urls.txt")
+            return
+        
+        results = []
+        for index, url in enumerate(all_urls, 1):
+            print(f"\n[{index}/{len(all_urls)}] Starting analysis for URL: {url}")
+            job_id = self._start_url_analysis_job(url, embedding_model, llm_model)
+            if not job_id:
+                continue
+            
+            analysis_result = self._poll_url_analysis_job(
+                job_id=job_id,
+                poll_interval=poll_interval,
+                timeout=timeout
+            )
+            
+            if analysis_result:
+                analysis_result["job_id"] = job_id
+                results.append(analysis_result)
+        
+        if not results:
+            print("❌ No URL analyses completed successfully.")
+            return
+        
+        if output_file:
+            self.save_url_analysis_results(results, output_file, output_format)
+        else:
+            self.display_url_analysis_results(results, output_format)
+    
+    def _start_url_analysis_job(
+        self,
+        url: str,
+        embedding_model: str,
+        llm_model: str
+    ) -> Optional[str]:
+        """Submit a new URL analysis job."""
+        try:
+            payload = {
+                "url": url,
+                "embedding_model": embedding_model,
+                "llm_model": llm_model
+            }
+            response = requests.post(
+                self._build_api_url("/analyze-url"),
+                json=payload,
+                timeout=30
+            )
+            if response.status_code != 200:
+                detail = response.json().get("detail", response.text)
+                print(f"❌ Failed to start analysis for {url}: {detail}")
+                return None
+            
+            job_info = response.json()
+            job_id = job_info.get("job_id")
+            print(f"🆔 Job ID: {job_id}")
+            return job_id
+        except requests.exceptions.RequestException as exc:
+            print(f"❌ Network error starting URL analysis: {exc}")
+            return None
+    
+    def _poll_url_analysis_job(
+        self,
+        job_id: str,
+        poll_interval: int,
+        timeout: int
+    ) -> Optional[Dict[str, Any]]:
+        """Poll the status endpoint until the job completes or fails."""
+        deadline = time.time() + timeout
+        status_url = self._build_api_url(f"/analysis-status/{job_id}")
+        result_url = self._build_api_url(f"/analysis-result/{job_id}")
+        
+        while time.time() < deadline:
+            try:
+                status_response = requests.get(status_url, timeout=15)
+                if status_response.status_code != 200:
+                    print(f"❌ Failed to fetch status for job {job_id}")
+                    return None
+                
+                status_payload = status_response.json()
+                job_status = status_payload.get("status", "unknown")
+                progress = status_payload.get("progress", "")
+                print(f"   ⏳ Status: {job_status} ({progress})")
+                
+                if job_status == "completed":
+                    return self._fetch_url_analysis_result(result_url)
+                if job_status == "failed":
+                    print(f"❌ Job {job_id} failed: {status_payload.get('error', 'Unknown error')}")
+                    return None
+                
+                time.sleep(max(1, poll_interval))
+            except requests.exceptions.RequestException as exc:
+                print(f"❌ Error polling job {job_id}: {exc}")
+                time.sleep(max(1, poll_interval))
+        
+        print(f"⚠️  Job {job_id} timed out after {timeout} seconds")
+        return None
+    
+    def _fetch_url_analysis_result(self, result_url: str) -> Optional[Dict[str, Any]]:
+        """Fetch the completed analysis result."""
+        try:
+            response = requests.get(result_url, timeout=30)
+            if response.status_code != 200:
+                detail = response.json().get("detail", response.text)
+                print(f"❌ Failed to fetch analysis result: {detail}")
+                return None
+            return response.json()
+        except requests.exceptions.RequestException as exc:
+            print(f"❌ Error retrieving analysis result: {exc}")
+            return None
+    
+    def display_url_analysis_results(self, results: List[Dict[str, Any]], output_format: str):
+        """Display URL workflow results."""
+        if not results:
+            print("No URL analysis results to display.")
+            return
+        
+        if output_format == 'json':
+            print(json.dumps(results, indent=2, ensure_ascii=False))
+            return
+        
+        print("\n" + "="*80)
+        print("🌐 BIOANALYZER - URL STUDY ANALYSIS RESULTS")
+        print("="*80)
+        
+        for result in results:
+            print(f"\n🔗 Source URL: {result.get('source_url', 'N/A')}")
+            print(f"🆔 Job ID: {result.get('job_id', 'N/A')}")
+            print(f"🧪 Experiments: {len(result.get('experiments', []))}")
+            print(f"🧬 Total Signatures: {result.get('total_signatures', 0)}")
+            print(f"✅ Curation Ready: {'Yes' if result.get('curation_ready') else 'No'}")
+            print(f"⚠️  Missing Fields: {', '.join(result.get('missing_fields', [])) or 'None'}")
+            print(f"📊 Confidence Score: {result.get('confidence_score', 0.0):.2f}")
+            print("-" * 60)
+            
+            for exp in result.get('experiments', []):
+                metadata = exp.get('metadata', {})
+                print(f"   • Experiment: {exp.get('title', 'Untitled')}")
+                print(f"     Host Species: {metadata.get('host_species', 'N/A')}")
+                print(f"     Body Site   : {metadata.get('body_site', 'N/A')}")
+                print(f"     Condition   : {metadata.get('condition', 'N/A')}")
+                print(f"     Sequencing  : {metadata.get('sequencing_type', 'N/A')}")
+                print(f"     Taxa Level  : {metadata.get('taxa_level', 'N/A')}")
+                print(f"     Sample Size : {metadata.get('sample_size', 'N/A')}")
+                if exp.get('signatures'):
+                    print(f"     Signatures  : {len(exp['signatures'])}")
+                else:
+                    print("     Signatures  : None detected")
+                print()
+    
+    def save_url_analysis_results(self, results: List[Dict[str, Any]], filename: str, output_format: str):
+        """Save URL analysis results to disk."""
+        if output_format == 'json':
+            content = json.dumps(results, indent=2, ensure_ascii=False)
+        else:
+            content = self.get_url_analysis_table_content(results)
+        
+        with open(filename, 'w', encoding='utf-8') as handle:
+            handle.write(content)
+        
+        print(f"💾 URL analysis results saved to: {filename}")
+    
+    def get_url_analysis_table_content(self, results: List[Dict[str, Any]]) -> str:
+        """Generate a text table for URL analyses."""
+        lines = ["BIOANALYZER - URL STUDY ANALYSIS RESULTS", "=" * 60, ""]
+        for result in results:
+            lines.append(f"Source URL: {result.get('source_url', 'N/A')}")
+            lines.append(f"Experiments: {len(result.get('experiments', []))}")
+            lines.append(f"Total Signatures: {result.get('total_signatures', 0)}")
+            lines.append(f"Curation Ready: {'Yes' if result.get('curation_ready') else 'No'}")
+            lines.append(f"Missing Fields: {', '.join(result.get('missing_fields', [])) or 'None'}")
+            lines.append("")
+            for exp in result.get('experiments', []):
+                meta = exp.get('metadata', {})
+                lines.append(f"  - {exp.get('title', 'Untitled')}")
+                lines.append(f"    Host Species : {meta.get('host_species', 'N/A')}")
+                lines.append(f"    Body Site    : {meta.get('body_site', 'N/A')}")
+                lines.append(f"    Condition    : {meta.get('condition', 'N/A')}")
+                lines.append(f"    Sequencing   : {meta.get('sequencing_type', 'N/A')}")
+                lines.append(f"    Taxa Level   : {meta.get('taxa_level', 'N/A')}")
+                lines.append(f"    Sample Size  : {meta.get('sample_size', 'N/A')}")
+                if exp.get('signatures'):
+                    lines.append(f"    Signatures   : {len(exp['signatures'])}")
+                else:
+                    lines.append("    Signatures   : None")
+                lines.append("")
+            lines.append("-" * 60)
+        return "\n".join(lines)
     
     def save_results(self, results: List[Dict[str, Any]], filename: str, output_format: str):
         """Save results to a file."""
@@ -1423,6 +1662,24 @@ Examples:
     analyze_parser.add_argument('--verbose', '-v', action='store_true',
                               help='Verbose output')
     
+    # Analyze URL command
+    analyze_url_parser = subparsers.add_parser('analyze-url', help='Analyze study URLs')
+    analyze_url_parser.add_argument('urls', nargs='*', help='Study URLs to analyze')
+    analyze_url_parser.add_argument('--file', '-f', help='File containing study URLs')
+    analyze_url_parser.add_argument('--embedding-model', default='gemini/text-embedding-004',
+                                    help='Embedding model identifier')
+    analyze_url_parser.add_argument('--llm-model', default='gemini/gemini-2.0-flash',
+                                    help='LLM model identifier')
+    analyze_url_parser.add_argument('--format', choices=['table', 'json'], default='table',
+                                    help='Output format for results')
+    analyze_url_parser.add_argument('--output', '-o', help='File to save results')
+    analyze_url_parser.add_argument('--poll-interval', type=int, default=5,
+                                    help='Seconds between status polls')
+    analyze_url_parser.add_argument('--timeout', type=int, default=300,
+                                    help='Time in seconds before giving up on a job')
+    analyze_url_parser.add_argument('--verbose', '-v', action='store_true',
+                                    help='Verbose output')
+    
     # Fields command
     fields_parser = subparsers.add_parser('fields', help='Show field information')
     
@@ -1530,6 +1787,19 @@ Examples:
             args.output,
             args.save
         ))
+        return
+    
+    if args.command == 'analyze-url':
+        cli.handle_url_analysis(
+            urls=args.urls,
+            file_path=args.file,
+            embedding_model=args.embedding_model,
+            llm_model=args.llm_model,
+            output_format=args.format,
+            output_file=args.output,
+            poll_interval=args.poll_interval,
+            timeout=args.timeout
+        )
         return
     
     if args.command == 'analyze':

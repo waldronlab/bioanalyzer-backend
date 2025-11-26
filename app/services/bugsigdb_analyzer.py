@@ -7,8 +7,15 @@ import asyncio
 import json
 
 from app.models.unified_qa import UnifiedQA
+from app.services.cache_manager import CacheManager
 from app.services.data_retrieval import PubMedRetriever
-from app.utils.config import DEFAULT_MODEL, GEMINI_API_KEY, NCBI_API_KEY, ANALYSIS_TIMEOUT
+from app.utils.config import (
+    DEFAULT_MODEL,
+    GEMINI_API_KEY,
+    NCBI_API_KEY,
+    ANALYSIS_TIMEOUT,
+    CACHE_VALIDITY_HOURS,
+)
 from app.api.utils.api_utils import get_current_timestamp
 
 logger = logging.getLogger(__name__)
@@ -16,6 +23,7 @@ logger = logging.getLogger(__name__)
 # Initialize services
 unified_qa = UnifiedQA(use_gemini=True, gemini_api_key=GEMINI_API_KEY)
 pubmed_retriever = PubMedRetriever(api_key=NCBI_API_KEY)
+cache_manager = CacheManager()
 
 # The 6 essential BugSigDB fields
 ESSENTIAL_FIELDS = {
@@ -33,6 +41,14 @@ async def analyze_paper_simple(pmid: str) -> Optional[Dict]:
     Simple analysis focused only on the 6 essential BugSigDB fields.
     """
     try:
+        cached = cache_manager.get_analysis_result(pmid)
+        if cached and cache_manager.is_cache_valid(
+            cached.get("timestamp", ""),
+            max_age_hours=CACHE_VALIDITY_HOURS
+        ):
+            logger.info(f"Returning cached analysis for PMID: {pmid}")
+            return cached.get("analysis_data")
+        
         logger.info(f"Starting simple analysis for PMID: {pmid}")
         
         # Get paper metadata
@@ -78,6 +94,32 @@ async def analyze_paper_simple(pmid: str) -> Optional[Dict]:
         }
         
         logger.info(f"Simple analysis completed for PMID: {pmid}")
+
+        try:
+            avg_confidence = 0.0
+            if field_results:
+                confidences = [
+                    float(field_data.get("confidence", 0.0))
+                    for field_data in field_results.values()
+                ]
+                if confidences:
+                    avg_confidence = sum(confidences) / len(confidences)
+            
+            cache_manager.store_analysis_result(
+                pmid=pmid,
+                analysis_data=result,
+                metadata={
+                    "title": title,
+                    "journal": texts.get('journal', ''),
+                    "publication_date": texts.get('publication_date', ''),
+                    "authors": texts.get('authors', []),
+                },
+                source=DEFAULT_MODEL,
+                confidence=avg_confidence
+            )
+        except Exception as cache_error:
+            logger.warning(f"Unable to cache analysis for PMID {pmid}: {cache_error}")
+
         return result
         
     except Exception as e:

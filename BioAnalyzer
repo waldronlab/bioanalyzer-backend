@@ -64,6 +64,37 @@ For help, visit: https://github.com/your-repo/bioanalyzer-backend
     
     # Change to the backend directory
     os.chdir(backend_dir)
+
+    # Load .env from the backend directory if present so CLI and docker-run
+    # receive the same environment variables developers place in .env.
+    try:
+        env_path = backend_dir / '.env'
+        if env_path.exists():
+            try:
+                from dotenv import load_dotenv
+                load_dotenv(str(env_path))
+                print(f"Loaded environment variables from {env_path}")
+            except Exception:
+                # Fallback: parse the .env file manually if python-dotenv is not installed
+                try:
+                    with open(env_path, 'r', encoding='utf-8') as f:
+                        for raw in f:
+                            line = raw.strip()
+                            if not line or line.startswith('#'):
+                                continue
+                            if '=' not in line:
+                                continue
+                            key, val = line.split('=', 1)
+                            key = key.strip()
+                            val = val.strip().strip('"').strip("'")
+                            # Only set the env var if not already present in the environment
+                            if key and val and os.environ.get(key) is None:
+                                os.environ[key] = val
+                    print(f"Loaded environment variables from {env_path} (fallback parser)")
+                except Exception:
+                    pass
+    except Exception:
+        pass
     
     # Import and run the CLI
     try:
