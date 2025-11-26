@@ -29,7 +29,11 @@ from typing import List, Optional, Dict, Any
 import logging
 
 import requests
-from dotenv import dotenv_values
+
+try:
+    from dotenv import dotenv_values
+except ImportError:  # pragma: no cover - safety net for bare installs
+    dotenv_values = None  # type: ignore
 
 # Add the project root to Python path
 project_root = Path(__file__).parent
@@ -80,6 +84,12 @@ class BioAnalyzerCLI:
         if not env_file:
             return {}
         try:
+            if dotenv_values is None:
+                logger.warning(
+                    "python-dotenv not installed; .env file will be ignored. "
+                    "Install it via 'pip install python-dotenv' to load env files automatically."
+                )
+                return {}
             values = dotenv_values(env_file)
             return {k: v for k, v in (values or {}).items() if v}
         except Exception as exc:
