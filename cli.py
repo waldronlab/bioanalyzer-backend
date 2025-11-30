@@ -46,6 +46,7 @@ class BioAnalyzerCLI:
     def __init__(self):
         self.container_name = "bioanalyzer-api"
         self.image_name = "bioanalyzer-backend"
+        self.network_name = "bioanalyzer-network"
         self.verbose = False
         # Critical runtime environment variables the backend may rely on
         self.required_env_vars = [
@@ -62,25 +63,52 @@ class BioAnalyzerCLI:
             "UVICORN_RELOAD",
         ]
 
+    def _get_env_file_path(self) -> Optional[str]:
+        """Get the absolute path to .env file if it exists."""
+        env_path = project_root / ".env"
+        if env_path.exists():
+            return str(env_path.resolve())  # Use absolute path for Docker
+        return None
+    
     def _collect_env_flags(self) -> list:
         """Collect docker -e flags for known env vars if present in the host environment."""
         flags = []
+        
+        # First, try to use --env-file if .env exists (preferred method)
+        env_file = self._get_env_file_path()
+        if env_file:
+            flags.extend(["--env-file", env_file])
+        
+        # Also pass through any env vars explicitly set in the host environment
+        # (these will override .env file values)
         for key in self.required_env_vars + self.optional_env_vars:
             val = os.environ.get(key)
             if val is not None and str(val) != "":
                 flags.extend(["-e", f"{key}={val}"])
+        
         return flags
 
     def _validate_environment(self):
         """Warn about missing critical env vars before starting containers."""
+        # Check if .env file exists
+        env_file = self._get_env_file_path()
+        
+        # Check host environment variables
         missing = [k for k in self.required_env_vars if not os.environ.get(k)]
+        
+        # If .env file exists, we'll load it in the container, so the warning is less critical
+        # but still show it to inform the user
         if missing:
             print("⚠️  Missing critical environment variables:")
             for k in missing:
                 print(f"   - {k}")
-            print("   The backend may start, but analysis quality/availability can be impacted.")
-            print("   Set them in your shell before 'BioAnalyzer start', e.g.:")
-            print("     export GEMINI_API_KEY=...; export NCBI_API_KEY=...; export EMAIL=you@example.com")
+            if env_file:
+                print(f"   Note: .env file found at {env_file} - it will be loaded in the container.")
+            else:
+                print("   The backend may start, but analysis quality/availability can be impacted.")
+                print("   Set them in your shell before 'BioAnalyzer start', e.g.:")
+                print("     export GEMINI_API_KEY=...; export NCBI_API_KEY=...; export EMAIL=you@example.com")
+                print("   Or create a .env file in the project root with these variables.")
     
     def print_banner(self):
         """Print the BioAnalyzer banner."""
@@ -200,6 +228,24 @@ class BioAnalyzerCLI:
             print(f" Error building containers: {e}")
             return False
     
+    def _ensure_network(self):
+        """Ensure Docker network exists for container communication."""
+        # Check if network exists
+        check_result = subprocess.run(
+            ["docker", "network", "ls", "--filter", f"name={self.network_name}", "--format", "{{.Name}}"],
+            capture_output=True,
+            text=True,
+            check=False
+        )
+        
+        if not check_result.stdout.strip():
+            # Network doesn't exist, create it
+            subprocess.run(
+                ["docker", "network", "create", self.network_name],
+                capture_output=True,
+                check=False
+            )
+    
     def start_application(self):
         """Start the BioAnalyzer application."""
         print("🚀 Starting BioAnalyzer application...")
@@ -215,6 +261,10 @@ class BioAnalyzerCLI:
         try:
             # Preflight env validation
             self._validate_environment()
+            
+            # Ensure Docker network exists for container communication
+            self._ensure_network()
+            
             # Check if container already exists
             check_result = subprocess.run(
                 ["docker", "ps", "-a", "--filter", f"name={self.container_name}", "--format", "{{.Names}}"],
@@ -251,6 +301,7 @@ class BioAnalyzerCLI:
             env_flags = self._collect_env_flags()
             run_cmd = [
                 "docker", "run", "-d", "--name", self.container_name,
+                "--network", self.network_name,
                 "-p", "8000:8000",
             ] + env_flags + [self.image_name]
             subprocess.run(run_cmd, check=True)
@@ -299,6 +350,7 @@ class BioAnalyzerCLI:
                         print("🌐 Starting frontend...")
                         subprocess.run([
                             "docker", "run", "-d", "--name", frontend_name,
+                            "--network", self.network_name,
                             "-p", "3000:80", "bioanalyzer-frontend"
                         ], check=True)
                         print("✅ Frontend is running at http://localhost:3000")
@@ -306,6 +358,7 @@ class BioAnalyzerCLI:
                     print("🌐 Starting frontend...")
                     subprocess.run([
                         "docker", "run", "-d", "--name", frontend_name,
+                        "--network", self.network_name,
                         "-p", "3000:80", "bioanalyzer-frontend"
                     ], check=True)
                     print("✅ Frontend is running at http://localhost:3000")
