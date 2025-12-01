@@ -79,7 +79,7 @@ cython_debug/
 # Docker
 *.log
 logs/
-Dockerfile*
+# Dockerfile*
 .dockerignore
 .docker/
 
@@ -98,4 +98,4 @@ Thumbs.db
 # App specific
 cache/
 results/
-BioAnalyzer
+# BioAnalyzer

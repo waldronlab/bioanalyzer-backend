@@ -142,6 +142,73 @@ class UnifiedQA:
             logger.error(f"UnifiedQA.analyze_paper error: {e}")
             return {"error": str(e), "confidence": 0.0, "status": "error"}
 
+    async def analyze_image(
+        self,
+        image_url: str,
+        prompt: str,
+        model: Optional[str] = None
+    ) -> str:
+        """
+        Analyze an image using visual LLM capabilities.
+        
+        Args:
+            image_url: Image URL (data URL or HTTP URL)
+            prompt: Text prompt for image analysis
+            model: Optional model override (default: gemini-2.0-flash)
+            
+        Returns:
+            Image description/analysis text
+        """
+        try:
+            if PAPERQA_AVAILABLE and isinstance(self.qa_system, PaperQAAgent):
+                # Use Paper-QA's litellm integration
+                import litellm
+                
+                model_name = model or "gemini/gemini-2.0-flash"
+                
+                response = await litellm.acompletion(
+                    model=model_name,
+                    messages=[
+                        {
+                            "role": "user",
+                            "content": [
+                                {"type": "text", "text": prompt},
+                                {"type": "image_url", "image_url": {"url": image_url}}
+                            ]
+                        }
+                    ]
+                )
+                
+                return response.choices[0].message.content
+            else:
+                # Use GeminiQA with vision model
+                import google.generativeai as genai
+                from PIL import Image
+                import requests
+                from io import BytesIO
+                import base64
+                
+                # Handle data URLs
+                if image_url.startswith('data:'):
+                    # Extract base64 data
+                    header, data = image_url.split(',', 1)
+                    image_data = base64.b64decode(data)
+                    image = Image.open(BytesIO(image_data))
+                else:
+                    # Download image
+                    response = requests.get(image_url)
+                    image = Image.open(BytesIO(response.content))
+                
+                # Use Gemini vision model
+                vision_model = genai.GenerativeModel('gemini-2.0-flash')
+                response = vision_model.generate_content([prompt, image])
+                
+                return response.text
+                
+        except Exception as e:
+            logger.error(f"Error analyzing image: {e}")
+            return f"Error analyzing image: {str(e)}"
+
     async def analyze_paper_enhanced(self, prompt: str) -> Dict[str, Union[str, float, List[str]]]:
         """Enhanced analysis method for BugSigDB curation requirements."""
         if self.use_gemini and self.qa_system:
