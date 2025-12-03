@@ -352,15 +352,11 @@ class BioAnalyzerCLI:
             ] + env_flags + [self.image_name]
             subprocess.run(run_cmd, check=True)
             
-            # Wait for backend to be ready
-            print("⏳ Waiting for backend to be ready...")
-            time.sleep(5)
-            
-            # Check if backend is running
-            if self.check_backend_health():
+            # Wait for backend to be ready with polling on /health
+            if self._wait_for_backend_health(timeout=60, interval=2):
                 print("✅ Backend API is running at http://localhost:8000")
             else:
-                print("⚠️  Backend started but may not be fully ready yet")
+                print("⚠️  Backend container started but /health did not report healthy within 60s")
             
             # Start frontend if available
             frontend_dir = project_root.parent / "BioAnalyzer-Frontend"
@@ -456,10 +452,26 @@ class BioAnalyzerCLI:
         """Check if the backend is healthy."""
         try:
             import requests
+            # Use the lightweight root /health endpoint so we avoid any heavy dependencies.
             response = requests.get("http://localhost:8000/health", timeout=5)
             return response.status_code == 200
-        except:
+        except Exception as exc:
+            logger.debug(f"Backend health check failed: {exc}")
             return False
+
+    def _wait_for_backend_health(self, timeout: int = 60, interval: float = 2) -> bool:
+        """
+        Poll the backend /health endpoint until it reports healthy or we time out.
+
+        This improves resilience over a single fixed sleep, especially on slower machines.
+        """
+        deadline = time.time() + timeout
+        print(f"⏳ Waiting for backend health (timeout: {timeout}s)...")
+        while time.time() < deadline:
+            if self.check_backend_health():
+                return True
+            time.sleep(max(0.5, interval))
+        return False
     
     def get_system_status(self):
         """Get system status information."""

@@ -1,8 +1,23 @@
 import os
 from pathlib import Path
-from dotenv import load_dotenv
-import google.generativeai as genai
 import logging
+
+# Graceful python-dotenv import: keep backend usable even if optional dep is missing
+try:
+    from dotenv import load_dotenv  # type: ignore
+except ImportError:  # pragma: no cover - safety net for bare installs
+    def load_dotenv(*args, **kwargs):  # type: ignore[no-redef]
+        """
+        Lightweight fallback when python-dotenv is not installed.
+        We simply skip .env loading and log a clear warning once.
+        """
+        logger = logging.getLogger(__name__)
+        logger.warning(
+            "python-dotenv not installed; .env files will not be auto-loaded. "
+            "Install it with 'pip install python-dotenv' for local development."
+        )
+
+import google.generativeai as genai
 
 # Load environment variables from .env file
 # Try multiple possible locations for .env file
