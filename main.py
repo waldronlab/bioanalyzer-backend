@@ -23,7 +23,19 @@ project_root = Path(__file__).parent
 sys.path.insert(0, str(project_root))
 
 # Import and run the FastAPI application
-from app.api.app import app
+# Wrap import in try-except to provide better error messages
+try:
+    from app.api.app import app
+except Exception as e:
+    print(f"❌ Error importing FastAPI application: {e}")
+    print("\nThis might be due to:")
+    print("  1. Missing dependencies - run: pip install -r config/requirements.txt")
+    print("  2. Syntax errors in application code")
+    print("  3. Missing environment variables")
+    print(f"\nFull error: {type(e).__name__}: {e}")
+    import traceback
+    traceback.print_exc()
+    sys.exit(1)
 
 def main():
     """Main function to start the API server."""
@@ -49,14 +61,22 @@ def main():
     print(f"📝 Log level: {args.log_level}")
     print("\nPress Ctrl+C to stop the server")
     
-    import uvicorn
-    uvicorn.run(
-        "app.api.app:app",
-        host=args.host,
-        port=args.port,
-        log_level=args.log_level,
-        reload=reload_flag
-    )
+    try:
+        import uvicorn
+        uvicorn.run(
+            "app.api.app:app",
+            host=args.host,
+            port=args.port,
+            log_level=args.log_level,
+            reload=reload_flag
+        )
+    except KeyboardInterrupt:
+        print("\n\n👋 Server stopped by user")
+    except Exception as e:
+        print(f"\n❌ Error starting server: {e}")
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()

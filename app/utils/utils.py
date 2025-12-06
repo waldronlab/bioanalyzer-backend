@@ -4,10 +4,21 @@ import logging
 import hashlib
 from pathlib import Path
 from typing import Dict, List, Union, Any
-from dotenv import load_dotenv
 from dataclasses import dataclass
 
-# Load environment variables
+# Optional python-dotenv import – keep utilities usable even if the package is absent
+try:
+    from dotenv import load_dotenv  # type: ignore
+except ImportError:  # pragma: no cover - safety net for bare installs
+    def load_dotenv(*args, **kwargs):  # type: ignore[no-redef]
+        logger = logging.getLogger(__name__)
+        logger.warning(
+            "python-dotenv not installed; environment variables will not be loaded "
+            "from .env by app.utils.utils. Install it with 'pip install python-dotenv' "
+            "for local development."
+        )
+
+# Load environment variables (no-op if dotenv is unavailable)
 load_dotenv()
 
 # Configure logging

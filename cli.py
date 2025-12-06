@@ -101,9 +101,11 @@ class BioAnalyzerCLI:
         flags = []
         
         # First, try to use --env-file if .env exists (preferred method)
+        # Docker's --env-file works even if python-dotenv is not installed on host
         env_file = self._get_env_file_path()
         if env_file:
             flags.extend(["--env-file", env_file])
+            logger.debug(f"Using --env-file: {env_file}")
         
         # Also pass through any env vars explicitly set in the host environment
         # (these will override .env file values)
@@ -111,6 +113,7 @@ class BioAnalyzerCLI:
             val = os.environ.get(key)
             if val is not None and str(val) != "":
                 flags.extend(["-e", f"{key}={val}"])
+                logger.debug(f"Passing through env var: {key}")
         
         return flags
 
@@ -350,17 +353,38 @@ class BioAnalyzerCLI:
                 "--network", self.network_name,
                 "-p", "8000:8000",
             ] + env_flags + [self.image_name]
-            subprocess.run(run_cmd, check=True)
             
-            # Wait for backend to be ready
-            print("⏳ Waiting for backend to be ready...")
-            time.sleep(5)
+            # Run the command and capture output for debugging
+            result = subprocess.run(
+                run_cmd,
+                capture_output=True,
+                text=True,
+                check=False
+            )
             
-            # Check if backend is running
-            if self.check_backend_health():
+            if result.returncode != 0:
+                print(f"❌ Error starting container: {result.stderr}")
+                # Show logs if container was created but failed to start
+                logs_result = subprocess.run(
+                    ["docker", "logs", self.container_name],
+                    capture_output=True,
+                    text=True,
+                    check=False
+                )
+                if logs_result.stdout:
+                    print("\n📋 Container logs:")
+                    print(logs_result.stdout[-1000:])  # Last 1000 chars
+                return False
+            
+            container_id = result.stdout.strip()
+            if container_id:
+                print(f"✅ Container started: {container_id[:12]}")
+            
+            # Wait for backend to be ready with polling on /health
+            if self._wait_for_backend_health(timeout=60, interval=2):
                 print("✅ Backend API is running at http://localhost:8000")
             else:
-                print("⚠️  Backend started but may not be fully ready yet")
+                print("⚠️  Backend container started but /health did not report healthy within 60s")
             
             # Start frontend if available
             frontend_dir = project_root.parent / "BioAnalyzer-Frontend"
@@ -456,10 +480,26 @@ class BioAnalyzerCLI:
         """Check if the backend is healthy."""
         try:
             import requests
+            # Use the lightweight root /health endpoint so we avoid any heavy dependencies.
             response = requests.get("http://localhost:8000/health", timeout=5)
             return response.status_code == 200
-        except:
+        except Exception as exc:
+            logger.debug(f"Backend health check failed: {exc}")
             return False
+
+    def _wait_for_backend_health(self, timeout: int = 60, interval: float = 2) -> bool:
+        """
+        Poll the backend /health endpoint until it reports healthy or we time out.
+
+        This improves resilience over a single fixed sleep, especially on slower machines.
+        """
+        deadline = time.time() + timeout
+        print(f"⏳ Waiting for backend health (timeout: {timeout}s)...")
+        while time.time() < deadline:
+            if self.check_backend_health():
+                return True
+            time.sleep(max(0.5, interval))
+        return False
     
     def get_system_status(self):
         """Get system status information."""
