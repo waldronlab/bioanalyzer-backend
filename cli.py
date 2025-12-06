@@ -101,9 +101,11 @@ class BioAnalyzerCLI:
         flags = []
         
         # First, try to use --env-file if .env exists (preferred method)
+        # Docker's --env-file works even if python-dotenv is not installed on host
         env_file = self._get_env_file_path()
         if env_file:
             flags.extend(["--env-file", env_file])
+            logger.debug(f"Using --env-file: {env_file}")
         
         # Also pass through any env vars explicitly set in the host environment
         # (these will override .env file values)
@@ -111,6 +113,7 @@ class BioAnalyzerCLI:
             val = os.environ.get(key)
             if val is not None and str(val) != "":
                 flags.extend(["-e", f"{key}={val}"])
+                logger.debug(f"Passing through env var: {key}")
         
         return flags
 
@@ -350,7 +353,32 @@ class BioAnalyzerCLI:
                 "--network", self.network_name,
                 "-p", "8000:8000",
             ] + env_flags + [self.image_name]
-            subprocess.run(run_cmd, check=True)
+            
+            # Run the command and capture output for debugging
+            result = subprocess.run(
+                run_cmd,
+                capture_output=True,
+                text=True,
+                check=False
+            )
+            
+            if result.returncode != 0:
+                print(f"❌ Error starting container: {result.stderr}")
+                # Show logs if container was created but failed to start
+                logs_result = subprocess.run(
+                    ["docker", "logs", self.container_name],
+                    capture_output=True,
+                    text=True,
+                    check=False
+                )
+                if logs_result.stdout:
+                    print("\n📋 Container logs:")
+                    print(logs_result.stdout[-1000:])  # Last 1000 chars
+                return False
+            
+            container_id = result.stdout.strip()
+            if container_id:
+                print(f"✅ Container started: {container_id[:12]}")
             
             # Wait for backend to be ready with polling on /health
             if self._wait_for_backend_health(timeout=60, interval=2):

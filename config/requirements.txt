@@ -35,6 +35,7 @@ xlrd>=2.0.1
 # Utilities
 tqdm>=4.65.0
 python-dotenv>=1.0.0
+psutil>=5.9.0
 
 # WebSocket dependencies
 fastapi>=0.104.0

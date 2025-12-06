@@ -28,9 +28,31 @@ from app.api.utils.api_utils import get_current_timestamp
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1", tags=["System"])
 
-# Initialize services for health checks
-unified_qa = UnifiedQA(use_gemini=True, gemini_api_key=GEMINI_API_KEY)
-pubmed_retriever = PubMedRetriever(api_key=NCBI_API_KEY)
+# Lazy initialization of services to prevent startup failures
+_unified_qa = None
+_pubmed_retriever = None
+
+def get_unified_qa():
+    """Lazy initialization of UnifiedQA service."""
+    global _unified_qa
+    if _unified_qa is None:
+        try:
+            _unified_qa = UnifiedQA(use_gemini=True, gemini_api_key=GEMINI_API_KEY)
+        except Exception as e:
+            logger.warning(f"Failed to initialize UnifiedQA: {e}")
+            _unified_qa = None
+    return _unified_qa
+
+def get_pubmed_retriever():
+    """Lazy initialization of PubMedRetriever service."""
+    global _pubmed_retriever
+    if _pubmed_retriever is None:
+        try:
+            _pubmed_retriever = PubMedRetriever(api_key=NCBI_API_KEY)
+        except Exception as e:
+            logger.warning(f"Failed to initialize PubMedRetriever: {e}")
+            _pubmed_retriever = None
+    return _pubmed_retriever
 
 
 @router.get("/")
@@ -52,21 +74,13 @@ async def health_check():
     Returns service health status and basic information.
     """
     try:
-        # Basic health check
+        # Basic health check - lightweight, no service initialization required
         current_time = get_current_timestamp()
         
-        # Check if services are responsive
-        services_status = {
-            "unified_qa": True,  # Assume healthy if no exception
-            "pubmed_retriever": True,
-            "performance_logger": True
-        }
-        
-        # Overall health status
-        overall_health = all(services_status.values())
-        
+        # Simple health check - just verify the API is responding
+        # Don't initialize services here to keep it fast and reliable
         return HealthResponse(
-            status="healthy" if overall_health else "unhealthy",
+            status="healthy",
             timestamp=current_time,
             version="1.0.0"
         )
@@ -119,6 +133,15 @@ async def gemini_health_check():
     Returns Gemini API health status and response time.
     """
     try:
+        unified_qa = get_unified_qa()
+        if unified_qa is None:
+            return {
+                "status": "unhealthy",
+                "api_key_configured": bool(GEMINI_API_KEY),
+                "error": "UnifiedQA service not initialized",
+                "timestamp": get_current_timestamp()
+            }
+        
         start_time = datetime.now()
         
         # Test Gemini API with a simple request
@@ -157,7 +180,14 @@ async def gemini_health_check():
 async def ncbi_health_check(pmid: str = "31452104"):
     """Check NCBI E-Utilities connectivity and basic metadata availability."""
     try:
-        retriever = PubMedRetriever(api_key=NCBI_API_KEY)
+        retriever = get_pubmed_retriever()
+        if retriever is None:
+            return {
+                "status": "unhealthy",
+                "error": "PubMedRetriever service not initialized",
+                "timestamp": get_current_timestamp(),
+                "pmid": pmid
+            }
         md = retriever.fetch_paper_metadata(pmid)
         ok = bool(md.get("title") or md.get("abstract"))
         return {
@@ -347,6 +377,12 @@ async def ask_question(request: Dict[str, Any]):
         logger.info(f"Q&A request: {question[:100]}...")
         
         # Use UnifiedQA to get the answer
+        unified_qa = get_unified_qa()
+        if unified_qa is None:
+            raise HTTPException(
+                status_code=503,
+                detail="QA service not available. Check GEMINI_API_KEY configuration."
+            )
         response = await unified_qa.chat(question)
         
         answer = response.get('text', '')

@@ -20,10 +20,47 @@ from app.api.utils.api_utils import get_current_timestamp
 
 logger = logging.getLogger(__name__)
 
-# Initialize services
-unified_qa = UnifiedQA(use_gemini=True, gemini_api_key=GEMINI_API_KEY)
-pubmed_retriever = PubMedRetriever(api_key=NCBI_API_KEY)
-cache_manager = CacheManager()
+# Lazy initialization of services to prevent startup failures
+_unified_qa = None
+_pubmed_retriever = None
+_cache_manager = None
+
+def get_unified_qa():
+    """Lazy initialization of UnifiedQA service."""
+    global _unified_qa
+    if _unified_qa is None:
+        try:
+            _unified_qa = UnifiedQA(use_gemini=True, gemini_api_key=GEMINI_API_KEY)
+            logger.info("UnifiedQA service initialized successfully")
+        except Exception as e:
+            logger.error(f"Failed to initialize UnifiedQA: {e}")
+            # Try fallback to GeminiQA directly
+            try:
+                from app.models.gemini_qa import GeminiQA
+                _unified_qa = GeminiQA(api_key=GEMINI_API_KEY)
+                logger.info("Fallback to GeminiQA successful")
+            except Exception as e2:
+                logger.error(f"Fallback to GeminiQA also failed: {e2}")
+                _unified_qa = None
+    return _unified_qa
+
+def get_pubmed_retriever():
+    """Lazy initialization of PubMedRetriever service."""
+    global _pubmed_retriever
+    if _pubmed_retriever is None:
+        try:
+            _pubmed_retriever = PubMedRetriever(api_key=NCBI_API_KEY)
+        except Exception as e:
+            logger.error(f"Failed to initialize PubMedRetriever: {e}")
+            _pubmed_retriever = None
+    return _pubmed_retriever
+
+def get_cache_manager():
+    """Lazy initialization of CacheManager."""
+    global _cache_manager
+    if _cache_manager is None:
+        _cache_manager = CacheManager()
+    return _cache_manager
 
 # The 6 essential BugSigDB fields
 ESSENTIAL_FIELDS = {
@@ -41,6 +78,13 @@ async def analyze_paper_simple(pmid: str) -> Optional[Dict]:
     Simple analysis focused only on the 6 essential BugSigDB fields.
     """
     try:
+        cache_manager = get_cache_manager()
+        pubmed_retriever = get_pubmed_retriever()
+        
+        if pubmed_retriever is None:
+            logger.error("PubMedRetriever not available. Check NCBI_API_KEY configuration.")
+            return None
+        
         cached = cache_manager.get_analysis_result(pmid)
         if cached and cache_manager.is_cache_valid(
             cached.get("timestamp", ""),
@@ -148,10 +192,33 @@ async def analyze_single_field(text: str, field_name: str, question: str, pmid: 
         }}
         """
         
+        unified_qa = get_unified_qa()
+        if unified_qa is None:
+            logger.error("UnifiedQA service not available. Check GEMINI_API_KEY configuration.")
+            return create_empty_field_result(field_name)
+        
         response = await asyncio.wait_for(
             unified_qa.chat(prompt),
             timeout=ANALYSIS_TIMEOUT
         )
+        
+        # Check if response indicates an error
+        if response.get('text', '').startswith('Error:'):
+            logger.warning(f"UnifiedQA returned error for field {field_name}: {response.get('text')}")
+            # Try fallback to direct Gemini API if Paper-QA failed
+            if 'Paper-QA' in str(response.get('text', '')) or 'router' in str(response.get('text', '')).lower():
+                logger.info(f"Attempting fallback to direct Gemini API for field {field_name}")
+                try:
+                    from app.models.gemini_qa import GeminiQA
+                    gemini_qa = GeminiQA(api_key=GEMINI_API_KEY)
+                    response = await asyncio.wait_for(
+                        gemini_qa.chat(prompt),
+                        timeout=ANALYSIS_TIMEOUT
+                    )
+                    logger.info(f"Fallback to GeminiQA successful for field {field_name}")
+                except Exception as fallback_error:
+                    logger.error(f"Fallback to GeminiQA also failed: {fallback_error}")
+                    return create_empty_field_result(field_name)
         
         # Parse the response
         answer = response.get('text', '')

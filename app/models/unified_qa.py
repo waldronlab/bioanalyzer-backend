@@ -6,7 +6,7 @@ from typing import Dict, List, Optional, Union
 
 # Try to import Paper-QA first, fallback to GeminiQA if not available
 try:
-from .paperqa_agent import PaperQAAgent
+    from .paperqa_agent import PaperQAAgent
     PAPERQA_AVAILABLE = True
 except ImportError:
     PAPERQA_AVAILABLE = False
@@ -65,9 +65,19 @@ class UnifiedQA:
         if self.use_gemini and api_key_candidate:
             try:
                 if self.use_paperqa:
-                    # Use Paper-QA agent (preferred)
-                    self.qa_system = PaperQAAgent(api_key=api_key_candidate)
-                    logger.info("UnifiedQA: PaperQAAgent initialized successfully.")
+                    # Try Paper-QA agent first (preferred)
+                    try:
+                        self.qa_system = PaperQAAgent(api_key=api_key_candidate)
+                        # Test if Paper-QA actually works (some versions have compatibility issues)
+                        logger.info("UnifiedQA: PaperQAAgent initialized successfully.")
+                    except Exception as paperqa_error:
+                        logger.warning(f"UnifiedQA: Paper-QA initialization failed: {paperqa_error}")
+                        logger.info("UnifiedQA: Falling back to GeminiQA due to Paper-QA issues")
+                        # Fallback to direct Gemini API
+                        from .gemini_qa import GeminiQA
+                        self.qa_system = GeminiQA(api_key=api_key_candidate)
+                        self.use_paperqa = False  # Disable Paper-QA for this instance
+                        logger.info("UnifiedQA: GeminiQA initialized successfully (Paper-QA unavailable).")
                 else:
                     # Fallback to direct Gemini API
                     from .gemini_qa import GeminiQA
@@ -81,6 +91,7 @@ class UnifiedQA:
                     try:
                         from .gemini_qa import GeminiQA
                         self.qa_system = GeminiQA(api_key=api_key_candidate)
+                        self.use_paperqa = False  # Disable Paper-QA for this instance
                         logger.info("UnifiedQA: Fallback to GeminiQA after Paper-QA failure.")
                     except Exception as e2:
                         logger.error(f"UnifiedQA: Fallback to GeminiQA also failed: {e2}")
@@ -100,10 +111,35 @@ class UnifiedQA:
         if not self.qa_system:
             return {"text": "Model not available. Check GEMINI_API_KEY.", "confidence": 0.0}
         try:
-            return await self.qa_system.chat(prompt)
+            response = await self.qa_system.chat(prompt)
+            # Check if response indicates an error (Paper-QA failure)
+            if response.get('text', '').startswith('Error:') or 'router' in str(response.get('text', '')).lower():
+                logger.warning(f"Paper-QA returned error, falling back to GeminiQA: {response.get('text')}")
+                # Fallback to direct Gemini API
+                return await self._fallback_to_gemini(prompt)
+            return response
         except Exception as e:
             logger.error(f"UnifiedQA.chat error: {e}")
-            return {"text": f"Error: {e}", "confidence": 0.0}
+            # Try fallback to GeminiQA
+            logger.info("Attempting fallback to GeminiQA after error")
+            return await self._fallback_to_gemini(prompt)
+    
+    async def _fallback_to_gemini(self, prompt: str) -> dict:
+        """Fallback to direct Gemini API when Paper-QA fails."""
+        try:
+            from .gemini_qa import GeminiQA
+            # Get API key from environment or use the one from initialization
+            api_key = os.getenv("GEMINI_API_KEY", "")
+            if not api_key:
+                return {"text": "GEMINI_API_KEY not available for fallback", "confidence": 0.0}
+            
+            gemini_qa = GeminiQA(api_key=api_key)
+            response = await gemini_qa.chat(prompt)
+            logger.info("Fallback to GeminiQA successful")
+            return response
+        except Exception as e:
+            logger.error(f"Fallback to GeminiQA also failed: {e}")
+            return {"text": f"Error: All QA systems failed. Last error: {e}", "confidence": 0.0}
 
     async def ask_question(self, question: str, context: Optional[str] = None, pmid: Optional[str] = None) -> Dict:
         """
