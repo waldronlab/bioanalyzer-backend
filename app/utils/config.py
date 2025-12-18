@@ -125,6 +125,16 @@ ANALYSIS_TIMEOUT = int(os.getenv("ANALYSIS_TIMEOUT", "45"))  # seconds - total a
 GEMINI_TIMEOUT = int(os.getenv("GEMINI_TIMEOUT", "30"))  # seconds - Gemini API timeout
 FRONTEND_TIMEOUT = int(os.getenv("FRONTEND_TIMEOUT", "60"))  # seconds - frontend timeout
 
+# RAG Configuration - Advanced RAG with Contextual Summarization
+RAG_SUMMARY_PROVIDER = os.getenv("RAG_SUMMARY_PROVIDER", "").lower() or None  # Provider for summarization LLM
+RAG_SUMMARY_MODEL = os.getenv("RAG_SUMMARY_MODEL", "") or None  # Model for summarization (can be cheaper/faster)
+RAG_SUMMARY_LENGTH = os.getenv("RAG_SUMMARY_LENGTH", "medium")  # "short", "medium", "long"
+RAG_SUMMARY_QUALITY = os.getenv("RAG_SUMMARY_QUALITY", "balanced")  # "fast", "balanced", "high"
+RAG_RERANK_METHOD = os.getenv("RAG_RERANK_METHOD", "hybrid")  # "keyword", "llm", "hybrid"
+RAG_USE_SUMMARY_CACHE = os.getenv("RAG_USE_SUMMARY_CACHE", "true").lower() in ("true", "1", "yes")
+RAG_MAX_SUMMARY_KEY_POINTS = int(os.getenv("RAG_MAX_SUMMARY_KEY_POINTS", "5"))
+RAG_TOP_K_CHUNKS = int(os.getenv("RAG_TOP_K_CHUNKS", "10"))  # Number of top chunks to use after re-ranking
+
 # Cache Configuration
 CACHE_VALIDITY_HOURS = int(os.getenv("CACHE_VALIDITY_HOURS", "24"))
 MAX_CACHE_SIZE = int(os.getenv("MAX_CACHE_SIZE", "1000"))  # number of entries

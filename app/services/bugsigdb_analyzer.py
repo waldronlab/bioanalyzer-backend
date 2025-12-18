@@ -2,7 +2,7 @@
 Simplified analysis service focused only on the 6 essential BugSigDB fields.
 """
 import logging
-from typing import Dict, Optional
+from typing import Dict, Optional, List
 import asyncio
 import json
 
@@ -115,11 +115,33 @@ async def analyze_paper_simple(pmid: str) -> Optional[Dict]:
             logger.warning(f"No analyzable text found for PMID: {pmid}")
             return None
         
+        # Try to create chunks for advanced RAG if full text is available
+        chunks = None
+        if full_text and len(full_text) > 1000:
+            try:
+                from app.utils.chunking import ChunkingService
+                chunker = ChunkingService(chunk_chars=3000, overlap=100)
+                chunks = await chunker.chunk_markdown(
+                    markdown=full_text,
+                    doc_name=f"PMID_{pmid}",
+                    doc_key=pmid
+                )
+                logger.info(f"Created {len(chunks)} chunks for advanced RAG")
+            except Exception as chunk_error:
+                logger.warning(f"Failed to create chunks for advanced RAG: {chunk_error}")
+                chunks = None
+        
         # Analyze each of the 6 essential fields
         field_results = {}
         for field_name, question in ESSENTIAL_FIELDS.items():
             try:
-                field_result = await analyze_single_field(analysis_text, field_name, question, pmid)
+                field_result = await analyze_single_field(
+                    analysis_text, 
+                    field_name, 
+                    question, 
+                    pmid,
+                    chunks=chunks  # Pass chunks for advanced RAG
+                )
                 field_results[field_name] = field_result
             except Exception as e:
                 logger.error(f"Error analyzing field {field_name} for PMID {pmid}: {e}")
@@ -171,13 +193,50 @@ async def analyze_paper_simple(pmid: str) -> Optional[Dict]:
         return None
 
 
-async def analyze_single_field(text: str, field_name: str, question: str, pmid: str) -> Dict:
+async def analyze_single_field(
+    text: str, 
+    field_name: str, 
+    question: str, 
+    pmid: str,
+    chunks: Optional[List] = None
+) -> Dict:
     """
     Analyze a single field using the LLM.
+    
+    Args:
+        text: Plain text context (used if chunks not provided)
+        field_name: Name of the field being extracted
+        question: Question to answer
+        pmid: Paper ID
+        chunks: Optional list of Text chunks for advanced RAG (uses contextual summarization if provided)
     """
     try:
+        # Use advanced RAG if chunks are provided
+        if chunks:
+            try:
+                from app.services.advanced_rag import AdvancedRAGService
+                from app.utils.config import RAG_USE_SUMMARY_CACHE
+                
+                # Initialize RAG service
+                rag_service = AdvancedRAGService()
+                
+                # Get contextual context using RAG
+                contextual_context = await rag_service.get_contextual_context(
+                    chunks=chunks,
+                    query=question,
+                    top_k=None  # Use config default
+                )
+                
+                logger.info(f"Using advanced RAG for field {field_name} (context length: {len(contextual_context)})")
+                context_text = contextual_context
+            except Exception as rag_error:
+                logger.warning(f"Advanced RAG failed for field {field_name}, falling back to simple text: {rag_error}")
+                context_text = text[:2000]
+        else:
+            context_text = text[:2000]
+        
         prompt = f"""
-        Context: {text[:2000]}
+        Context: {context_text}
         
         Question: {question}
         
