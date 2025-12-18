@@ -4,6 +4,13 @@ import os
 import asyncio
 from typing import Dict, List, Optional, Union
 
+# Try to import LiteLLM provider manager first
+try:
+    from .llm_provider import LLMProviderManager, LITELLM_AVAILABLE
+except ImportError:
+    LITELLM_AVAILABLE = False
+    LLMProviderManager = None
+
 # Try to import Paper-QA first, fallback to GeminiQA if not available
 try:
     from .paperqa_agent import PaperQAAgent
@@ -14,102 +21,160 @@ except ImportError:
     logger.warning("Paper-QA not available, falling back to GeminiQA")
     from .gemini_qa import GeminiQA
 
-from app.utils.config import GEMINI_TIMEOUT, GEMINI_API_KEY
+from app.utils.config import GEMINI_TIMEOUT, GEMINI_API_KEY, LLM_PROVIDER, LLM_MODEL
 
 logger = logging.getLogger(__name__)
 
 
 class UnifiedQA:
     """
-    Unified QA system that wraps Paper-QA agent (preferred) or GeminiQA (fallback).
+    Unified QA system that supports multiple LLM providers via LiteLLM.
     
-    Paper-QA is preferred because it:
-    - Supports multiple LLMs including Gemini
-    - Provides agent-based reasoning
-    - Offers better paper analysis capabilities
+    Supports:
+    - OpenAI (GPT-4, GPT-4o, etc.)
+    - Anthropic (Claude)
+    - Google Gemini
+    - Local models (Ollama, llamafile)
+    - Paper-QA agent (fallback, preferred for complex analysis)
+    - Direct Gemini API (fallback for backward compatibility)
     """
 
     def __init__(
         self, 
-        use_gemini: bool = True, 
-        gemini_api_key: Optional[str] = None,
+        provider: Optional[str] = None,
+        model: Optional[str] = None,
+        use_gemini: Optional[bool] = None,  # Deprecated, use provider instead
+        gemini_api_key: Optional[str] = None,  # For backward compatibility
         use_paperqa: bool = True
     ):
         """
         Initialize the unified QA system.
 
         Args:
-            use_gemini: Whether to use Gemini (via Paper-QA or direct API)
-            gemini_api_key: API key for Gemini
-            use_paperqa: Whether to use Paper-QA agent (default: True)
-                          If False or Paper-QA unavailable, falls back to GeminiQA
+            provider: LLM provider (openai, anthropic, gemini, ollama, llamafile)
+                    If None, auto-detect from environment or use LLM_PROVIDER config
+            model: Model name (e.g., "gpt-4o", "claude-3-5-sonnet-20241022")
+                  If None, use provider default or LLM_MODEL config
+            use_gemini: Deprecated - use provider="gemini" instead
+                      If True and provider not set, defaults to gemini
+            gemini_api_key: API key for Gemini (for backward compatibility)
+            use_paperqa: Whether to use Paper-QA agent for complex analysis
+                        (default: True, only used if LiteLLM not available)
 
         Behavior:
-        - If use_paperqa=True and Paper-QA is available, use PaperQAAgent
-        - Otherwise, fall back to GeminiQA (direct API calls)
-        - If gemini_api_key provided (non-empty), use it.
-        - Else fall back to environment variable GEMINI_API_KEY.
+        1. If LiteLLM is available, use LLMProviderManager (supports all providers)
+        2. If LiteLLM not available and Paper-QA available, use PaperQAAgent
+        3. Otherwise, fall back to GeminiQA (direct API calls)
         """
-        self.use_gemini = bool(use_gemini)
+        # Handle backward compatibility
+        if use_gemini is not None:
+            logger.warning(
+                "use_gemini parameter is deprecated. Use provider='gemini' instead."
+            )
+            if use_gemini and provider is None:
+                provider = "gemini"
+        
+        # Set provider from config if not provided
+        if provider is None:
+            provider = LLM_PROVIDER
+        
+        # Set model from config if not provided
+        if model is None:
+            model = LLM_MODEL
+        
+        self.provider = provider
+        self.model = model
         self.use_paperqa = bool(use_paperqa) and PAPERQA_AVAILABLE
-
-        # Prefer explicit param, otherwise environment variable
-        api_key_candidate = None
-        if gemini_api_key and isinstance(gemini_api_key, str) and gemini_api_key.strip():
-            api_key_candidate = gemini_api_key.strip()
-        else:
-            env_key = os.getenv("GEMINI_API_KEY", "")
-            if env_key and env_key.strip():
-                api_key_candidate = env_key.strip()
-
-        if self.use_gemini and api_key_candidate:
+        
+        # Initialize LLM provider manager if LiteLLM is available
+        self.llm_manager = None
+        if LITELLM_AVAILABLE and LLMProviderManager:
             try:
-                if self.use_paperqa:
-                    # Try Paper-QA agent first (preferred)
-                    try:
-                        self.qa_system = PaperQAAgent(api_key=api_key_candidate)
-                        # Test if Paper-QA actually works (some versions have compatibility issues)
-                        logger.info("UnifiedQA: PaperQAAgent initialized successfully.")
-                    except Exception as paperqa_error:
-                        logger.warning(f"UnifiedQA: Paper-QA initialization failed: {paperqa_error}")
-                        logger.info("UnifiedQA: Falling back to GeminiQA due to Paper-QA issues")
+                self.llm_manager = LLMProviderManager(
+                    provider=provider,
+                    model=model
+                )
+                logger.info(
+                    f"UnifiedQA: Using LiteLLM with provider={self.llm_manager.provider.value}, "
+                    f"model={self.llm_manager.model}"
+                )
+            except Exception as e:
+                logger.warning(f"UnifiedQA: Failed to initialize LiteLLM: {e}")
+                self.llm_manager = None
+        
+        # Fallback to Paper-QA or GeminiQA if LiteLLM not available
+        if self.llm_manager is None:
+            # Backward compatibility: use gemini_api_key if provided
+            api_key_candidate = None
+            if gemini_api_key and isinstance(gemini_api_key, str) and gemini_api_key.strip():
+                api_key_candidate = gemini_api_key.strip()
+            else:
+                env_key = os.getenv("GEMINI_API_KEY", "")
+                if env_key and env_key.strip():
+                    api_key_candidate = env_key.strip()
+
+            if api_key_candidate:
+                try:
+                    if self.use_paperqa:
+                        # Try Paper-QA agent first (preferred for complex analysis)
+                        try:
+                            self.qa_system = PaperQAAgent(api_key=api_key_candidate)
+                            # Test if Paper-QA actually works (some versions have compatibility issues)
+                            logger.info("UnifiedQA: PaperQAAgent initialized successfully (fallback).")
+                        except Exception as paperqa_error:
+                            logger.warning(f"UnifiedQA: Paper-QA initialization failed: {paperqa_error}")
+                            logger.info("UnifiedQA: Falling back to GeminiQA due to Paper-QA issues")
+                            # Fallback to direct Gemini API
+                            from .gemini_qa import GeminiQA
+                            self.qa_system = GeminiQA(api_key=api_key_candidate)
+                            self.use_paperqa = False  # Disable Paper-QA for this instance
+                            logger.info("UnifiedQA: GeminiQA initialized successfully (Paper-QA unavailable).")
+                    else:
                         # Fallback to direct Gemini API
                         from .gemini_qa import GeminiQA
                         self.qa_system = GeminiQA(api_key=api_key_candidate)
-                        self.use_paperqa = False  # Disable Paper-QA for this instance
-                        logger.info("UnifiedQA: GeminiQA initialized successfully (Paper-QA unavailable).")
-                else:
-                    # Fallback to direct Gemini API
-                    from .gemini_qa import GeminiQA
-                    self.qa_system = GeminiQA(api_key=api_key_candidate)
-                    logger.info("UnifiedQA: GeminiQA initialized successfully (Paper-QA not used).")
-            except Exception as e:
+                        logger.info("UnifiedQA: GeminiQA initialized successfully (Paper-QA not used).")
+                except Exception as e:
+                    self.qa_system = None
+                    logger.error(f"UnifiedQA: failed to initialize QA system: {e}")
+                    # Try fallback if Paper-QA failed
+                    if self.use_paperqa:
+                        try:
+                            from .gemini_qa import GeminiQA
+                            self.qa_system = GeminiQA(api_key=api_key_candidate)
+                            self.use_paperqa = False  # Disable Paper-QA for this instance
+                            logger.info("UnifiedQA: Fallback to GeminiQA after Paper-QA failure.")
+                        except Exception as e2:
+                            logger.error(f"UnifiedQA: Fallback to GeminiQA also failed: {e2}")
+            else:
                 self.qa_system = None
-                logger.error(f"UnifiedQA: failed to initialize QA system: {e}")
-                # Try fallback if Paper-QA failed
-                if self.use_paperqa:
-                    try:
-                        from .gemini_qa import GeminiQA
-                        self.qa_system = GeminiQA(api_key=api_key_candidate)
-                        self.use_paperqa = False  # Disable Paper-QA for this instance
-                        logger.info("UnifiedQA: Fallback to GeminiQA after Paper-QA failure.")
-                    except Exception as e2:
-                        logger.error(f"UnifiedQA: Fallback to GeminiQA also failed: {e2}")
+                logger.warning(
+                    "UnifiedQA: QA system not initialized (no API keys). "
+                    "Chat functionality will be limited."
+                )
         else:
             self.qa_system = None
-            logger.warning(
-                "UnifiedQA: QA system not initialized. "
-                f"use_gemini={self.use_gemini}, api_key_provided={bool(api_key_candidate)}. "
-                "Chat functionality will be limited."
-            )
 
     async def chat(self, prompt: str) -> dict:
         """
         Chat with the QA system (generic conversational).
         Returns a dict with 'text' and 'confidence' keys to match downstream expectations.
         """
+        # Use LiteLLM if available
+        if self.llm_manager:
+            try:
+                response = await self.llm_manager.chat(
+                    messages=[{"role": "user", "content": prompt}],
+                    timeout=GEMINI_TIMEOUT,
+                )
+                return response
+            except Exception as e:
+                logger.error(f"UnifiedQA.chat (LiteLLM) error: {e}")
+                # Fall through to fallback
+        
+        # Fallback to Paper-QA or GeminiQA
         if not self.qa_system:
-            return {"text": "Model not available. Check GEMINI_API_KEY.", "confidence": 0.0}
+            return {"text": "Model not available. Check API keys or LLM_PROVIDER config.", "confidence": 0.0}
         try:
             response = await self.qa_system.chat(prompt)
             # Check if response indicates an error (Paper-QA failure)
@@ -146,8 +211,27 @@ class UnifiedQA:
         Adapter used by paper_analysis.py and other routers.
         Ensures a common response shape: {'answer': str, 'confidence': float}
         """
+        # Use LiteLLM if available
+        if self.llm_manager:
+            try:
+                prompt = question
+                if context:
+                    prompt = f"Context: {context[:2000]}\n\nQuestion: {question}"
+                
+                resp = await self.llm_manager.chat(
+                    messages=[{"role": "user", "content": prompt}],
+                    timeout=GEMINI_TIMEOUT,
+                )
+                text = resp.get("text") or ""
+                confidence = float(resp.get("confidence", 0.0) or 0.0)
+                return {"answer": text, "confidence": confidence, "pmid": pmid}
+            except Exception as e:
+                logger.error(f"UnifiedQA.ask_question (LiteLLM) error: {e}")
+                # Fall through to fallback
+        
+        # Fallback to Paper-QA or GeminiQA
         if not self.qa_system:
-            return {"answer": "Model not available. Check GEMINI_API_KEY.", "confidence": 0.0, "pmid": pmid}
+            return {"answer": "Model not available. Check API keys or LLM_PROVIDER config.", "confidence": 0.0, "pmid": pmid}
         
         # Use PaperQA's ask_question if available (more optimized for context+question)
         if self.use_paperqa and hasattr(self.qa_system, 'ask_question'):
@@ -193,17 +277,40 @@ class UnifiedQA:
         Args:
             image_url: Image URL (data URL or HTTP URL)
             prompt: Text prompt for image analysis
-            model: Optional model override (default: gemini-2.0-flash)
+            model: Optional model override (uses provider default if not specified)
             
         Returns:
             Image description/analysis text, or an informative error string.
         """
-        # Fast exit if Gemini is not configured – avoid hitting external APIs at all.
-        if not GEMINI_API_KEY:
-            logger.warning("Image analysis requested but GEMINI_API_KEY is not configured.")
+        # Use LiteLLM if available
+        if self.llm_manager:
+            try:
+                # Override model if specified
+                if model:
+                    original_model = self.llm_manager.model
+                    self.llm_manager.model = model
+                
+                result = await self.llm_manager.analyze_image(
+                    image_url=image_url,
+                    prompt=prompt,
+                    timeout=GEMINI_TIMEOUT,
+                )
+                
+                # Restore original model
+                if model:
+                    self.llm_manager.model = original_model
+                
+                return result
+            except Exception as e:
+                logger.error(f"UnifiedQA.analyze_image (LiteLLM) error: {e}")
+                # Fall through to fallback
+        
+        # Fast exit if no API keys configured
+        if not GEMINI_API_KEY and not self.llm_manager:
+            logger.warning("Image analysis requested but no API keys are configured.")
             return (
-                "Image analysis is unavailable because GEMINI_API_KEY is not configured. "
-                "Set GEMINI_API_KEY in your environment or .env to enable visual analysis."
+                "Image analysis is unavailable because no API keys are configured. "
+                "Set LLM_PROVIDER and appropriate API keys in your environment or .env to enable visual analysis."
             )
 
         try:
