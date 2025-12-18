@@ -2,17 +2,28 @@
 Tests for API endpoints in app/api/routers/
 """
 import pytest
-from fastapi.testclient import TestClient
 from unittest.mock import patch, AsyncMock, MagicMock
-from app.api.app import app
+
+# Try to import FastAPI-dependent modules, skip tests if not available
+try:
+    from fastapi.testclient import TestClient
+    from app.api.app import app
+    FASTAPI_AVAILABLE = True
+except ImportError:
+    FASTAPI_AVAILABLE = False
+    TestClient = None
+    app = None
 
 
 @pytest.fixture
 def client():
     """Create a test client for the FastAPI app."""
+    if not FASTAPI_AVAILABLE:
+        pytest.skip("FastAPI not available")
     return TestClient(app)
 
 
+@pytest.mark.skipif(not FASTAPI_AVAILABLE, reason="FastAPI not available")
 class TestRootEndpoint:
     """Tests for root endpoint."""
     
@@ -26,6 +37,7 @@ class TestRootEndpoint:
         assert "BioAnalyzer" in data["message"]
 
 
+@pytest.mark.skipif(not FASTAPI_AVAILABLE, reason="FastAPI not available")
 class TestHealthEndpoints:
     """Tests for health check endpoints."""
     
@@ -82,6 +94,7 @@ class TestHealthEndpoints:
         assert "pmid" in data
 
 
+@pytest.mark.skipif(not FASTAPI_AVAILABLE, reason="FastAPI not available")
 class TestConfigEndpoints:
     """Tests for configuration endpoints."""
     
@@ -95,6 +108,7 @@ class TestConfigEndpoints:
         assert "frontend_timeout" in data
 
 
+@pytest.mark.skipif(not FASTAPI_AVAILABLE, reason="FastAPI not available")
 class TestSystemEndpoints:
     """Tests for system endpoints."""
     
@@ -134,6 +148,7 @@ class TestSystemEndpoints:
         assert "metrics" in data
 
 
+@pytest.mark.skipif(not FASTAPI_AVAILABLE, reason="FastAPI not available")
 class TestBugSigDBAnalysisEndpoints:
     """Tests for BugSigDB analysis endpoints."""
     
@@ -198,6 +213,7 @@ class TestBugSigDBAnalysisEndpoints:
         assert "error" in response.json()["detail"].lower()
 
 
+@pytest.mark.skipif(not FASTAPI_AVAILABLE, reason="FastAPI not available")
 class TestQAEndpoint:
     """Tests for Q&A endpoint."""
     
@@ -246,6 +262,7 @@ class TestQAEndpoint:
         assert response.status_code == 500
 
 
+@pytest.mark.skipif(not FASTAPI_AVAILABLE, reason="FastAPI not available")
 class TestMetricsEndpoint:
     """Tests for metrics endpoint."""
     

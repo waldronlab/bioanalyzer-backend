@@ -88,8 +88,17 @@ class EnhancedFieldValidator:
             Dict with validation details: {'score': float, 'notes': str}
         """
         try:
-            # Get the content value for the field
-            content_value = field_data.get('value', '') or field_data.get('primary', '') or field_data.get('site', '') or ''
+            # Get the content value for the field - check all possible field keys
+            content_value = (
+                field_data.get('value', '') or 
+                field_data.get('primary', '') or 
+                field_data.get('site', '') or 
+                field_data.get('description', '') or 
+                field_data.get('method', '') or 
+                field_data.get('level', '') or 
+                field_data.get('size', '') or 
+                ''
+            )
             
             if not content_value or content_value.lower() in ["unknown", "not specified", ""]:
                 return {'score': 0.0, 'notes': "No content extracted"}
@@ -193,17 +202,30 @@ class FieldExtractionEnhancer:
                 # Validate the field
                 validation_result = self.validator.validate_field(field_name, extracted_data[field_name], full_text)
                 
+                # Extract the value from field_data
+                field_data = extracted_data[field_name]
+                extracted_value = field_data.get('value', '') or field_data.get('primary', '') or field_data.get('site', '') or field_data.get('description', '') or field_data.get('method', '') or field_data.get('level', '') or field_data.get('size', '') or 'Unknown'
+                
+                # Determine status from score
+                score = validation_result.get('score', 0.0)
+                if score >= 0.8:
+                    status = "PRESENT"
+                elif score >= 0.4:
+                    status = "PARTIALLY_PRESENT"
+                else:
+                    status = "ABSENT"
+                
                 # Update the field with validation results
                 enhanced_data[field_name] = {
                     "primary" if field_name == "host_species" else 
                     "site" if field_name == "body_site" else
                     "description" if field_name == "condition" else
                     "method" if field_name == "sequencing_type" else
-                    "level" if field_name == "taxa_level" else "size": validation_result.extracted_value,
-                    "confidence": validation_result.confidence,
-                    "status": validation_result.status,
-                    "reason_if_missing": validation_result.reason_if_missing,
-                    "suggestions_for_curation": validation_result.suggestions_for_curation
+                    "level" if field_name == "taxa_level" else "size": extracted_value,
+                    "confidence": score,
+                    "status": status,
+                    "reason_if_missing": "Field not found in analysis" if status == "ABSENT" else "",
+                    "suggestions_for_curation": validation_result.get('notes', '')
                 }
             else:
                 # Create default structure for missing field

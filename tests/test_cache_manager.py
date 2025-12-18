@@ -6,7 +6,24 @@ import tempfile
 import json
 import os
 from pathlib import Path
-from app.services.cache_manager import CacheManager
+
+# Import CacheManager directly to avoid import chain issues
+try:
+    # Try direct import first
+    from app.services.cache_manager import CacheManager
+except ImportError:
+    # If that fails, try importing the module directly
+    import sys
+    from pathlib import Path
+    cache_manager_path = Path(__file__).parent.parent / "app" / "services" / "cache_manager.py"
+    if cache_manager_path.exists():
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("cache_manager", cache_manager_path)
+        cache_manager_module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cache_manager_module)
+        CacheManager = cache_manager_module.CacheManager
+    else:
+        raise
 
 
 @pytest.fixture
@@ -203,16 +220,19 @@ class TestCacheStats:
         
         stats = cache_manager.get_cache_stats()
         assert isinstance(stats, dict)
-        assert "total_requests" in stats
-        assert "cache_hits" in stats
-        assert "cache_misses" in stats
+        assert "analysis_cache_count" in stats
+        assert "metadata_cache_count" in stats
+        assert "fulltext_cache_count" in stats
+        assert stats["analysis_cache_count"] >= 1
     
     def test_get_cache_stats_empty(self, cache_manager):
         """Test getting cache stats with no operations."""
         stats = cache_manager.get_cache_stats()
-        assert stats["total_requests"] == 0
-        assert stats["cache_hits"] == 0
-        assert stats["cache_misses"] == 0
+        assert isinstance(stats, dict)
+        assert "analysis_cache_count" in stats
+        assert stats["analysis_cache_count"] == 0
+        assert stats["metadata_cache_count"] == 0
+        assert stats["fulltext_cache_count"] == 0
 
 
 class TestCacheOperations:
@@ -227,7 +247,7 @@ class TestCacheOperations:
         cache_manager.store_metadata("12345678", {"title": "Test"})
         
         # Clear cache
-        result = cache_manager.clear_cache()
+        result = cache_manager.clear_all_cache()
         assert result is True
         
         # Verify data is gone
@@ -241,8 +261,8 @@ class TestCacheOperations:
             "12345678", {"test": "data"}, {"title": "Test"}
         )
         
-        # Delete old entries (with 0 days, should delete everything)
-        result = cache_manager.delete_old_entries(days=0)
+        # Delete old entries (with 0 hours, should delete everything)
+        result = cache_manager.clear_old_cache(max_age_hours=0)
         assert result >= 0
         
         # Verify data is gone

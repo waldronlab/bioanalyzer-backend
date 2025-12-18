@@ -5,6 +5,9 @@ This must be imported before any app.* imports in test files.
 import sys
 from pathlib import Path
 
+# Add the app folder to sys.path
+sys.path.insert(0, str(Path(__file__).parent.parent / "app"))
+
 # Add /app/app to path FIRST (Docker has nested structure: /app/app/services/)
 if '/app/app' not in sys.path:
     sys.path.insert(0, '/app/app')

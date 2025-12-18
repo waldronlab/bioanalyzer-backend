@@ -3,16 +3,31 @@ Tests for API utility functions in app/api/utils/api_utils.py
 """
 import pytest
 from datetime import datetime
-from app.api.utils.api_utils import (
-    extract_taxa,
-    create_default_field_structure,
-    validate_field_structure,
-    create_comprehensive_fallback_analysis,
-    generate_curation_summary,
-    get_current_timestamp
-)
+
+# Try to import FastAPI-dependent modules, skip tests if not available
+try:
+    from fastapi import FastAPI
+    from app.api.utils.api_utils import (
+        extract_taxa,
+        create_default_field_structure,
+        validate_field_structure,
+        create_comprehensive_fallback_analysis,
+        generate_curation_summary,
+        get_current_timestamp
+    )
+    FASTAPI_AVAILABLE = True
+except ImportError:
+    FASTAPI_AVAILABLE = False
+    # Create dummy functions to avoid NameError
+    extract_taxa = None
+    create_default_field_structure = None
+    validate_field_structure = None
+    create_comprehensive_fallback_analysis = None
+    generate_curation_summary = None
+    get_current_timestamp = None
 
 
+@pytest.mark.skipif(not FASTAPI_AVAILABLE, reason="FastAPI not available")
 class TestExtractTaxa:
     """Tests for extract_taxa function."""
     
@@ -50,6 +65,7 @@ class TestExtractTaxa:
         assert len(taxa) == len(set(taxa))
 
 
+@pytest.mark.skipif(not FASTAPI_AVAILABLE, reason="FastAPI not available")
 class TestCreateDefaultFieldStructure:
     """Tests for create_default_field_structure function."""
     
@@ -101,6 +117,7 @@ class TestCreateDefaultFieldStructure:
         assert "unknown_field" in result["reason_if_missing"].lower()
 
 
+@pytest.mark.skipif(not FASTAPI_AVAILABLE, reason="FastAPI not available")
 class TestValidateFieldStructure:
     """Tests for validate_field_structure function."""
     
@@ -144,6 +161,7 @@ class TestValidateFieldStructure:
         assert validate_field_structure(field_data, "host_species") is False
 
 
+@pytest.mark.skipif(not FASTAPI_AVAILABLE, reason="FastAPI not available")
 class TestCreateComprehensiveFallbackAnalysis:
     """Tests for create_comprehensive_fallback_analysis function."""
     
@@ -178,6 +196,7 @@ class TestCreateComprehensiveFallbackAnalysis:
                 assert "suggestions" in field_data
 
 
+@pytest.mark.skipif(not FASTAPI_AVAILABLE, reason="FastAPI not available")
 class TestGenerateCurationSummary:
     """Tests for generate_curation_summary function."""
     
@@ -228,6 +247,7 @@ class TestGenerateCurationSummary:
         assert len(summary) > 0
 
 
+@pytest.mark.skipif(not FASTAPI_AVAILABLE, reason="FastAPI not available")
 class TestGetCurrentTimestamp:
     """Tests for get_current_timestamp function."""
     

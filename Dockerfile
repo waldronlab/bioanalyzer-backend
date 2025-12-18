@@ -1,8 +1,10 @@
 # BioAnalyzer Backend Dockerfile
 FROM python:3.11-slim
 
-# Set working directory
 WORKDIR /app
+
+# FIX: Make Python recognize the application as a package
+ENV PYTHONPATH="/app:/app/app"
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
@@ -105,7 +107,7 @@ HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
 
 # Set PYTHONPATH for app module imports (fixed nested /app/app issue)
-ENV PYTHONPATH=/app:/app/app
+# ENV PYTHONPATH=/app:/app/app
 
 # Default command (can be overridden)
 CMD ["python", "main.py", "--host", "0.0.0.0", "--port", "8000"]
