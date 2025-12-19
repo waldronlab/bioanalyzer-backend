@@ -711,10 +711,15 @@ class BioAnalyzerCLI:
             if results:
                 if output_file:
                     self.save_results(results, output_file, output_format)
+                    print(f"✅ Successfully analyzed {len(results)} out of {total} paper(s)")
+                    if len(results) < total:
+                        print(f"⚠️  {total - len(results)} paper(s) failed or were skipped")
                 else:
                     self.display_results(results, output_format)
             else:
                 print("❌ No results obtained.")
+                if output_file:
+                    print(f"⚠️  No results to save to {output_file}")
                 
         except ImportError:
             print("❌ Error: requests module not available. Please install it: pip install requests")
@@ -1922,9 +1927,17 @@ Examples:
             try:
                 with open(args.file, 'r') as f:
                     file_pmids = [line.strip() for line in f if line.strip()]
+                    if not file_pmids:
+                        print(f"❌ Error: File '{args.file}' is empty or contains no valid PMIDs.")
+                        print("   Please add PMIDs to the file (one per line or comma-separated).")
+                        return
                     pmids.extend(file_pmids)
+                    print(f"📁 Loaded {len(file_pmids)} PMID(s) from {args.file}")
+            except FileNotFoundError:
+                print(f"❌ Error: File '{args.file}' not found.")
+                return
             except Exception as e:
-                print(f"❌ Error reading file: {e}")
+                print(f"❌ Error reading file '{args.file}': {e}")
                 return
         
         if not pmids:
