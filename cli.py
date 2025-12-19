@@ -314,36 +314,55 @@ class BioAnalyzerCLI:
             # Ensure Docker network exists for container communication
             self._ensure_network()
             
-            # Check if container already exists
-            check_result = subprocess.run(
-                ["docker", "ps", "-a", "--filter", f"name={self.container_name}", "--format", "{{.Names}}"],
+            # Check if port 8000 is already in use
+            port_check = subprocess.run(
+                ["docker", "ps", "--filter", "publish=8000", "--format", "{{.Names}}"],
                 capture_output=True,
                 text=True,
                 check=False
             )
             
-            if check_result.stdout.strip():
-                # Container exists - check if it's running
-                ps_result = subprocess.run(
-                    ["docker", "ps", "--filter", f"name={self.container_name}", "--format", "{{.Names}}"],
+            if port_check.stdout.strip():
+                container_using_port = port_check.stdout.strip().split('\n')[0]
+                print(f"⚠️  Port 8000 is already in use by container '{container_using_port}'")
+                if self.check_backend_health():
+                    print(f"✅ Backend API is already available at http://localhost:8000")
+                    return True
+                else:
+                    print(f"⚠️  Container exists but API is not responding. Consider stopping it first.")
+                    return False
+            
+            # Check if container already exists (by name)
+            for container_name in [self.container_name, "bioanalyzer-backend"]:
+                check_result = subprocess.run(
+                    ["docker", "ps", "-a", "--filter", f"name={container_name}", "--format", "{{.Names}}"],
                     capture_output=True,
                     text=True,
                     check=False
                 )
                 
-                if ps_result.stdout.strip():
-                    # Container is already running
-                    print(f"⚠️  Container '{self.container_name}' is already running!")
-                    print(f"✅ Backend API is available at http://localhost:8000")
-                    return True
-                else:
-                    # Container exists but is stopped - remove it first
-                    print(f"🧹 Removing existing stopped container '{self.container_name}'...")
-                    subprocess.run(
-                        ["docker", "rm", self.container_name],
+                if check_result.stdout.strip():
+                    # Container exists - check if it's running
+                    ps_result = subprocess.run(
+                        ["docker", "ps", "--filter", f"name={container_name}", "--format", "{{.Names}}"],
                         capture_output=True,
+                        text=True,
                         check=False
                     )
+                    
+                    if ps_result.stdout.strip():
+                        # Container is already running
+                        print(f"⚠️  Container '{container_name}' is already running!")
+                        print(f"✅ Backend API is available at http://localhost:8000")
+                        return True
+                    else:
+                        # Container exists but is stopped - remove it first
+                        print(f"🧹 Removing existing stopped container '{container_name}'...")
+                        subprocess.run(
+                            ["docker", "rm", container_name],
+                            capture_output=True,
+                            check=False
+                        )
             
             # Start backend container (pass through env vars when available)
             print("🔧 Starting backend API...")
@@ -449,8 +468,8 @@ class BioAnalyzerCLI:
         print("🛑 Stopping BioAnalyzer application...")
         
         try:
-            # Stop and remove containers
-            containers = [self.container_name, "bioanalyzer-frontend"]
+            # Stop and remove containers (check both possible backend names)
+            containers = [self.container_name, "bioanalyzer-backend", "bioanalyzer-frontend"]
             
             for container in containers:
                 try:
@@ -517,17 +536,25 @@ class BioAnalyzerCLI:
         image_exists = self.check_image()
         print(f"Backend Image: {'✅ Built' if image_exists else '❌ Not Built'}")
         
-        # Check containers
-        try:
-            result = subprocess.run([
-                "docker", "ps", "--filter", f"name={self.container_name}", "--format", "{{.Status}}"
-            ], capture_output=True, text=True, check=True)
-            
-            if result.stdout.strip():
-                print(f"Backend Container: ✅ {result.stdout.strip()}")
-            else:
-                print("Backend Container: ❌ Not Running")
-        except:
+        # Check containers (check both possible backend names)
+        backend_running = False
+        backend_status = ""
+        for container_name in [self.container_name, "bioanalyzer-backend"]:
+            try:
+                result = subprocess.run([
+                    "docker", "ps", "--filter", f"name={container_name}", "--format", "{{.Status}}"
+                ], capture_output=True, text=True, check=True)
+                
+                if result.stdout.strip():
+                    backend_running = True
+                    backend_status = result.stdout.strip()
+                    break
+            except:
+                continue
+        
+        if backend_running:
+            print(f"Backend Container: ✅ {backend_status}")
+        else:
             print("Backend Container: ❌ Not Running")
         
         # Check frontend
