@@ -42,15 +42,28 @@ if not env_loaded:
 # API Keys
 NCBI_API_KEY = os.getenv('NCBI_API_KEY', '')
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY', '')
+OPENAI_API_KEY = os.getenv('OPENAI_API_KEY', '')
+ANTHROPIC_API_KEY = os.getenv('ANTHROPIC_API_KEY', '')
 EMAIL = os.getenv('EMAIL', '')
 
-# Model Configuration
+# LLM Provider Configuration
+# Supported providers: openai, anthropic, gemini, ollama, llamafile
+LLM_PROVIDER = os.getenv('LLM_PROVIDER', '').lower() or None  # Auto-detect if not set
+LLM_MODEL = os.getenv('LLM_MODEL', '') or None  # Use provider default if not set
+
+# Model Configuration (backward compatibility)
 DEFAULT_MODEL = os.getenv('DEFAULT_MODEL', 'gemini')
 AVAILABLE_MODELS = []
 
 # Initialize available models
 if GEMINI_API_KEY:
     AVAILABLE_MODELS.append('gemini')
+if OPENAI_API_KEY:
+    AVAILABLE_MODELS.append('openai')
+if ANTHROPIC_API_KEY:
+    AVAILABLE_MODELS.append('anthropic')
+if os.getenv('OLLAMA_BASE_URL') or os.getenv('OLLAMA_HOST'):
+    AVAILABLE_MODELS.append('ollama')
 
 def validate_gemini_key():
     """Validate Gemini API key by configuring the client."""
