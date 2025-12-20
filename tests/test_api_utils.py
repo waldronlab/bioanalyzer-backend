@@ -7,14 +7,14 @@ from datetime import datetime
 # Try to import FastAPI-dependent modules, skip tests if not available
 try:
     from fastapi import FastAPI
-    from app.api.utils.api_utils import (
-        extract_taxa,
-        create_default_field_structure,
-        validate_field_structure,
-        create_comprehensive_fallback_analysis,
-        generate_curation_summary,
-        get_current_timestamp
-    )
+from app.api.utils.api_utils import (
+    extract_taxa,
+    create_default_field_structure,
+    validate_field_structure,
+    create_comprehensive_fallback_analysis,
+    generate_curation_summary,
+    get_current_timestamp
+)
     FASTAPI_AVAILABLE = True
 except ImportError:
     FASTAPI_AVAILABLE = False

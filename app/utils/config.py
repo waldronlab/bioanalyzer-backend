@@ -197,15 +197,15 @@ def setup_logging():
     file_handlers_created = []
     
     try:
-        # Main application log handler with rotation
-        main_file_handler = logging.handlers.RotatingFileHandler(
-            MAIN_LOG_FILE,
-            maxBytes=MAX_LOG_SIZE,
-            backupCount=MAX_LOG_FILES,
-            encoding='utf-8'
-        )
-        main_file_handler.setLevel(logging.INFO)
-        main_file_handler.setFormatter(file_formatter)
+    # Main application log handler with rotation
+    main_file_handler = logging.handlers.RotatingFileHandler(
+        MAIN_LOG_FILE,
+        maxBytes=MAX_LOG_SIZE,
+        backupCount=MAX_LOG_FILES,
+        encoding='utf-8'
+    )
+    main_file_handler.setLevel(logging.INFO)
+    main_file_handler.setFormatter(file_formatter)
         root_logger.addHandler(main_file_handler)
         file_handlers_created.append('main')
     except (PermissionError, OSError) as e:
@@ -213,45 +213,45 @@ def setup_logging():
         pass
     
     try:
-        # Performance log handler
-        perf_file_handler = logging.handlers.RotatingFileHandler(
-            PERFORMANCE_LOG_FILE,
-            maxBytes=MAX_LOG_SIZE,
-            backupCount=MAX_LOG_FILES,
-            encoding='utf-8'
-        )
-        perf_file_handler.setLevel(logging.INFO)
-        perf_file_handler.setFormatter(file_formatter)
+    # Performance log handler
+    perf_file_handler = logging.handlers.RotatingFileHandler(
+        PERFORMANCE_LOG_FILE,
+        maxBytes=MAX_LOG_SIZE,
+        backupCount=MAX_LOG_FILES,
+        encoding='utf-8'
+    )
+    perf_file_handler.setLevel(logging.INFO)
+    perf_file_handler.setFormatter(file_formatter)
         root_logger.addHandler(perf_file_handler)
         file_handlers_created.append('performance')
     except (PermissionError, OSError) as e:
         pass
     
     try:
-        # Error log handler
-        error_file_handler = logging.handlers.RotatingFileHandler(
-            ERROR_LOG_FILE,
-            maxBytes=MAX_LOG_SIZE,
-            backupCount=MAX_LOG_FILES,
-            encoding='utf-8'
-        )
-        error_file_handler.setLevel(logging.ERROR)
-        error_file_handler.setFormatter(file_formatter)
+    # Error log handler
+    error_file_handler = logging.handlers.RotatingFileHandler(
+        ERROR_LOG_FILE,
+        maxBytes=MAX_LOG_SIZE,
+        backupCount=MAX_LOG_FILES,
+        encoding='utf-8'
+    )
+    error_file_handler.setLevel(logging.ERROR)
+    error_file_handler.setFormatter(file_formatter)
         root_logger.addHandler(error_file_handler)
         file_handlers_created.append('error')
     except (PermissionError, OSError) as e:
         pass
     
     try:
-        # API log handler
-        api_file_handler = logging.handlers.RotatingFileHandler(
-            API_LOG_FILE,
-            maxBytes=MAX_LOG_SIZE,
-            backupCount=MAX_LOG_FILES,
-            encoding='utf-8'
+    # API log handler
+    api_file_handler = logging.handlers.RotatingFileHandler(
+        API_LOG_FILE,
+        maxBytes=MAX_LOG_SIZE,
+        backupCount=MAX_LOG_FILES,
+        encoding='utf-8'
     )
-        api_file_handler.setLevel(logging.INFO)
-        api_file_handler.setFormatter(file_formatter)
+    api_file_handler.setLevel(logging.INFO)
+    api_file_handler.setFormatter(file_formatter)
         root_logger.addHandler(api_file_handler)
         file_handlers_created.append('api')
     except (PermissionError, OSError) as e:

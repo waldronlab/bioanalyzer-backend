@@ -334,35 +334,35 @@ class BioAnalyzerCLI:
             
             # Check if container already exists (by name)
             for container_name in [self.container_name, "bioanalyzer-backend"]:
-                check_result = subprocess.run(
+            check_result = subprocess.run(
                     ["docker", "ps", "-a", "--filter", f"name={container_name}", "--format", "{{.Names}}"],
+                capture_output=True,
+                text=True,
+                check=False
+            )
+            
+            if check_result.stdout.strip():
+                # Container exists - check if it's running
+                ps_result = subprocess.run(
+                        ["docker", "ps", "--filter", f"name={container_name}", "--format", "{{.Names}}"],
                     capture_output=True,
                     text=True,
                     check=False
                 )
                 
-                if check_result.stdout.strip():
-                    # Container exists - check if it's running
-                    ps_result = subprocess.run(
-                        ["docker", "ps", "--filter", f"name={container_name}", "--format", "{{.Names}}"],
+                if ps_result.stdout.strip():
+                    # Container is already running
+                        print(f"⚠️  Container '{container_name}' is already running!")
+                    print(f"✅ Backend API is available at http://localhost:8000")
+                    return True
+                else:
+                    # Container exists but is stopped - remove it first
+                        print(f"🧹 Removing existing stopped container '{container_name}'...")
+                    subprocess.run(
+                            ["docker", "rm", container_name],
                         capture_output=True,
-                        text=True,
                         check=False
                     )
-                    
-                    if ps_result.stdout.strip():
-                        # Container is already running
-                        print(f"⚠️  Container '{container_name}' is already running!")
-                        print(f"✅ Backend API is available at http://localhost:8000")
-                        return True
-                    else:
-                        # Container exists but is stopped - remove it first
-                        print(f"🧹 Removing existing stopped container '{container_name}'...")
-                        subprocess.run(
-                            ["docker", "rm", container_name],
-                            capture_output=True,
-                            check=False
-                        )
             
             # Start backend container (pass through env vars when available)
             print("🔧 Starting backend API...")
@@ -540,12 +540,12 @@ class BioAnalyzerCLI:
         backend_running = False
         backend_status = ""
         for container_name in [self.container_name, "bioanalyzer-backend"]:
-            try:
-                result = subprocess.run([
+        try:
+            result = subprocess.run([
                     "docker", "ps", "--filter", f"name={container_name}", "--format", "{{.Status}}"
-                ], capture_output=True, text=True, check=True)
-                
-                if result.stdout.strip():
+            ], capture_output=True, text=True, check=True)
+            
+            if result.stdout.strip():
                     backend_running = True
                     backend_status = result.stdout.strip()
                     break
@@ -554,7 +554,7 @@ class BioAnalyzerCLI:
         
         if backend_running:
             print(f"Backend Container: ✅ {backend_status}")
-        else:
+            else:
             print("Backend Container: ❌ Not Running")
         
         # Check frontend

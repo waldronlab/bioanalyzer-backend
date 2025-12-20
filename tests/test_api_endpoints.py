@@ -7,7 +7,7 @@ from unittest.mock import patch, AsyncMock, MagicMock
 # Try to import FastAPI-dependent modules, skip tests if not available
 try:
     from fastapi.testclient import TestClient
-    from app.api.app import app
+from app.api.app import app
     FASTAPI_AVAILABLE = True
 except ImportError:
     FASTAPI_AVAILABLE = False
