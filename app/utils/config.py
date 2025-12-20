@@ -146,6 +146,13 @@ MAX_CONCURRENT_REQUESTS = int(os.getenv("MAX_CONCURRENT_REQUESTS", "3"))
 # Retrieval configuration
 USE_FULLTEXT = os.getenv('USE_FULLTEXT', '0').lower() in ('1', 'true', 'yes')
 
+# Production Configuration
+ENVIRONMENT = os.getenv('ENVIRONMENT', 'development').lower()
+CORS_ORIGINS = os.getenv('CORS_ORIGINS', '*').split(',') if os.getenv('CORS_ORIGINS') else ['*']
+ENABLE_RATE_LIMITING = os.getenv('ENABLE_RATE_LIMITING', 'true').lower() in ('true', '1', 'yes')
+RATE_LIMIT_PER_MINUTE = int(os.getenv('RATE_LIMIT_PER_MINUTE', '60'))
+ENABLE_REQUEST_ID = os.getenv('ENABLE_REQUEST_ID', 'true').lower() in ('true', '1', 'yes')
+
 # Logging Configuration
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 LOG_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
@@ -197,15 +204,15 @@ def setup_logging():
     file_handlers_created = []
     
     try:
-    # Main application log handler with rotation
-    main_file_handler = logging.handlers.RotatingFileHandler(
-        MAIN_LOG_FILE,
-        maxBytes=MAX_LOG_SIZE,
-        backupCount=MAX_LOG_FILES,
-        encoding='utf-8'
-    )
-    main_file_handler.setLevel(logging.INFO)
-    main_file_handler.setFormatter(file_formatter)
+        # Main application log handler with rotation
+        main_file_handler = logging.handlers.RotatingFileHandler(
+            MAIN_LOG_FILE,
+            maxBytes=MAX_LOG_SIZE,
+            backupCount=MAX_LOG_FILES,
+            encoding='utf-8'
+        )
+        main_file_handler.setLevel(logging.INFO)
+        main_file_handler.setFormatter(file_formatter)
         root_logger.addHandler(main_file_handler)
         file_handlers_created.append('main')
     except (PermissionError, OSError) as e:
@@ -213,45 +220,45 @@ def setup_logging():
         pass
     
     try:
-    # Performance log handler
-    perf_file_handler = logging.handlers.RotatingFileHandler(
-        PERFORMANCE_LOG_FILE,
-        maxBytes=MAX_LOG_SIZE,
-        backupCount=MAX_LOG_FILES,
-        encoding='utf-8'
-    )
-    perf_file_handler.setLevel(logging.INFO)
-    perf_file_handler.setFormatter(file_formatter)
+        # Performance log handler
+        perf_file_handler = logging.handlers.RotatingFileHandler(
+            PERFORMANCE_LOG_FILE,
+            maxBytes=MAX_LOG_SIZE,
+            backupCount=MAX_LOG_FILES,
+            encoding='utf-8'
+        )
+        perf_file_handler.setLevel(logging.INFO)
+        perf_file_handler.setFormatter(file_formatter)
         root_logger.addHandler(perf_file_handler)
         file_handlers_created.append('performance')
     except (PermissionError, OSError) as e:
         pass
     
     try:
-    # Error log handler
-    error_file_handler = logging.handlers.RotatingFileHandler(
-        ERROR_LOG_FILE,
-        maxBytes=MAX_LOG_SIZE,
-        backupCount=MAX_LOG_FILES,
-        encoding='utf-8'
-    )
-    error_file_handler.setLevel(logging.ERROR)
-    error_file_handler.setFormatter(file_formatter)
+        # Error log handler
+        error_file_handler = logging.handlers.RotatingFileHandler(
+            ERROR_LOG_FILE,
+            maxBytes=MAX_LOG_SIZE,
+            backupCount=MAX_LOG_FILES,
+            encoding='utf-8'
+        )
+        error_file_handler.setLevel(logging.ERROR)
+        error_file_handler.setFormatter(file_formatter)
         root_logger.addHandler(error_file_handler)
         file_handlers_created.append('error')
     except (PermissionError, OSError) as e:
         pass
     
     try:
-    # API log handler
-    api_file_handler = logging.handlers.RotatingFileHandler(
-        API_LOG_FILE,
-        maxBytes=MAX_LOG_SIZE,
-        backupCount=MAX_LOG_FILES,
-        encoding='utf-8'
-    )
-    api_file_handler.setLevel(logging.INFO)
-    api_file_handler.setFormatter(file_formatter)
+        # API log handler
+        api_file_handler = logging.handlers.RotatingFileHandler(
+            API_LOG_FILE,
+            maxBytes=MAX_LOG_SIZE,
+            backupCount=MAX_LOG_FILES,
+            encoding='utf-8'
+        )
+        api_file_handler.setLevel(logging.INFO)
+        api_file_handler.setFormatter(file_formatter)
         root_logger.addHandler(api_file_handler)
         file_handlers_created.append('api')
     except (PermissionError, OSError) as e:

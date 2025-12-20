@@ -49,7 +49,36 @@ STATUS_VALUES = {
 }
 
 
+def _validate_pmid(pmid: str) -> str:
+    """Validate and normalize PMID."""
+    if not pmid:
+        raise HTTPException(status_code=400, detail="PMID cannot be empty")
+    
+    # Remove whitespace
+    pmid = pmid.strip()
+    
+    # Validate format (should be numeric)
+    if not pmid.isdigit():
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid PMID format: '{pmid}'. PMID must be numeric."
+        )
+    
+    # Validate length (PMID is typically 8 digits, but can vary)
+    if len(pmid) < 1 or len(pmid) > 20:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid PMID length: '{pmid}'. PMID should be 1-20 digits."
+        )
+    
+    return pmid
+
+
 async def _run_analysis(pmid: str):
+    """Run analysis with validated PMID."""
+    # Validate PMID
+    pmid = _validate_pmid(pmid)
+    
     logger.info(f"Starting analysis for PMID: {pmid}")
     result = await analyze_paper_simple(pmid)
     if not result:
