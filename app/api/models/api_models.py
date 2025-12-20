@@ -99,3 +99,59 @@ class PaperAnalysisResult(BaseModel):
     analysis_timestamp: str
     processing_time: float
     model_used: str
+
+
+# RAG-specific models for v2 API
+class RAGConfig(BaseModel):
+    """RAG configuration for analysis."""
+    enabled: bool = True
+    top_k_chunks: Optional[int] = None  # Number of top chunks to use
+    rerank_method: Optional[str] = None  # "keyword", "llm", "hybrid"
+    summary_length: Optional[str] = None  # "short", "medium", "long"
+    summary_quality: Optional[str] = None  # "fast", "balanced", "high"
+    summary_provider: Optional[str] = None  # LLM provider for summarization
+    summary_model: Optional[str] = None  # Model for summarization
+    use_cache: Optional[bool] = None  # Enable/disable summary caching
+
+
+class AnalysisRequestV2(BaseModel):
+    """Enhanced request model for v2 API with RAG support."""
+    pmid: str
+    rag_config: Optional[RAGConfig] = None
+    use_rag: bool = True  # Feature flag to enable/disable RAG
+
+
+class BatchAnalysisRequestV2(BaseModel):
+    """Enhanced batch analysis request with RAG support."""
+    pmids: List[str]
+    rag_config: Optional[RAGConfig] = None
+    use_rag: bool = True
+    max_concurrent: int = 5
+
+
+class RAGStats(BaseModel):
+    """RAG processing statistics."""
+    chunks_processed: int
+    chunks_ranked: int
+    chunks_summarized: int
+    avg_relevance_score: float
+    avg_confidence: float
+    rerank_method: str
+    summary_length: str
+    processing_time: float
+
+
+class PaperAnalysisResultV2(PaperAnalysisResult):
+    """Enhanced paper analysis result with RAG metadata."""
+    rag_enabled: bool = False
+    rag_stats: Optional[RAGStats] = None
+    rag_config_used: Optional[RAGConfig] = None
+
+
+class RAGConfigResponse(BaseModel):
+    """RAG configuration information."""
+    default_config: RAGConfig
+    available_rerank_methods: List[str]
+    available_summary_lengths: List[str]
+    available_summary_qualities: List[str]
+    available_providers: List[str]
