@@ -269,14 +269,22 @@ Once running, open your browser and navigate to:
 
 ### Core Endpoints
 
-#### Paper Analysis
+#### Paper Analysis (v1 - Simple)
 ```bash
 GET /api/v1/analyze/{pmid}           # Analyze paper for BugSigDB fields
-POST /api/v1/analyze/batch           # Batch analysis
+POST /api/v1/analyze/{pmid}          # Analyze paper (POST method)
 GET /api/v1/fields                   # Get field information
 ```
 
-#### Paper Retrieval (NEW!)
+#### Paper Analysis (v2 - RAG-Enhanced)
+```bash
+GET /api/v2/analyze/{pmid}            # Analyze with RAG features
+POST /api/v2/analyze                 # Analyze with custom RAG config
+POST /api/v2/analyze/batch           # Batch analysis with RAG
+GET /api/v2/rag/config              # Get RAG configuration
+```
+
+#### Paper Retrieval
 ```bash
 GET /api/v1/retrieve/{pmid}          # Retrieve full paper data
 POST /api/v1/retrieve/batch          # Batch retrieval
