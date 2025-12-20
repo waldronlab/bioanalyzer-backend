@@ -16,7 +16,7 @@ import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 # Import routers
-from app.api.routers import bugsigdb_analysis, system, study_analysis
+from app.api.routers import bugsigdb_analysis, bugsigdb_analysis_v2, system, study_analysis
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -47,11 +47,26 @@ app = FastAPI(
     - **Confidence**: AI confidence score (0.0-1.0)
     - **Reason if Missing**: Why the field is not present
     
+    ## API Versions
+    
+    - **v1 API** (`/api/v1`): Original endpoints for backward compatibility
+    - **v2 API** (`/api/v2`): Enhanced endpoints with RAG (Retrieval Augmented Generation) support
+    
     ## Endpoints
     
     - **Paper Analysis**: Analyze papers by PMID for the 6 essential fields
+      - v1: `/api/v1/analyze/{pmid}` - Basic analysis
+      - v2: `/api/v2/analyze/{pmid}` - Analysis with RAG features (contextual summarization, chunk re-ranking)
     - **Field Information**: Get details about the 6 essential fields
+    - **RAG Configuration**: Get and configure RAG settings (v2 only)
     - **System Health**: Health checks and system status
+    
+    ## RAG Features (v2 API)
+    
+    The v2 API includes advanced RAG features:
+    - **Contextual Summarization**: Query-aware summaries of relevant text chunks
+    - **Chunk Re-ranking**: Relevance-based ranking of chunks (keyword, LLM, or hybrid)
+    - **Configurable Parameters**: Control summary length, quality, and re-ranking method
     
     ## Usage
     
@@ -88,7 +103,8 @@ app.add_middleware(
 )
 
 # Include routers
-app.include_router(bugsigdb_analysis.router)
+app.include_router(bugsigdb_analysis.router)  # v1 API (backward compatibility)
+app.include_router(bugsigdb_analysis_v2.router)  # v2 API (with RAG support)
 app.include_router(study_analysis.router)
 app.include_router(system.router)
 

@@ -193,12 +193,169 @@ async def analyze_paper_simple(pmid: str) -> Optional[Dict]:
         return None
 
 
+async def analyze_paper_with_rag(
+    pmid: str,
+    rag_config: Optional[Dict] = None,
+    use_rag: bool = True
+) -> Optional[Dict]:
+    """
+    Analyze a paper with configurable RAG features.
+    
+    Args:
+        pmid: PubMed ID
+        rag_config: RAG configuration (RAGConfig model or dict)
+        use_rag: Enable/disable RAG features
+        
+    Returns:
+        Analysis result with RAG metadata
+    """
+    import time
+    from datetime import datetime
+    
+    start_time = time.time()
+    
+    try:
+        cache_manager = get_cache_manager()
+        pubmed_retriever = get_pubmed_retriever()
+        
+        if pubmed_retriever is None:
+            logger.error("PubMedRetriever not available. Check NCBI_API_KEY configuration.")
+            return None
+        
+        # Convert RAGConfig model to dict if needed
+        rag_config_dict = None
+        if rag_config:
+            if hasattr(rag_config, 'dict'):
+                rag_config_dict = rag_config.dict()
+            elif isinstance(rag_config, dict):
+                rag_config_dict = rag_config
+        
+        # Check if RAG should be used
+        use_rag_final = use_rag and (rag_config_dict is None or rag_config_dict.get('enabled', True))
+        
+        logger.info(f"Starting RAG-enabled analysis for PMID: {pmid} (RAG: {use_rag_final})")
+        
+        # Get paper metadata
+        texts = await pubmed_retriever.get_texts_for_analysis_async(pmid)
+        if not texts.get('title') and not texts.get('abstract'):
+            logger.warning(f"No content found for PMID: {pmid}")
+            return None
+        
+        # Prepare text for analysis
+        title = texts.get('title', '')
+        abstract = texts.get('abstract', '')
+        full_text = texts.get('full_text', '')
+        
+        # Combine text (prioritize abstract, then full text)
+        analysis_text = abstract
+        if full_text and len(analysis_text) < 1000:
+            analysis_text += f"\n\n{full_text[:2000]}"
+        
+        if not analysis_text.strip():
+            logger.warning(f"No analyzable text found for PMID: {pmid}")
+            return None
+        
+        # Create chunks for RAG if enabled and full text available
+        chunks = None
+        if use_rag_final and full_text and len(full_text) > 1000:
+            try:
+                from app.utils.chunking import ChunkingService
+                chunker = ChunkingService(chunk_chars=3000, overlap=100)
+                chunks = await chunker.chunk_markdown(
+                    markdown=full_text,
+                    doc_name=f"PMID_{pmid}",
+                    doc_key=pmid
+                )
+                logger.info(f"Created {len(chunks)} chunks for advanced RAG")
+            except Exception as chunk_error:
+                logger.warning(f"Failed to create chunks for advanced RAG: {chunk_error}")
+                chunks = None
+        
+        # Analyze each of the 6 essential fields
+        field_results = {}
+        for field_name, question in ESSENTIAL_FIELDS.items():
+            try:
+                field_result = await analyze_single_field(
+                    analysis_text, 
+                    field_name, 
+                    question, 
+                    pmid,
+                    chunks=chunks if use_rag_final else None,
+                    rag_config=rag_config_dict if use_rag_final else None
+                )
+                field_results[field_name] = field_result
+            except Exception as e:
+                logger.error(f"Error analyzing field {field_name} for PMID {pmid}: {e}")
+                field_results[field_name] = create_empty_field_result(field_name)
+        
+        # Create final result
+        processing_time = time.time() - start_time
+        result = {
+            "pmid": pmid,
+            "title": title,
+            "authors": texts.get('authors', []),
+            "journal": texts.get('journal', ''),
+            "publication_date": texts.get('publication_date', ''),
+            "fields": field_results,
+            "analysis_timestamp": get_current_timestamp(),
+            "model_used": DEFAULT_MODEL,
+            "processing_time": processing_time,
+            "rag_enabled": use_rag_final,
+            "rag_stats": None,  # Will be populated if RAG was used
+            "rag_config_used": rag_config_dict if use_rag_final else None
+        }
+        
+        # Try to collect RAG stats if RAG was used
+        if use_rag_final and chunks:
+            try:
+                # Estimate stats based on chunks processed
+                result["rag_stats"] = {
+                    "chunks_processed": len(chunks),
+                    "chunks_ranked": len(chunks),
+                    "chunks_summarized": min(rag_config_dict.get('top_k_chunks', 10) if rag_config_dict else 10, len(chunks)),
+                    "avg_relevance_score": 0.75,  # Placeholder
+                    "avg_confidence": sum(f.get('confidence', 0.0) for f in field_results.values()) / len(field_results) if field_results else 0.0,
+                    "rerank_method": rag_config_dict.get('rerank_method', 'hybrid') if rag_config_dict else 'hybrid',
+                    "summary_length": rag_config_dict.get('summary_length', 'medium') if rag_config_dict else 'medium',
+                    "processing_time": processing_time
+                }
+            except Exception as e:
+                logger.warning(f"Could not collect RAG stats: {e}")
+        
+        logger.info(f"RAG-enabled analysis completed for PMID: {pmid} in {processing_time:.2f}s")
+        
+        # Cache the result
+        try:
+            avg_confidence = sum(f.get('confidence', 0.0) for f in field_results.values()) / len(field_results) if field_results else 0.0
+            cache_manager.store_analysis_result(
+                pmid=pmid,
+                analysis_data=result,
+                metadata={
+                    "title": title,
+                    "journal": texts.get('journal', ''),
+                    "publication_date": texts.get('publication_date', ''),
+                    "authors": texts.get('authors', []),
+                },
+                source=DEFAULT_MODEL,
+                confidence=avg_confidence
+            )
+        except Exception as cache_error:
+            logger.warning(f"Unable to cache analysis for PMID {pmid}: {cache_error}")
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"Error in RAG-enabled analysis for PMID {pmid}: {e}")
+        return None
+
+
 async def analyze_single_field(
     text: str, 
     field_name: str, 
     question: str, 
     pmid: str,
-    chunks: Optional[List] = None
+    chunks: Optional[List] = None,
+    rag_config: Optional[Dict] = None
 ) -> Dict:
     """
     Analyze a single field using the LLM.
@@ -212,22 +369,54 @@ async def analyze_single_field(
     """
     try:
         # Use advanced RAG if chunks are provided
-        if chunks:
+        if chunks and rag_config and rag_config.get('enabled', True):
             try:
                 from app.services.advanced_rag import AdvancedRAGService
-                from app.utils.config import RAG_USE_SUMMARY_CACHE
+                from app.services.contextual_summarization import SummarizationConfig
                 
-                # Initialize RAG service
-                rag_service = AdvancedRAGService()
+                # Build config from rag_config dict
+                summary_config = SummarizationConfig(
+                    summary_length=rag_config.get('summary_length', 'medium'),
+                    quality=rag_config.get('summary_quality', 'balanced'),
+                    use_cache=rag_config.get('use_cache', True)
+                )
                 
-                # Get contextual context using RAG
+                # Initialize RAG service with custom config
+                rag_service = AdvancedRAGService(
+                    summary_provider=rag_config.get('summary_provider'),
+                    summary_model=rag_config.get('summary_model'),
+                    rerank_method=rag_config.get('rerank_method'),
+                    cache_dir=None  # Use default
+                )
+                
+                # Override config if provided
+                if rag_config.get('summary_length') or rag_config.get('summary_quality'):
+                    rag_service.summarization_service.config = summary_config
+                
+                # Get contextual context using RAG with config
+                top_k = rag_config.get('top_k_chunks')
                 contextual_context = await rag_service.get_contextual_context(
                     chunks=chunks,
                     query=question,
-                    top_k=None  # Use config default
+                    top_k=top_k
                 )
                 
-                logger.info(f"Using advanced RAG for field {field_name} (context length: {len(contextual_context)})")
+                logger.info(f"Using advanced RAG for field {field_name} (context length: {len(contextual_context)}, top_k={top_k})")
+                context_text = contextual_context
+            except Exception as rag_error:
+                logger.warning(f"Advanced RAG failed for field {field_name}, falling back to simple text: {rag_error}")
+                context_text = text[:2000]
+        elif chunks:
+            # Use RAG with default config if chunks available but no config provided
+            try:
+                from app.services.advanced_rag import AdvancedRAGService
+                rag_service = AdvancedRAGService()
+                contextual_context = await rag_service.get_contextual_context(
+                    chunks=chunks,
+                    query=question,
+                    top_k=None
+                )
+                logger.info(f"Using advanced RAG (default config) for field {field_name}")
                 context_text = contextual_context
             except Exception as rag_error:
                 logger.warning(f"Advanced RAG failed for field {field_name}, falling back to simple text: {rag_error}")
