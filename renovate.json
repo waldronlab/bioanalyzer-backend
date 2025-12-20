@@ -1,0 +1,279 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "description": "Renovate configuration for BioAnalyzer Package - Automated dependency updates with security and stability focus",
+  "extends": [
+    "config:recommended",
+    ":dependencyDashboard",
+    ":semanticCommits",
+    ":semanticCommitTypeAll(deps)",
+    ":separatePatchReleases",
+    ":timezone(UTC)"
+  ],
+  
+  "enabledManagers": [
+    "pip_requirements",
+    "dockerfile",
+    "docker-compose",
+    "github-actions",
+    "regex"
+  ],
+  
+  "packageRules": [
+    {
+      "description": "Group all Python dependencies together for easier review",
+      "matchManagers": ["pip_requirements"],
+      "groupName": "Python dependencies",
+      "schedule": ["before 10am on monday"],
+      "prCreation": "not-pending",
+      "stabilityDays": 3
+    },
+    {
+      "description": "Security updates - highest priority, immediate",
+      "matchManagers": ["pip_requirements", "dockerfile", "docker-compose"],
+      "matchDepTypes": ["security"],
+      "groupName": "Security updates",
+      "prPriority": 10,
+      "schedule": ["at any time"],
+      "stabilityDays": 0,
+      "automerge": false,
+      "labels": ["security", "dependencies"]
+    },
+    {
+      "description": "Critical ML/AI dependencies - require careful review",
+      "matchPackageNames": [
+        "torch",
+        "torchvision",
+        "torchaudio",
+        "transformers",
+        "google-generativeai",
+        "litellm",
+        "paper-qa"
+      ],
+      "groupName": "ML/AI dependencies",
+      "prPriority": 5,
+      "stabilityDays": 7,
+      "automerge": false,
+      "labels": ["ml", "ai", "dependencies"],
+      "reviewers": ["@RonaldRonnie"]
+    },
+    {
+      "description": "PyTorch CPU versions - special handling",
+      "matchPackageNames": ["torch", "torchvision", "torchaudio"],
+      "matchPackagePatterns": ["^torch"],
+      "allowedVersions": "/^2\\.[0-9]+\\.[0-9]+/",
+      "prBodyNotes": [
+        "⚠️ **PyTorch Update**: This is a PyTorch CPU version update. Please verify:",
+        "- CPU wheel compatibility",
+        "- Model compatibility",
+        "- Performance impact"
+      ],
+      "labels": ["pytorch", "ml", "dependencies"]
+    },
+    {
+      "description": "FastAPI and web framework dependencies",
+      "matchPackageNames": [
+        "fastapi",
+        "uvicorn",
+        "starlette",
+        "pydantic",
+        "aiohttp",
+        "websockets"
+      ],
+      "groupName": "Web framework dependencies",
+      "stabilityDays": 3,
+      "labels": ["web", "api", "dependencies"]
+    },
+    {
+      "description": "Data processing dependencies",
+      "matchPackageNames": [
+        "pandas",
+        "numpy",
+        "scikit-learn",
+        "biopython"
+      ],
+      "groupName": "Data processing dependencies",
+      "stabilityDays": 3,
+      "labels": ["data", "dependencies"]
+    },
+    {
+      "description": "Patch updates - safe to automerge",
+      "matchManagers": ["pip_requirements"],
+      "matchUpdateTypes": ["patch"],
+      "matchPackageNames": [
+        "requests",
+        "beautifulsoup4",
+        "lxml",
+        "python-dotenv",
+        "psutil",
+        "tqdm",
+        "pytz",
+        "PyYAML",
+        "click"
+      ],
+      "automerge": true,
+      "automergeType": "pr",
+      "automergeStrategy": "squash",
+      "stabilityDays": 1,
+      "labels": ["dependencies", "automerge"]
+    },
+    {
+      "description": "Minor updates for utility packages - safe to automerge",
+      "matchManagers": ["pip_requirements"],
+      "matchUpdateTypes": ["minor"],
+      "matchPackageNames": [
+        "python-dotenv",
+        "psutil",
+        "tqdm",
+        "pytz",
+        "PyYAML",
+        "click",
+        "openpyxl",
+        "xlrd"
+      ],
+      "automerge": true,
+      "automergeType": "pr",
+      "automergeStrategy": "squash",
+      "stabilityDays": 2,
+      "labels": ["dependencies", "automerge"]
+    },
+    {
+      "description": "Major version updates - require manual review",
+      "matchUpdateTypes": ["major"],
+      "prPriority": -5,
+      "stabilityDays": 14,
+      "automerge": false,
+      "labels": ["major-update", "dependencies", "breaking-change"],
+      "prBodyNotes": [
+        "⚠️ **Major Version Update**: This is a major version update that may include breaking changes.",
+        "Please review the changelog and test thoroughly before merging."
+      ]
+    },
+    {
+      "description": "Docker base image updates",
+      "matchManagers": ["dockerfile", "docker-compose"],
+      "matchDepTypes": ["base"],
+      "groupName": "Docker base images",
+      "schedule": ["before 10am on monday"],
+      "stabilityDays": 7,
+      "labels": ["docker", "dependencies"]
+    },
+    {
+      "description": "Python base image - pin to specific versions",
+      "matchManagers": ["dockerfile"],
+      "matchPackageNames": ["python"],
+      "allowedVersions": "/^3\\.(9|10|11|12)\\.[0-9]+$/",
+      "labels": ["docker", "python", "dependencies"]
+    },
+    {
+      "description": "GitHub Actions updates",
+      "matchManagers": ["github-actions"],
+      "groupName": "GitHub Actions",
+      "schedule": ["before 10am on monday"],
+      "stabilityDays": 2,
+      "labels": ["github-actions", "ci/cd"]
+    }
+  ],
+  
+  "schedule": [
+    "before 10am on monday"
+  ],
+  
+  "timezone": "UTC",
+  
+  "prConcurrentLimit": 5,
+  "prHourlyLimit": 2,
+  
+  "dependencyDashboard": true,
+  "dependencyDashboardTitle": "🤖 Dependency Updates Dashboard",
+  "dependencyDashboardFooter": "This dashboard shows all dependency updates. Review and merge PRs as needed.",
+  
+  "automerge": false,
+  "automergeType": "pr",
+  "automergeStrategy": "squash",
+  
+  "stabilityDays": 3,
+  "minimumReleaseAge": "3 days",
+  
+  "rangeStrategy": "update-lockfile",
+  
+  "labels": ["dependencies"],
+  
+  "assignees": ["@RonaldRonnie"],
+  "reviewers": ["@RonaldRonnie"],
+  
+  "prBodyColumns": [
+    "Package",
+    "Change",
+    "Age",
+    "Adoption",
+    "Passing"
+  ],
+  
+  "prBodyNotes": [
+    "This PR was automatically created by [Renovate](https://github.com/renovatebot/renovate).",
+    "Please review the changes and test before merging."
+  ],
+  
+  "ignorePresets": [
+    ":ignoreModulesAndTests"
+  ],
+  
+  "vulnerabilityAlerts": {
+    "enabled": true,
+    "labels": ["security"],
+    "assignees": ["@RonaldRonnie"],
+    "reviewers": ["@RonaldRonnie"],
+    "prPriority": 10,
+    "schedule": ["at any time"],
+    "stabilityDays": 0
+  },
+  
+  "lockFileMaintenance": {
+    "enabled": true,
+    "schedule": ["before 10am on the first day of the month"],
+    "labels": ["dependencies", "maintenance"]
+  },
+  
+  "regexManagers": [
+    {
+      "description": "Update Python version in Dockerfile",
+      "fileMatch": ["^Dockerfile$"],
+      "matchStrings": [
+        "FROM python:(?<currentValue>\\d+\\.\\d+)(?<datasource>docker) AS"
+      ],
+      "depNameTemplate": "python",
+      "versioningTemplate": "semver"
+    }
+  ],
+  
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Update requirements.txt version constraints",
+      "fileMatch": ["^config/requirements\\.txt$"],
+      "matchStrings": [
+        "(?<depName>[a-zA-Z0-9-_]+)(?<currentValue>>=\\d+\\.\\d+\\.\\d+)"
+      ],
+      "datasourceTemplate": "pypi",
+      "versioningTemplate": "semver"
+    }
+  ],
+  
+  "commitMessagePrefix": "chore(deps):",
+  "commitMessageAction": "update",
+  "commitMessageTopic": "{{depName}}",
+  "commitMessageExtra": "to {{newVersion}}",
+  
+  "onboarding": true,
+  "onboardingConfig": {
+    "extends": ["config:recommended"]
+  },
+  
+  "requireConfig": false,
+  
+  "platform": "github",
+  "repositories": [
+    "waldronlab/bioanalyzer-backend"
+  ]
+}
+

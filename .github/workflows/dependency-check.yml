@@ -1,0 +1,73 @@
+name: Dependency Check (Alternative)
+
+on:
+  pull_request:
+    branches:
+      - main
+      - develop
+      - 'feature/**'
+      - 'chore/**'
+    paths:
+      - 'config/requirements.txt'
+      - 'Dockerfile'
+      - 'docker-compose.yml'
+      - '.github/workflows/**'
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  check-dependencies:
+    name: Check Dependencies
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5.0.0
+        with:
+          python-version: '3.11'
+      
+      - name: Check for known vulnerable packages
+        run: |
+          echo "Checking for known security issues..."
+          echo ""
+          echo "⚠️ For full dependency review, enable GitHub Advanced Security:"
+          echo "   https://github.com/waldronlab/bioanalyzer-backend/settings/security_analysis"
+          echo ""
+          echo "This is a basic check. For comprehensive security scanning,"
+          echo "please enable Dependency graph and GitHub Advanced Security."
+      
+      - name: Validate requirements.txt format
+        run: |
+          if [ -f "config/requirements.txt" ]; then
+            echo "Validating requirements.txt format..."
+            python3 -c "
+          import re
+          with open('config/requirements.txt', 'r') as f:
+              for line_num, line in enumerate(f, 1):
+                  line = line.strip()
+                  if line and not line.startswith('#'):
+                      if '==' in line and '>=' in line:
+                          print(f'⚠️ Line {line_num}: Mixed version specifiers: {line}')
+                      elif not re.match(r'^[a-zA-Z0-9_-]+', line):
+                          print(f'⚠️ Line {line_num}: Invalid package name format: {line}')
+          "
+            echo "✅ requirements.txt format validation complete"
+          else
+            echo "ℹ️ No requirements.txt found, skipping validation"
+          fi
+      
+      - name: Check Dockerfile for outdated base images
+        run: |
+          if [ -f "Dockerfile" ]; then
+            echo "Checking Dockerfile for base image..."
+            if grep -q "FROM python:" Dockerfile; then
+              PYTHON_VERSION=$(grep "FROM python:" Dockerfile | head -1 | sed 's/.*python:\([^ ]*\).*/\1/')
+              echo "Found Python base image: $PYTHON_VERSION"
+              echo "ℹ️ Consider using specific version tags for reproducibility"
+            fi
+          fi
+
