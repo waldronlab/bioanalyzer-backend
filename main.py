@@ -63,13 +63,29 @@ def main():
     
     try:
         import uvicorn
-        uvicorn.run(
-            "app.api.app:app",
-            host=args.host,
-            port=args.port,
-            log_level=args.log_level,
-            reload=reload_flag
-        )
+        import os
+        
+        # Get worker count from environment (for production)
+        workers = int(os.getenv("UVICORN_WORKERS", "1"))
+        
+        # Use workers in production (not in development with reload)
+        if workers > 1 and not reload_flag:
+            import multiprocessing
+            uvicorn.run(
+                "app.api.app:app",
+                host=args.host,
+                port=args.port,
+                log_level=args.log_level,
+                workers=workers
+            )
+        else:
+            uvicorn.run(
+                "app.api.app:app",
+                host=args.host,
+                port=args.port,
+                log_level=args.log_level,
+                reload=reload_flag
+            )
     except KeyboardInterrupt:
         print("\n\n👋 Server stopped by user")
     except Exception as e:
