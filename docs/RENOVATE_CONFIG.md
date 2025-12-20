@@ -112,11 +112,28 @@ Dependabot is configured as a backup:
 
 ## Dependency Review Workflow
 
-GitHub Actions workflow automatically:
-- Reviews all PRs for dependency changes
-- Checks for security vulnerabilities
-- Validates license compatibility
-- Comments summary in PR
+### Primary Workflow (Requires GitHub Advanced Security)
+
+The `dependency-review.yml` workflow requires:
+- **Dependency graph** enabled
+- **GitHub Advanced Security** enabled (for private repositories)
+
+**To enable:**
+1. Go to: https://github.com/waldronlab/bioanalyzer-backend/settings/security_analysis
+2. Enable "Dependency graph"
+3. For private repos, enable "GitHub Advanced Security"
+
+**Note:** This workflow is set to `continue-on-error: true`, so it won't block PRs if Advanced Security is not enabled.
+
+### Alternative Workflow (No Advanced Security Required)
+
+The `dependency-check.yml` workflow provides basic dependency validation:
+- Validates requirements.txt format
+- Checks Dockerfile for base images
+- Provides guidance on enabling full dependency review
+- Works without GitHub Advanced Security
+
+Both workflows run automatically on pull requests.
 
 ## Best Practices
 

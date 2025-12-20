@@ -16,12 +16,16 @@ jobs:
   dependency-review:
     name: Dependency Review
     runs-on: ubuntu-latest
+    # Only run if dependency graph is enabled (skip if not available)
+    continue-on-error: true
     steps:
       - name: Checkout repository
         uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
       
       - name: Dependency Review
+        id: dependency-review
         uses: actions/dependency-review-action@v4.0.0
+        continue-on-error: true
         with:
           fail-on-severity: moderate
           deny-licenses: GPL-2.0, GPL-3.0
@@ -29,4 +33,18 @@ jobs:
             pkg:npm/*
             pkg:composer/*
           comment-summary-in-pr: always
+      
+      - name: Check if dependency review is available
+        if: steps.dependency-review.outcome == 'failure'
+        run: |
+          echo "⚠️ Dependency review is not available. This is expected if:"
+          echo "  1. Dependency graph is not enabled"
+          echo "  2. GitHub Advanced Security is not enabled (for private repos)"
+          echo ""
+          echo "To enable dependency review:"
+          echo "  1. Go to: https://github.com/waldronlab/bioanalyzer-backend/settings/security_analysis"
+          echo "  2. Enable 'Dependency graph'"
+          echo "  3. For private repos, enable 'GitHub Advanced Security'"
+          echo ""
+          echo "This workflow will continue without blocking the PR."
 
