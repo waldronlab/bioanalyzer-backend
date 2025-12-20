@@ -45,17 +45,16 @@ jobs:
           if [ -f "config/requirements.txt" ]; then
             echo "Validating requirements.txt format..."
             python3 -c "
-            import re
-            with open('config/requirements.txt', 'r') as f:
-                for line_num, line in enumerate(f, 1):
-                    line = line.strip()
-                    if line and not line.startswith('#'):
-                        # Check for basic format issues
-                        if '==' in line and '>=' in line:
-                            print(f'⚠️ Line {line_num}: Mixed version specifiers: {line}')
-                        elif not re.match(r'^[a-zA-Z0-9_-]+', line):
-                            print(f'⚠️ Line {line_num}: Invalid package name format: {line}')
-            "
+          import re
+          with open('config/requirements.txt', 'r') as f:
+              for line_num, line in enumerate(f, 1):
+                  line = line.strip()
+                  if line and not line.startswith('#'):
+                      if '==' in line and '>=' in line:
+                          print(f'⚠️ Line {line_num}: Mixed version specifiers: {line}')
+                      elif not re.match(r'^[a-zA-Z0-9_-]+', line):
+                          print(f'⚠️ Line {line_num}: Invalid package name format: {line}')
+          "
             echo "✅ requirements.txt format validation complete"
           else
             echo "ℹ️ No requirements.txt found, skipping validation"
