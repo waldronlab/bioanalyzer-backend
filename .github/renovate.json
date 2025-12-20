@@ -1,0 +1,22 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "description": "Renovate configuration for BioAnalyzer Backend - GitHub-specific settings",
+  "extends": ["../renovate.json"],
+  
+  "platform": "github",
+  "repositories": ["waldronlab/bioanalyzer-backend"],
+  
+  "github-actions": {
+    "enabled": true,
+    "fileMatch": ["^\\.github/workflows/.*\\.ya?ml$"]
+  },
+  
+  "packageRules": [
+    {
+      "description": "Pin GitHub Actions to full SHA",
+      "matchManagers": ["github-actions"],
+      "pinDigests": true
+    }
+  ]
+}
+
