@@ -239,7 +239,7 @@ BioAnalyzer analyze --file pmids.txt # Analyze from file
 BioAnalyzer fields                   # Show field information
 ```
 
-#### Paper Retrieval (NEW!)
+#### Paper Retrieval
 ```bash
 BioAnalyzer retrieve 12345678        # Retrieve single paper
 BioAnalyzer retrieve 12345678,87654321 # Retrieve multiple papers
@@ -248,6 +248,26 @@ BioAnalyzer retrieve 12345678 --save  # Save individual files
 BioAnalyzer retrieve 12345678 --format json # JSON output
 BioAnalyzer retrieve 12345678 --output results.csv # Save to file
 ```
+
+#### Settings & Configuration (RAG Configuration)
+```bash
+# View current settings (including RAG configuration)
+BioAnalyzer settings view
+
+# View RAG settings specifically
+BioAnalyzer settings view | grep -A 10 "RAG"
+
+# Save RAG configuration
+BioAnalyzer settings save --file rag-config.json
+
+# Load and apply RAG configuration
+BioAnalyzer settings load --file rag-config.json --apply
+
+# Apply RAG preset (fast, balanced, high_quality)
+BioAnalyzer settings preset balanced --save
+```
+
+**Note:** RAG features are configured through the settings system. The CLI uses the v2 API which supports RAG by default. See [RAG Guide](docs/RAG_GUIDE.md) for detailed RAG configuration and usage.
 
 ### API Endpoints
 
@@ -311,6 +331,9 @@ Once started, access:
 *At least one LLM API key is required for analysis functionality.
 
 #### RAG Configuration (v2 API)
+
+The RAG (Retrieval-Augmented Generation) system enhances analysis accuracy through contextual summarization and chunk re-ranking. See [RAG Guide](docs/RAG_GUIDE.md) for comprehensive documentation.
+
 | Variable | Description | Required | Default |
 |----------|-------------|----------|---------|
 | `RAG_SUMMARY_PROVIDER` | LLM provider for summarization | No | Auto-detect |
@@ -321,6 +344,24 @@ Once started, access:
 | `RAG_USE_SUMMARY_CACHE` | Enable summary caching | No | true |
 | `RAG_MAX_SUMMARY_KEY_POINTS` | Max key points per summary | No | 5 |
 | `RAG_TOP_K_CHUNKS` | Top K chunks after re-ranking | No | 10 |
+
+**Quick RAG Setup:**
+```bash
+# Fast processing
+export RAG_SUMMARY_QUALITY="fast"
+export RAG_RERANK_METHOD="keyword"
+export RAG_TOP_K_CHUNKS="5"
+
+# High accuracy
+export RAG_SUMMARY_QUALITY="high"
+export RAG_RERANK_METHOD="llm"
+export RAG_TOP_K_CHUNKS="20"
+
+# Balanced (recommended)
+export RAG_SUMMARY_QUALITY="balanced"
+export RAG_RERANK_METHOD="hybrid"
+export RAG_TOP_K_CHUNKS="10"
+```
 
 #### Performance Configuration
 | Variable | Description | Required | Default |
@@ -385,6 +426,7 @@ The system analyzes papers for these critical fields:
   - Summary caching for performance
 - **Dependencies**: ContextualSummarizationService, ChunkReRanker
 - **Use Case**: v2 API endpoints for improved extraction accuracy
+- **Documentation**: See [RAG Guide](docs/RAG_GUIDE.md) for detailed usage and examples
 
 #### ContextualSummarizationService
 - **Purpose**: Generate query-aware summaries of text chunks
@@ -485,9 +527,12 @@ curl -X GET "http://localhost:8000/api/v1/analyze/12345678"
 ```
 
 ### v2 API - RAG-Enhanced Analysis
+
+RAG (Retrieval-Augmented Generation) enhances analysis accuracy through contextual summarization and chunk re-ranking. **See [RAG Guide](docs/RAG_GUIDE.md) for comprehensive documentation, examples, and troubleshooting.**
+
 ```bash
 # Analyze with default RAG settings
-curl -X GET "http://localhost:8000/api/v2/analyze/12345678"
+curl -X GET "http://localhost:8000/api/v2/analyze/12345678?use_rag=true"
 
 # Analyze with custom RAG configuration
 curl -X POST "http://localhost:8000/api/v2/analyze" \
@@ -509,12 +554,23 @@ curl -X POST "http://localhost:8000/api/v2/analyze/batch" \
   -d '{
     "pmids": ["12345678", "87654321"],
     "rag_config": {
-      "enabled": true
+      "enabled": true,
+      "top_k_chunks": 10
     }
   }'
 
 # Get RAG configuration
 curl -X GET "http://localhost:8000/api/v2/rag/config"
+```
+
+**Quick RAG Configuration Examples:**
+
+```bash
+# Fast processing (for batch jobs)
+curl -X GET "http://localhost:8000/api/v2/analyze/12345678?use_rag=true&summary_quality=fast&rerank_method=keyword&top_k_chunks=5"
+
+# High accuracy (for critical analysis)
+curl -X GET "http://localhost:8000/api/v2/analyze/12345678?use_rag=true&summary_quality=high&rerank_method=llm&top_k_chunks=20"
 ```
 
 ### Retrieval Request
@@ -803,9 +859,11 @@ python main.py
 
 - **🚀 Quick Start**: [QUICKSTART.md](docs/QUICKSTART.md) - Get running in 5 minutes
 - **📖 Complete Setup Guide**: [SETUP_GUIDE.md](SETUP_GUIDE.md) - Detailed setup steps (tested & verified)
-- **🏗️ Architecture Guide**: [ARCHITECTURE.md](docs/ARCHITECTURE.md)
-- **🐳 Docker Guide**: [DOCKER_DEPLOYMENT.md](docs/DOCKER_DEPLOYMENT.md)
-- **🔧 API Documentation**: http://localhost:8000/docs (when running)
+- **🏗️ Architecture Guide**: [ARCHITECTURE.md](docs/ARCHITECTURE.md) - System architecture and design
+- **🧠 RAG Guide**: [RAG_GUIDE.md](docs/RAG_GUIDE.md) - **NEW!** Comprehensive RAG features documentation
+- **⚙️ Settings Guide**: [SETTINGS.md](docs/SETTINGS.md) - Configuration system documentation
+- **🐳 Docker Guide**: [DOCKER_DEPLOYMENT.md](docs/DOCKER_DEPLOYMENT.md) - Docker deployment guide
+- **🔧 API Documentation**: http://localhost:8000/docs (when running) - Interactive API documentation
 
 ## 🤝 Contributing
 
