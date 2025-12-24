@@ -578,6 +578,164 @@ class BioAnalyzerCLI:
         else:
             print("API Health: ❌ Not Responding")
     
+    def handle_settings_command(self, args):
+        """Handle settings commands."""
+        try:
+            from app.core.settings import SettingsManager, BioAnalyzerSettings
+        except ImportError as e:
+            print(f"❌ Error: Failed to import settings module: {e}")
+            print("   Make sure you're running from the project root directory.")
+            return
+        
+        manager = SettingsManager()
+        
+        if args.settings_command == 'view':
+            # Load current settings
+            settings = manager.load()
+            
+            # Format output
+            if args.format == 'json':
+                output = settings.model_dump_json(indent=2)
+            elif args.format == 'yaml':
+                import yaml
+                output = yaml.dump(settings.model_dump(), default_flow_style=False, sort_keys=False)
+            else:  # table format
+                output = self._format_settings_table(settings)
+            
+            # Output
+            if args.output:
+                with open(args.output, 'w') as f:
+                    f.write(output)
+                print(f"✅ Settings written to {args.output}")
+            else:
+                print(output)
+        
+        elif args.settings_command == 'save':
+            # Determine settings to save
+            if args.preset:
+                settings = BioAnalyzerSettings.from_preset(args.preset)
+            else:
+                settings = manager.load()
+            
+            # Save to file
+            file_path = Path(args.file) if args.file else manager.DEFAULT_SETTINGS_FILE
+            manager.save(settings, file_path, args.format)
+            print(f"✅ Settings saved to {file_path}")
+            if args.preset:
+                print(f"   Preset: {args.preset}")
+        
+        elif args.settings_command == 'load':
+            # Load from file
+            file_path = Path(args.file)
+            if not file_path.exists():
+                print(f"❌ Error: Settings file not found: {file_path}")
+                return
+            
+            settings = BioAnalyzerSettings.from_file(file_path)
+            print(f"✅ Settings loaded from {file_path}")
+            
+            if args.apply:
+                settings.apply_to_environment()
+                print("✅ Settings applied to environment variables")
+        
+        elif args.settings_command == 'preset':
+            # Apply preset
+            settings = BioAnalyzerSettings.from_preset(args.name)
+            print(f"✅ Preset '{args.name}' loaded")
+            
+            if args.save:
+                manager.save(settings)
+                print(f"✅ Preset saved to {manager.DEFAULT_SETTINGS_FILE}")
+            else:
+                # Show what would be applied
+                print("\n📋 Preset configuration:")
+                print(self._format_settings_table(settings))
+                print("\n💡 Tip: Use --save to save this preset to your settings file")
+        
+        elif args.settings_command == 'migrate':
+            # Migrate old settings
+            old_file = Path(args.file)
+            if not old_file.exists():
+                print(f"❌ Error: Settings file not found: {old_file}")
+                return
+            
+            output_file = Path(args.output) if args.output else old_file.with_suffix('.new' + old_file.suffix)
+            migrated = manager.migrate_settings(old_file, output_file)
+            print(f"✅ Settings migrated from {old_file} to {output_file}")
+        
+        else:
+            print("❌ Error: Unknown settings command")
+            print("   Available commands: view, save, load, preset, migrate")
+    
+    def _format_settings_table(self, settings: 'BioAnalyzerSettings') -> str:
+        """Format settings as a readable table."""
+        lines = []
+        lines.append("=" * 60)
+        lines.append("BioAnalyzer Settings")
+        lines.append("=" * 60)
+        
+        # Version and preset
+        if settings.preset:
+            lines.append(f"\n📦 Preset: {settings.preset}")
+        lines.append(f"📌 Version: {settings.version}")
+        lines.append(f"🌍 Environment: {settings.environment.value}")
+        
+        # API Settings
+        lines.append("\n🔌 API Configuration:")
+        lines.append(f"  Timeout: {settings.api.timeout}s")
+        lines.append(f"  Analysis Timeout: {settings.api.analysis_timeout}s")
+        lines.append(f"  Gemini Timeout: {settings.api.gemini_timeout}s")
+        lines.append(f"  Max Concurrent Requests: {settings.api.max_concurrent_requests}")
+        lines.append(f"  NCBI Rate Limit Delay: {settings.api.ncbi_rate_limit_delay}s")
+        
+        # LLM Settings
+        lines.append("\n🤖 LLM Configuration:")
+        lines.append(f"  Provider: {settings.llm.provider or 'Auto-detect'}")
+        lines.append(f"  Model: {settings.llm.model or 'Provider default'}")
+        
+        # RAG Settings
+        lines.append("\n📚 RAG Configuration:")
+        lines.append(f"  Enabled: {settings.rag.enabled}")
+        lines.append(f"  Top K Chunks: {settings.rag.top_k_chunks}")
+        lines.append(f"  Re-rank Method: {settings.rag.rerank_method.value}")
+        lines.append(f"  Summary Length: {settings.rag.summary_length.value}")
+        lines.append(f"  Summary Quality: {settings.rag.summary_quality.value}")
+        lines.append(f"  Use Cache: {settings.rag.use_cache}")
+        lines.append(f"  Max Key Points: {settings.rag.max_summary_key_points}")
+        
+        # Cache Settings
+        lines.append("\n💾 Cache Configuration:")
+        lines.append(f"  Enabled: {settings.cache.enabled}")
+        lines.append(f"  Validity Hours: {settings.cache.validity_hours}")
+        lines.append(f"  Max Size: {settings.cache.max_size}")
+        lines.append(f"  Directory: {settings.cache.directory}")
+        
+        # Rate Limiting
+        lines.append("\n⏱️  Rate Limiting:")
+        lines.append(f"  Enabled: {settings.rate_limit.enabled}")
+        lines.append(f"  Requests/Minute: {settings.rate_limit.requests_per_minute}")
+        
+        # Logging
+        lines.append("\n📝 Logging Configuration:")
+        lines.append(f"  Level: {settings.logging.level.value}")
+        lines.append(f"  Directory: {settings.logging.directory}")
+        lines.append(f"  Max File Size: {settings.logging.max_file_size / (1024*1024):.1f} MB")
+        lines.append(f"  Max Files: {settings.logging.max_files}")
+        
+        # Retrieval
+        lines.append("\n🔍 Retrieval Configuration:")
+        lines.append(f"  Use Fulltext: {settings.retrieval.use_fulltext}")
+        lines.append(f"  NCBI API URL: {settings.retrieval.ncbi_api_url}")
+        
+        # Security
+        lines.append("\n🔒 Security Configuration:")
+        lines.append(f"  CORS Origins: {', '.join(settings.security.cors_origins)}")
+        lines.append(f"  Request ID: {settings.security.enable_request_id}")
+        
+        lines.append("\n" + "=" * 60)
+        
+        return "\n".join(lines)
+    
     def interactive_analysis(self):
         """Start interactive analysis mode."""
         self.print_banner()
@@ -1810,6 +1968,42 @@ Examples:
     retrieve_parser.add_argument('--verbose', '-v', action='store_true',
                                help='Verbose output')
     
+    # Settings command
+    settings_parser = subparsers.add_parser('settings', help='Manage BioAnalyzer settings')
+    settings_subparsers = settings_parser.add_subparsers(dest='settings_command', help='Settings commands')
+    
+    # Settings view command
+    settings_view_parser = settings_subparsers.add_parser('view', help='View current settings')
+    settings_view_parser.add_argument('--format', choices=['json', 'yaml', 'table'], 
+                                    default='table', help='Output format')
+    settings_view_parser.add_argument('--output', '-o', help='Output file (optional)')
+    
+    # Settings save command
+    settings_save_parser = settings_subparsers.add_parser('save', help='Save current settings to file')
+    settings_save_parser.add_argument('--file', '-f', help='Settings file path (default: ~/.bioanalyzer/settings.json)')
+    settings_save_parser.add_argument('--format', choices=['json', 'yaml'], 
+                                     default='json', help='File format')
+    settings_save_parser.add_argument('--preset', choices=['fast', 'balanced', 'high_quality', 'development', 'production'],
+                                      help='Save preset configuration')
+    
+    # Settings load command
+    settings_load_parser = settings_subparsers.add_parser('load', help='Load settings from file')
+    settings_load_parser.add_argument('--file', '-f', required=True, help='Settings file path')
+    settings_load_parser.add_argument('--apply', action='store_true',
+                                     help='Apply loaded settings to environment')
+    
+    # Settings preset command
+    settings_preset_parser = settings_subparsers.add_parser('preset', help='Apply preset configuration')
+    settings_preset_parser.add_argument('name', choices=['fast', 'balanced', 'high_quality', 'development', 'production'],
+                                       help='Preset name')
+    settings_preset_parser.add_argument('--save', '-s', action='store_true',
+                                       help='Save preset to settings file')
+    
+    # Settings migrate command
+    settings_migrate_parser = settings_subparsers.add_parser('migrate', help='Migrate old settings to new format')
+    settings_migrate_parser.add_argument('--file', '-f', required=True, help='Old settings file path')
+    settings_migrate_parser.add_argument('--output', '-o', help='Output file for migrated settings')
+    
     args = parser.parse_args()
     
     cli = BioAnalyzerCLI()
@@ -1960,6 +2154,11 @@ Examples:
             args.format, 
             args.output
         ))
+        return
+    
+    if args.command == 'settings':
+        cli.handle_settings_command(args)
+        return
 
 
 if __name__ == "__main__":
