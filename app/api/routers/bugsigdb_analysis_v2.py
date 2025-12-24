@@ -76,12 +76,15 @@ def _get_default_rag_config() -> RAGConfig:
     return RAGConfig(
         enabled=True,
         top_k_chunks=RAG_TOP_K_CHUNKS,
+        evidence_k=None,  # No limit by default
+        max_sources=RAG_TOP_K_CHUNKS,  # Default to same as top_k_chunks
         rerank_method=RAG_RERANK_METHOD,
         summary_length=RAG_SUMMARY_LENGTH,
         summary_quality=RAG_SUMMARY_QUALITY,
         summary_provider=RAG_SUMMARY_PROVIDER,
         summary_model=RAG_SUMMARY_MODEL,
-        use_cache=RAG_USE_SUMMARY_CACHE
+        use_cache=RAG_USE_SUMMARY_CACHE,
+        use_10_scale=True  # Use 0-10 scale by default
     )
 
 
@@ -90,6 +93,8 @@ async def analyze_paper(
     pmid: str,
     use_rag: bool = Query(True, description="Enable RAG features"),
     top_k_chunks: Optional[int] = Query(None, description="Number of top chunks to use"),
+    evidence_k: Optional[int] = Query(None, description="Number of evidence chunks to retrieve before re-ranking"),
+    max_sources: Optional[int] = Query(None, description="Maximum number of sources to use for final answer"),
     rerank_method: Optional[str] = Query(None, description="Re-ranking method: keyword, llm, hybrid"),
     summary_length: Optional[str] = Query(None, description="Summary length: short, medium, long"),
     summary_quality: Optional[str] = Query(None, description="Summary quality: fast, balanced, high")
@@ -106,6 +111,8 @@ async def analyze_paper(
     - `pmid`: PubMed ID of the paper to analyze
     - `use_rag`: Enable/disable RAG features (default: True)
     - `top_k_chunks`: Number of top chunks to use after re-ranking
+    - `evidence_k`: Number of evidence chunks to retrieve before re-ranking
+    - `max_sources`: Maximum number of sources to use for final answer
     - `rerank_method`: Method for re-ranking ("keyword", "llm", "hybrid")
     - `summary_length`: Length of summaries ("short", "medium", "long")
     - `summary_quality`: Quality setting ("fast", "balanced", "high")
@@ -118,12 +125,15 @@ async def analyze_paper(
             rag_config = RAGConfig(
                 enabled=True,
                 top_k_chunks=top_k_chunks or default_config.top_k_chunks,
+                evidence_k=evidence_k if evidence_k is not None else default_config.evidence_k,
+                max_sources=max_sources if max_sources is not None else default_config.max_sources,
                 rerank_method=rerank_method or default_config.rerank_method,
                 summary_length=summary_length or default_config.summary_length,
                 summary_quality=summary_quality or default_config.summary_quality,
                 summary_provider=default_config.summary_provider,
                 summary_model=default_config.summary_model,
-                use_cache=default_config.use_cache
+                use_cache=default_config.use_cache,
+                use_10_scale=default_config.use_10_scale
             )
         
         result = await analyze_paper_with_rag(pmid, rag_config=rag_config, use_rag=use_rag)

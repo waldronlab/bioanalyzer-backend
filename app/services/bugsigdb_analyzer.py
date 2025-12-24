@@ -225,7 +225,9 @@ async def analyze_paper_with_rag(
         # Convert RAGConfig model to dict if needed
         rag_config_dict = None
         if rag_config:
-            if hasattr(rag_config, 'dict'):
+            if hasattr(rag_config, 'model_dump'):
+                rag_config_dict = rag_config.model_dump(exclude_none=True)
+            elif hasattr(rag_config, 'dict'):
                 rag_config_dict = rag_config.dict()
             elif isinstance(rag_config, dict):
                 rag_config_dict = rag_config
@@ -308,15 +310,37 @@ async def analyze_paper_with_rag(
         # Try to collect RAG stats if RAG was used
         if use_rag_final and chunks:
             try:
+                # Try to get actual metrics from RAG service if available
+                rag_metrics = {}
+                try:
+                    from app.services.advanced_rag import AdvancedRAGService
+                    # Create a temporary service to get metrics structure
+                    temp_service = AdvancedRAGService(
+                        rerank_method=rag_config_dict.get('rerank_method', 'hybrid') if rag_config_dict else 'hybrid',
+                        evidence_k=rag_config_dict.get('evidence_k') if rag_config_dict else None,
+                        max_sources=rag_config_dict.get('max_sources') if rag_config_dict else None,
+                        use_10_scale=rag_config_dict.get('use_10_scale', True) if rag_config_dict else True
+                    )
+                    rag_metrics = temp_service.get_rerank_metrics()
+                except:
+                    pass
+                
                 # Estimate stats based on chunks processed
                 result["rag_stats"] = {
                     "chunks_processed": len(chunks),
-                    "chunks_ranked": len(chunks),
+                    "chunks_ranked": rag_metrics.get("chunks_reranked", len(chunks)),
                     "chunks_summarized": min(rag_config_dict.get('top_k_chunks', 10) if rag_config_dict else 10, len(chunks)),
-                    "avg_relevance_score": 0.75,  # Placeholder
+                    "avg_relevance_score": rag_metrics.get("avg_relevance_score", 0.75),
+                    "max_relevance_score": rag_metrics.get("max_relevance_score", 0.0),
+                    "min_relevance_score": rag_metrics.get("min_relevance_score", 0.0),
                     "avg_confidence": sum(f.get('confidence', 0.0) for f in field_results.values()) / len(field_results) if field_results else 0.0,
                     "rerank_method": rag_config_dict.get('rerank_method', 'hybrid') if rag_config_dict else 'hybrid',
                     "summary_length": rag_config_dict.get('summary_length', 'medium') if rag_config_dict else 'medium',
+                    "evidence_k": rag_config_dict.get('evidence_k') if rag_config_dict else None,
+                    "max_sources": rag_config_dict.get('max_sources') if rag_config_dict else None,
+                    "use_10_scale": rag_config_dict.get('use_10_scale', True) if rag_config_dict else True,
+                    "rerank_processing_time": rag_metrics.get("processing_time", 0.0),
+                    "avg_chunk_processing_time": rag_metrics.get("avg_chunk_processing_time", 0.0),
                     "processing_time": processing_time
                 }
             except Exception as e:
@@ -386,7 +410,10 @@ async def analyze_single_field(
                     summary_provider=rag_config.get('summary_provider'),
                     summary_model=rag_config.get('summary_model'),
                     rerank_method=rag_config.get('rerank_method'),
-                    cache_dir=None  # Use default
+                    cache_dir=None,  # Use default
+                    evidence_k=rag_config.get('evidence_k'),
+                    max_sources=rag_config.get('max_sources'),
+                    use_10_scale=rag_config.get('use_10_scale', True)
                 )
                 
                 # Override config if provided
@@ -395,10 +422,14 @@ async def analyze_single_field(
                 
                 # Get contextual context using RAG with config
                 top_k = rag_config.get('top_k_chunks')
+                evidence_k = rag_config.get('evidence_k')
+                max_sources = rag_config.get('max_sources')
                 contextual_context = await rag_service.get_contextual_context(
                     chunks=chunks,
                     query=question,
-                    top_k=top_k
+                    top_k=top_k,
+                    evidence_k=evidence_k,
+                    max_sources=max_sources
                 )
                 
                 logger.info(f"Using advanced RAG for field {field_name} (context length: {len(contextual_context)}, top_k={top_k})")

@@ -106,12 +106,15 @@ class RAGConfig(BaseModel):
     """RAG configuration for analysis."""
     enabled: bool = True
     top_k_chunks: Optional[int] = None  # Number of top chunks to use
+    evidence_k: Optional[int] = None  # Number of evidence chunks to retrieve before re-ranking
+    max_sources: Optional[int] = None  # Maximum number of sources to use for final answer
     rerank_method: Optional[str] = None  # "keyword", "llm", "hybrid"
     summary_length: Optional[str] = None  # "short", "medium", "long"
     summary_quality: Optional[str] = None  # "fast", "balanced", "high"
     summary_provider: Optional[str] = None  # LLM provider for summarization
     summary_model: Optional[str] = None  # Model for summarization
     use_cache: Optional[bool] = None  # Enable/disable summary caching
+    use_10_scale: Optional[bool] = True  # Use 0-10 scale for LLM-based re-ranking
 
 
 class AnalysisRequestV2(BaseModel):
