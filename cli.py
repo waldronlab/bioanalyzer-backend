@@ -185,6 +185,8 @@ class BioAnalyzerCLI:
    BioAnalyzer analyze <pmid>           Analyze a single paper
    BioAnalyzer analyze <pmid1,pmid2>    Analyze multiple papers
    BioAnalyzer analyze --file <file>    Analyze papers from file
+   BioAnalyzer analyze-url <url>        Analyze study from URL
+   BioAnalyzer analyze-url --file <file> Analyze studies from file
    BioAnalyzer fields                   Show field information
 
 📥 Retrieval Commands:
@@ -197,6 +199,13 @@ class BioAnalyzerCLI:
    BioAnalyzer qa --interactive          Start interactive Q&A mode
    BioAnalyzer qa                        Start interactive Q&A mode (default)
 
+⚙️  Settings Commands:
+   BioAnalyzer settings view             View current settings
+   BioAnalyzer settings save             Save current settings to file
+   BioAnalyzer settings load --file <f>  Load settings from file
+   BioAnalyzer settings preset <name>    Apply preset configuration
+   BioAnalyzer settings migrate --file <f> Migrate old settings format
+
 📊 Output Options:
    --format json|csv|table             Output format (default: table)
    --output <file>                     Save results to file
@@ -208,12 +217,16 @@ class BioAnalyzerCLI:
    BioAnalyzer analyze 12345678
    BioAnalyzer analyze 12345678,87654321
    BioAnalyzer analyze --file pmids.txt --format json
+   BioAnalyzer analyze-url https://example.com/study
+   BioAnalyzer analyze-url --file urls.txt --format json
    BioAnalyzer retrieve 12345678
    BioAnalyzer retrieve 12345678,87654321 --save
    BioAnalyzer retrieve --file pmids.txt --format json
    BioAnalyzer fields
    BioAnalyzer qa "What is the microbiome?"
    BioAnalyzer qa --interactive
+   BioAnalyzer settings view
+   BioAnalyzer settings preset balanced --save
    BioAnalyzer status
    BioAnalyzer stop
 
