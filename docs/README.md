@@ -7,46 +7,46 @@
 
 Comprehensive documentation for BioAnalyzer Backend - an AI-powered system for analyzing scientific papers and retrieving full text content from PubMed for BugSigDB curation readiness assessment. 
 
-## 🚀 Features
+## Features
 
-- **🔬 Paper Analysis**: Extract 6 essential BugSigDB fields using AI
-- **🤖 Multi-Provider LLM Support**: LiteLLM integration for OpenAI, Anthropic, Gemini, Ollama, and Llamafile
-- **🧠 Advanced RAG**: Contextual summarization and chunk re-ranking for improved accuracy
-- **📥 Full Text Retrieval**: Comprehensive PubMed and PMC data retrieval
-- **🌐 REST API**: Versioned API endpoints (v1 and v2) with RAG support
-- **💻 CLI Tool**: User-friendly command-line interface
-- **📊 Multiple Formats**: JSON, CSV, XML and table output formats
-- **⚡ Batch Processing**: Analyze multiple papers simultaneously
-- **🔧 Docker Support**: Containerized deployment
-- **📈 Monitoring**: Health checks and performance metrics
-- **🔄 Caching**: Built-in SQLite caching for improved performance
-- **🛡️ Error Handling**: Comprehensive error handling and recovery
-- **📚 Documentation**: Extensive documentation and examples
+- Paper Analysis: Extract 6 essential BugSigDB fields using AI
+- Multi-Provider LLM Support: LiteLLM integration for OpenAI, Anthropic, Gemini, Ollama, and Llamafile
+- Advanced RAG: Contextual summarization and chunk re-ranking for improved accuracy
+- Full Text Retrieval: Comprehensive PubMed and PMC data retrieval
+- REST API: Versioned API endpoints (v1 and v2) with RAG support
+- CLI Tool: Command-line interface
+- Multiple Formats: JSON, CSV, XML and table output formats
+- Batch Processing: Analyze multiple papers simultaneously
+- Docker Support: Containerized deployment
+- Monitoring: Health checks and performance metrics
+- Caching: Built-in SQLite caching for improved performance
+- Error Handling: Comprehensive error handling and recovery
+- Documentation: Extensive documentation and examples
 
-## 🏗️ Architecture
+## Architecture
 
 The project follows a layered architecture with clear separation of concerns:
 
-- **API Layer** (`app/api/`): FastAPI-based REST API with versioned endpoints
-  - **v1 API**: Backward compatible simple analysis endpoints
-  - **v2 API**: RAG-enhanced endpoints with contextual summarization
-- **Service Layer** (`app/services/`): Business logic and data processing services
-  - **BugSigDBAnalyzer**: Core field extraction service
-  - **AdvancedRAGService**: RAG with contextual summarization and chunk re-ranking
-  - **ContextualSummarizationService**: Query-aware summarization
-  - **ChunkReRanker**: Relevance-based chunk ranking
-  - **CacheManager**: SQLite-based caching
-- **Model Layer** (`app/models/`): AI models and analysis engines
-  - **LLMProviderManager**: Multi-provider LLM support via LiteLLM
-  - **UnifiedQA**: Unified interface for QA operations
-- **Utility Layer** (`app/utils/`): Shared utilities and helper functions
-  - **ChunkingService**: Text chunking for RAG
-  - **Configuration Management**: Environment and config handling
-- **CLI Interface** (`cli.py`): Command-line interface for direct user interaction
-- **Docker Support**: Containerized deployment with multi-stage builds
-- **Monitoring**: Health checks, logging, and performance metrics
+- API Layer (`app/api/`): FastAPI-based REST API with versioned endpoints
+  - v1 API: Backward compatible simple analysis endpoints
+  - v2 API: RAG-enhanced endpoints with contextual summarization
+- Service Layer (`app/services/`): Business logic and data processing services
+  - BugSigDBAnalyzer: Core field extraction service
+  - AdvancedRAGService: RAG with contextual summarization and chunk re-ranking
+  - ContextualSummarizationService: Query-aware summarization
+  - ChunkReRanker: Relevance-based chunk ranking
+  - CacheManager: SQLite-based caching
+- Model Layer (`app/models/`): AI models and analysis engines
+  - LLMProviderManager: Multi-provider LLM support via LiteLLM
+  - UnifiedQA: Unified interface for QA operations
+- Utility Layer (`app/utils/`): Shared utilities and helper functions
+  - ChunkingService: Text chunking for RAG
+  - Configuration Management: Environment and config handling
+- CLI Interface (`cli.py`): Command-line interface for direct user interaction
+- Docker Support: Containerized deployment with multi-stage builds
+- Monitoring: Health checks, logging, and performance metrics
 
-## 📋 Prerequisites
+## Prerequisites
 
 ### For Local Development
 - Python 3.8 or higher
@@ -58,14 +58,14 @@ The project follows a layered architecture with clear separation of concerns:
 - Docker Compose 2.0 or higher
 
 ### API Keys Required
-- **NCBI API key** (required for PubMed access)
-- **LLM API key** (at least one required):
+- NCBI API key (required for PubMed access)
+- LLM API key (at least one required):
   - Google Gemini API key (recommended)
   - OpenAI API key (optional)
   - Anthropic API key (optional)
   - Ollama (local, no API key needed)
 
-## 🛠️ Installation
+## Installation
 
 ### Option 1: Docker (Recommended)
 
@@ -170,7 +170,7 @@ DEFAULT_MODEL=gemini (Optional)
 2. Sign in with your Google account
 3. Create an API key
 
-## 🚀 Running the Application
+## Running the Application
 
 ### Quick Start with CLI
 
@@ -251,7 +251,7 @@ uvicorn web.app:app --host 127.0.0.1 --port 8000 --reload
 python -m web.app
 ```
 
-## 🌐 Web Interface
+## Web Interface
 
 Once running, open your browser and navigate to:
 
@@ -356,7 +356,7 @@ pytest -v
 docker exec -it bugsigdb-analyzer-app-dev pytest
 ```
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 BugsigdbAnalyzer/
@@ -405,7 +405,7 @@ BugsigdbAnalyzer/
 └── README.md              # This file
 ```
 
-## 🔧 Configuration
+## Configuration
 
 ### Environment Variables
 
@@ -449,7 +449,7 @@ The v2 API includes advanced RAG features:
 - **Volumes**: Persistent data storage
 - **Environment**: Production logging, resource limits, health checks
 
-## 📊 Data Sources
+## Data Sources
 
 - **PubMed**: Primary source for scientific papers
 - **BugSigDB**: Reference database for microbial signatures

@@ -2,11 +2,11 @@
 
 ## Overview
 
-BioAnalyzer now uses **Paper-QA** as an agent for LLM interactions instead of making direct calls to the Gemini API. This provides:
+BioAnalyzer uses Paper-QA as an agent for LLM interactions instead of making direct calls to the Gemini API. This provides:
 
-- **Multi-LLM Support**: Paper-QA supports multiple LLM providers (Gemini, OpenAI, Claude, etc.) via litellm
-- **Agent-Based Reasoning**: Better paper analysis through agent-based question answering
-- **Flexible Architecture**: Easy to switch between different LLM providers without code changes
+- Multi-LLM Support: Paper-QA supports multiple LLM providers (Gemini, OpenAI, Claude, etc.) via litellm
+- Agent-Based Reasoning: Better paper analysis through agent-based question answering
+- Flexible Architecture: Easy to switch between different LLM providers without code changes
 
 ## Installation
 

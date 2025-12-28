@@ -24,19 +24,16 @@ class AdvancedTextProcessor:
         self.sep_token_id = 3
     
     def encode_text(self, text: str) -> torch.Tensor:
-        """Encode text using tiktoken for better compatibility with modern LLMs"""
+        """Encode text using tiktoken."""
         if not self.tokenizer_available:
-            # Fallback: return simple character-based encoding
             return torch.tensor([ord(c) for c in text[:100]], dtype=torch.long)
     
-        # Add BOS token at start
         tokens = [self.bos_token_id] + self.tokenizer.encode(text)
         return torch.tensor(tokens, dtype=torch.long)
 
     def decode_tokens(self, tokens: Union[torch.Tensor, List[int]]) -> str:
-        """Decode tokens back to text"""
+        """Decode tokens back to text."""
         if not self.tokenizer_available:
-            # Fallback: return simple character-based decoding
             try:
                 if isinstance(tokens, torch.Tensor):
                     tokens = tokens.tolist()
@@ -45,23 +42,18 @@ class AdvancedTextProcessor:
                 return "Error decoding response (fallback mode)"
     
         try:
-            # Convert tensor to list if needed
             if isinstance(tokens, torch.Tensor):
-                if tokens.dim() > 1:  # If tensor has multiple dimensions
-                    tokens = tokens.squeeze().tolist()  # Remove extra dimensions
+                if tokens.dim() > 1:
+                    tokens = tokens.squeeze().tolist()
                 else:
                     tokens = tokens.tolist()
             elif isinstance(tokens, list) and isinstance(tokens[0], list):
-                tokens = tokens[0]  # Take first sequence if list of lists
+                tokens = tokens[0]
         
-            # Ensure we have a flat list of integers
             if not isinstance(tokens, list):
                 tokens = [int(tokens)]
         
-            # Filter out special tokens
             tokens = [t for t in tokens if t not in [self.bos_token_id, self.eos_token_id, self.pad_token_id, self.sep_token_id]]
-        
-            # Convert to integers if needed
             tokens = [int(t) for t in tokens]
         
             return self.tokenizer.decode(tokens)
@@ -72,9 +64,8 @@ class AdvancedTextProcessor:
             return "Error decoding response"
 
     def batch_encode(self, texts: List[str], max_length: int = 512, pad: bool = True) -> torch.Tensor:
-        """Batch encode texts with optional padding"""
+        """Batch encode texts with optional padding."""
         if not self.tokenizer_available:
-            # Fallback: simple character-based encoding
             encoded = []
             for text in texts:
                 tokens = [ord(c) for c in text[:max_length]]

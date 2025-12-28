@@ -5,28 +5,28 @@
 [![Docker](https://img.shields.io/badge/Docker-20.0+-blue.svg)](https://docker.com)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-A comprehensive AI-powered backend system for analyzing and Identifying scientific papers that contain curatable microbiome Signatures  (curation readiness assessment.)
+Backend system for analyzing scientific papers to identify curatable microbiome signatures. Extracts essential BugSigDB fields and retrieves full text from PubMed/PMC.
 
-> **✅ Tested Setup**: This project has been successfully built and tested on Ubuntu Linux with Docker. See [SETUP_GUIDE.md](SETUP_GUIDE.md) for verified setup steps.
+Tested on Ubuntu Linux with Docker. See [SETUP_GUIDE.md](SETUP_GUIDE.md) for setup steps.
 
-## 🧬 Overview
+## Overview
 
-BioAnalyzer Backend is a specialized system that combines advanced AI analysis with comprehensive PubMed data retrieval to evaluate scientific papers for BugSigDB curation readiness. The system extracts 6 essential fields required for microbial signature curation and provides full text retrieval capabilities.
+BioAnalyzer extracts 6 essential fields from papers for BugSigDB curation. Uses AI analysis with PubMed data retrieval to evaluate papers.
 
-### Key Capabilities
+### Features
 
-- **🔬 Paper Analysis**: Extract 6 essential BugSigDB fields using AI
-- **🤖 Multi-Provider LLM Support**: LiteLLM integration for OpenAI, Anthropic, Gemini, Ollama, and Llamafile
-- **🧠 Advanced RAG**: Contextual summarization and chunk re-ranking for improved accuracy
-- **📥 Full Text Retrieval**: Comprehensive PubMed and PMC data retrieval
-- **🌐 REST API**: Versioned API endpoints (v1 and v2) with RAG support
-- **💻 CLI Tool**: User-friendly command-line interface
-- **📊 Multiple Formats**: JSON, CSV, XML and table output formats
-- **⚡ Batch Processing**: Analyze multiple papers simultaneously
-- **🔧 Docker Support**: Containerized deployment
-- **📈 Monitoring**: Health checks and performance metrics
+- Paper analysis: Extract 6 BugSigDB fields using AI
+- Multi-provider LLM support: Works with OpenAI, Anthropic, Gemini, Ollama, and Llamafile via LiteLLM
+- RAG support: Contextual summarization and chunk re-ranking for better accuracy
+- Full text retrieval: Gets metadata and full text from PubMed/PMC
+- REST API: Versioned endpoints (v1 and v2) with RAG support
+- CLI tool: Command-line interface for analysis
+- Multiple output formats: JSON, CSV, XML, and table formats
+- Batch processing: Analyze multiple papers at once
+- Docker support: Containerized deployment
+- Monitoring: Health checks and performance metrics
 
-## 🏗️ Architecture
+## Architecture
 
 ### System Components
 
@@ -133,7 +133,7 @@ The system supports multiple LLM providers through LiteLLM:
 
 Auto-detection: If `LLM_PROVIDER` is not set, the system auto-detects from available API keys.
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
 
@@ -148,37 +148,26 @@ Auto-detection: If `LLM_PROVIDER` is not set, the system auto-detects from avail
 
 ### Installation & Setup
 
-#### ✅ **Method 1: Docker Installation (Recommended & Tested)**
+#### Docker Installation (Recommended)
 
-This is the **recommended approach** as it avoids Python environment conflicts and provides a clean, isolated setup.
+Docker avoids Python environment conflicts and provides a clean setup.
 
 ```bash
-# 1. Navigate to the project directory
 cd /path/to/bioanalyzer-backend
 
-# 2. Install CLI commands system-wide
 chmod +x install.sh
 ./install.sh
 
-# 3. Build Docker image
 docker compose build
-
-# 4. Start the application
 docker compose up -d
 
-# 5. Verify installation
 docker compose ps
 curl http://localhost:8000/health
 ```
 
-**Expected Output:**
-```json
-{"status":"healthy","timestamp":"2025-10-23T17:52:40.249451+00:00","version":"1.0.0"}
-```
+#### Local Python Installation
 
-#### **Method 2: Local Python Installation**
-
-⚠️ **Note**: This method may encounter issues with externally managed Python environments on modern Linux distributions.
+Note: This may encounter issues with externally managed Python environments on modern Linux distributions.
 
 ```bash
 # Clone and setup
@@ -198,27 +187,22 @@ cp .env.example .env
 # Edit .env with your API keys
 ```
 
-### 🧪 **Verification Steps**
+### Verification
 
-After installation, verify the system is working:
+After installation, verify everything works:
 
 ```bash
-# 1. Check Docker container status
 docker compose ps
-
-# 2. Test API health
 curl http://localhost:8000/health
 
-# 3. Test CLI commands (add to PATH first)
 export PATH="$PATH:/home/ronald/.local/bin"
 BioAnalyzer fields
 BioAnalyzer status
-
-# 4. View API documentation
-# Open browser: http://localhost:8000/docs
 ```
 
-## 📖 Usage
+Open http://localhost:8000/docs for API documentation.
+
+## Usage
 
 ### CLI Commands
 
@@ -303,12 +287,12 @@ GET /api/v1/config                   # Configuration info
 
 ### Web Interface
 
-Once started, access:
-- **Main Interface**: http://localhost:3000
-- **API Documentation**: http://localhost:8000/docs
-- **Health Check**: http://localhost:8000/health
+Once started:
+- Main Interface: http://localhost:3000
+- API Documentation: http://localhost:8000/docs
+- Health Check: http://localhost:8000/health
 
-## 🔧 Configuration
+## Configuration
 
 ### Environment Variables
 
@@ -379,24 +363,24 @@ export RAG_TOP_K_CHUNKS="10"
 - `app/utils/config.py`: Application configuration
 - `docker-compose.yml`: Docker services configuration
 
-## 📊 The 6 Essential BugSigDB Fields
+## The 6 Essential BugSigDB Fields
 
-The system analyzes papers for these critical fields:
+The system analyzes papers for these fields:
 
-1. **🧬 Host Species**: The organism being studied (Human, Mouse, Rat, etc.)
-2. **📍 Body Site**: Sample collection location (Gut, Oral, Skin, etc.)
-3. **🏥 Condition**: Disease/treatment/exposure being studied
-4. **🔬 Sequencing Type**: Molecular method used (16S, metagenomics, etc.)
-5. **🌳 Taxa Level**: Taxonomic level analyzed (phylum, genus, species, etc.)
-6. **👥 Sample Size**: Number of samples or participants
+1. Host Species: The organism being studied (Human, Mouse, Rat, etc.)
+2. Body Site: Sample collection location (Gut, Oral, Skin, etc.)
+3. Condition: Disease/treatment/exposure being studied
+4. Sequencing Type: Molecular method used (16S, metagenomics, etc.)
+5. Taxa Level: Taxonomic level analyzed (phylum, genus, species, etc.)
+6. Sample Size: Number of samples or participants
 
 ### Field Status Values
 
-- **✅ PRESENT**: Information about the microbiom signtaure is complete and clear
-- **⚠️ PARTIALLY_PRESENT**: Some information available but incomplete
-- **❌ ABSENT**: Information is missing
+- PRESENT: Information about the microbiome signature is complete and clear
+- PARTIALLY_PRESENT: Some information available but incomplete
+- ABSENT: Information is missing
 
-## 🏛️ Architecture Details
+## Architecture Details
 
 ### Service Layer Architecture
 
@@ -518,7 +502,7 @@ Aggregate Results + RAG Stats → Cache → JSON/CSV/Table Output
 3. **Parsing Errors**: Error reporting with context
 4. **Missing Data**: Clear indication of unavailable information
 
-## 🔍 API Examples
+## API Examples
 
 ### v1 API - Simple Analysis
 ```bash
@@ -612,7 +596,7 @@ curl -X POST "http://localhost:8000/api/v1/retrieve/batch" \
 }
 ```
 
-## 🧪 Testing
+## Testing
 
 ### Run Tests
 ```bash
@@ -635,7 +619,7 @@ docker exec -it bioanalyzer-api pytest
 - CLI command testing
 - Error handling validation
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 bioanalyzer-backend/
@@ -686,7 +670,7 @@ bioanalyzer-backend/
 └── README.md                     # This file
 ```
 
-## 🚀 Deployment
+## Deployment
 
 ### Docker Deployment
 
@@ -732,7 +716,7 @@ python cli.py analyze 12345678
 python cli.py retrieve 12345678 --save
 ```
 
-## 📈 Performance
+## Performance
 
 ### Optimization Features
 
@@ -753,7 +737,7 @@ python cli.py retrieve 12345678 --save
 - **Memory Usage**: ~100-200MB base + 50MB per concurrent request
 - **Cache Hit Rate**: ~60-80% (for frequently analyzed papers)
 
-## 🔧 Development
+## Development
 
 ### Setting Up Development Environment
 
@@ -797,11 +781,11 @@ pytest
 3. **CLI Commands**: Extend `cli.py` with new commands
 4. **Models**: Add Pydantic models in `app/api/models/`
 
-## 🐛 Troubleshooting
+## Troubleshooting
 
-### Common Issues & Solutions
+### Common Issues
 
-#### **Python Environment Issues**
+#### Python Environment Issues
 ```bash
 # Error: externally-managed-environment
 # Solution: Use Docker (recommended) or install python3-venv
@@ -810,7 +794,7 @@ python3 -m venv .venv
 source .venv/bin/activate
 ```
 
-#### **Docker Compose Issues**
+#### Docker Compose Issues
 ```bash
 # Error: docker-compose command not found
 # Solution: Use newer Docker Compose syntax
@@ -818,7 +802,7 @@ docker compose build    # Instead of docker-compose build
 docker compose up -d    # Instead of docker-compose up -d
 ```
 
-#### **CLI Command Not Found**
+#### CLI Command Not Found
 ```bash
 # Error: BioAnalyzer command not found
 # Solution: Add to PATH
@@ -826,7 +810,7 @@ export PATH="$PATH:/home/<copmuter_name>/.local/bin"
 # Or restart terminal after running ./install.sh
 ```
 
-#### **API Not Responding**
+#### API Not Responding
 ```bash
 # Check container status
 docker compose ps
@@ -838,7 +822,7 @@ docker compose logs
 docker compose restart
 ```
 
-#### **Missing API Keys**
+#### Missing API Keys
 ```bash
 # Warning: GeminiQA not initialized
 # This is normal - system works without API keys
@@ -855,17 +839,17 @@ export LOG_LEVEL=DEBUG
 python main.py
 ```
 
-## 📚 Documentation
+## Documentation
 
-- **🚀 Quick Start**: [QUICKSTART.md](docs/QUICKSTART.md) - Get running in 5 minutes
-- **📖 Complete Setup Guide**: [SETUP_GUIDE.md](SETUP_GUIDE.md) - Detailed setup steps (tested & verified)
-- **🏗️ Architecture Guide**: [ARCHITECTURE.md](docs/ARCHITECTURE.md) - System architecture and design
-- **🧠 RAG Guide**: [RAG_GUIDE.md](docs/RAG_GUIDE.md) - **NEW!** Comprehensive RAG features documentation
-- **⚙️ Settings Guide**: [SETTINGS.md](docs/SETTINGS.md) - Configuration system documentation
-- **🐳 Docker Guide**: [DOCKER_DEPLOYMENT.md](docs/DOCKER_DEPLOYMENT.md) - Docker deployment guide
-- **🔧 API Documentation**: http://localhost:8000/docs (when running) - Interactive API documentation
+- [QUICKSTART.md](docs/QUICKSTART.md) - Get running in 5 minutes
+- [SETUP_GUIDE.md](SETUP_GUIDE.md) - Detailed setup steps
+- [ARCHITECTURE.md](docs/ARCHITECTURE.md) - System architecture
+- [RAG_GUIDE.md](docs/RAG_GUIDE.md) - RAG features documentation
+- [SETTINGS.md](docs/SETTINGS.md) - Configuration system
+- [DOCKER_DEPLOYMENT.md](docs/DOCKER_DEPLOYMENT.md) - Docker deployment
+- API Documentation: http://localhost:8000/docs (when running)
 
-## 🤝 Contributing
+## Contributing
 
 1. Fork the repository
 2. Create a feature branch (`git checkout -b feature/amazing-feature`)
@@ -881,11 +865,11 @@ python main.py
 - Use type hints for all functions
 - Write comprehensive docstrings
 
-## 📄 License
+## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## 🙏 Acknowledgments
+## Acknowledgments
 
 - **BugSigDB Team**: For the microbial signatures database
 - **NCBI**: For PubMed data access and E-utilities API
@@ -894,7 +878,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - **FastAPI**: For the excellent web framework
 - **Docker**: For containerization technology
 
-## 📞 Support
+## Support
 
 - **Issues**: [GitHub Issues](https://github.com/waldronlab/bioanalyzer-backend/issues)
 - **Discussions**: [GitHub Discussions](https://github.com/waldronlab/bioanalyzer-backend/discussions)
@@ -902,4 +886,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ---
 
-**Happy analyzing! 🧬🔬**
+Happy analyzing!

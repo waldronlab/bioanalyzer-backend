@@ -1,9 +1,4 @@
-"""
-Image Processor Service for BioAnalyzer
-
-Self-contained image downloader/converter that avoids optional
-Paper-QA dependencies while still providing visual LLM support.
-"""
+"""Image processor service for downloading and converting images for visual LLM processing."""
 import base64
 import logging
 from dataclasses import dataclass, field
@@ -33,35 +28,16 @@ class ProcessedImage:
 
 
 class ImageProcessorService:
-    """
-    Image processor that downloads remote images, caches them locally,
-    and generates LLM-friendly data URLs.
-    """
+    """Image processor for downloading and caching images for visual LLM processing."""
 
-    def __init__(
-        self,
-        cache_dir: str = "cache/images",
-        max_image_size_mb: int = 10
-    ):
-        """
-        Initialize the image processor.
-
-        Args:
-            cache_dir: Directory to cache downloaded images
-            max_image_size_mb: Maximum image size in MB
-        """
+    def __init__(self, cache_dir: str = "cache/images", max_image_size_mb: int = 10):
+        """Initialize image processor."""
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.max_image_size = max_image_size_mb * 1024 * 1024
 
-    async def process_image_url(
-        self,
-        image_url: str,
-        index: int = 0
-    ) -> Optional[ProcessedImage]:
-        """
-        Download an image URL and prepare it for downstream processing.
-        """
+    async def process_image_url(self, image_url: str, index: int = 0) -> Optional[ProcessedImage]:
+        """Download image URL and prepare for processing."""
         try:
             logger.info("Processing image: %s", image_url)
             download = await self._download_image(image_url)

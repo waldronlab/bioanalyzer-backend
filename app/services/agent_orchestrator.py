@@ -1,8 +1,4 @@
-"""
-Agent Orchestrator for BioAnalyzer
-
-Uses Paper-QA's agent_query system for orchestrating extraction workflow.
-"""
+"""Agent orchestrator using Paper-QA's agent_query system."""
 import asyncio
 import logging
 from typing import List, Optional
@@ -23,29 +19,13 @@ logger = logging.getLogger(__name__)
 
 
 class AgentOrchestrator:
-    """
-    Orchestrates the extraction workflow using Paper-QA's agent system.
+    """Orchestrates extraction workflow using Paper-QA's agent system."""
     
-    Uses agent_query to coordinate extraction of experiments and signatures
-    from vectorized study content.
-    """
-    
-    def __init__(
-        self,
-        llm_model: str = "gemini/gemini-2.0-flash",
-        embedding_model: str = "gemini/text-embedding-004"
-    ):
-        """
-        Initialize the agent orchestrator.
-        
-        Args:
-            llm_model: LLM model for agent (litellm format)
-            embedding_model: Embedding model (litellm format)
-        """
+    def __init__(self, llm_model: str = "gemini/gemini-2.0-flash", embedding_model: str = "gemini/text-embedding-004"):
+        """Initialize agent orchestrator."""
         self.llm_model = llm_model
         self.embedding_model = embedding_model
         
-        # Create Paper-QA settings
         self.settings = Settings(
             llm=llm_model,
             summary_llm=llm_model,
@@ -60,26 +40,10 @@ class AgentOrchestrator:
         
         logger.info(f"Initialized agent orchestrator with {llm_model}")
     
-    async def analyze_study(
-        self,
-        chunks: List[Text],
-        study_id: str,
-        source_url: str
-    ) -> StudyAnalysisResult:
-        """
-        Analyze a complete study using the agent workflow.
-        
-        Args:
-            chunks: List of Text chunks from the study
-            study_id: Unique identifier for the study
-            source_url: Original URL
-            
-        Returns:
-            StudyAnalysisResult with extracted experiments and signatures
-        """
+    async def analyze_study(self, chunks: List[Text], study_id: str, source_url: str) -> StudyAnalysisResult:
+        """Analyze study using agent workflow."""
         logger.info(f"Starting study analysis: {study_id}")
         
-        # Create Docs object and add chunks
         docs = Docs()
         for chunk in chunks:
             docs.texts.append(chunk)
@@ -133,7 +97,6 @@ class AgentOrchestrator:
         """Extract experiments from the study."""
         logger.info("Extracting experiments...")
         
-        # Query for experiment identification
         query = """
         Identify all distinct experiments or studies described in this paper.
         For each experiment, extract:

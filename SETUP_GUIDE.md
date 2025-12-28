@@ -1,18 +1,16 @@
 # BioAnalyzer Backend - Complete Setup Guide
 
-## 📋 Overview
+This guide documents the actual steps taken to successfully build and run the BioAnalyzer Backend system. Based on testing on Ubuntu Linux with Docker.
 
-This guide documents the **actual steps taken** to successfully build and run the BioAnalyzer Backend system. This is a real-world setup guide based on testing on Ubuntu Linux with Docker.
+## System Requirements
 
-## 🎯 System Requirements
+- OS: Mac, Windows and Ubuntu Linux (tested on 6.14.0-33-generic)
+- Docker: Version 28.5.1+ with Docker Compose support
+- Python: 3.8+ (for local installation, optional)
+- Memory: Minimum 2GB RAM recommended
+- Storage: 1GB free space
 
-- **OS**: Mac, Windows and Ubuntu Linux (tested on 6.14.0-33-generic)
-- **Docker**: Version 28.5.1+ with Docker Compose support
-- **Python**: 3.8+ (for local installation, optional)
-- **Memory**: Minimum 2GB RAM recommended
-- **Storage**: 1GB free space
-
-## 🚀 Step-by-Step Setup
+## Step-by-Step Setup
 
 ### Step 1: Project Preparation
 
@@ -35,58 +33,18 @@ chmod +x install.sh
 ./install.sh
 ```
 
-**Expected Output:**
-```
-🧬 BioAnalyzer System Installation
-==================================
-[INFO] Installing BioAnalyzer for current user.
-[INFO] Creating installation directory: /home/<computer_user_bame>/.local/bin
-[INFO] BioAnalyzer backend directory: /home/<computer_user_bame>/Desktop/new/bioanalyzer-backend
-[INFO] Installing BioAnalyzer command...
-[SUCCESS] BioAnalyzer command installed successfully!
-```
-
 ### Step 3: Docker Setup (Recommended)
 
 Since modern Linux distributions have externally managed Python environments, Docker is the recommended approach:
 
 ```bash
-# Build Docker image
 docker compose build
-```
-
-**Expected Output:**
-```
-[+] Building 8.2s (8/8) FINISHED
-=> [internal] load build definition from Dockerfile
-=> [internal] load metadata for docker.io/library/python:3.11-slim
-=> [1/8] FROM docker.io/library/python:3.11-slim
-=> [2/8] WORKDIR /app
-=> [3/8] RUN apt-get update && apt-get install -y gcc g++ curl git
-=> [4/8] COPY config/requirements.txt .
-=> [5/8] RUN pip install --no-cache-dir -r requirements.txt
-=> [6/8] COPY . .
-=> [7/8] RUN mkdir -p cache logs results
-=> [8/8] RUN chmod +x cli.py
-=> exporting to image
-=> naming to docker.io/library/bioanalyzer-backend-bioanalyzer-backend
 ```
 
 ### Step 4: Start Application
 
 ```bash
-# Start application in background
 docker compose up -d
-```
-
-**Expected Output:**
-```
-Network bioanalyzer-backend_default  Creating
-Network bioanalyzer-backend_default  Created
-Container bioanalyzer-backend-bioanalyzer-backend-1  Creating
-Container bioanalyzer-backend-bioanalyzer-backend-1  Created
-Container bioanalyzer-backend-bioanalyzer-backend-1  Starting
-Container bioanalyzer-backend-bioanalyzer-backend-1  Started
 ```
 
 ### Step 5: Verification
@@ -96,42 +54,15 @@ Container bioanalyzer-backend-bioanalyzer-backend-1  Started
 docker compose ps
 ```
 
-**Expected Output:**
-```
-NAME                                        IMAGE                                     COMMAND                  SERVICE               CREATED         STATUS                            PORTS
-bioanalyzer-backend-bioanalyzer-backend-1   bioanalyzer-backend-bioanalyzer-backend   "python main.py --ho…"   bioanalyzer-backend   4 seconds ago   Up 4 seconds (health: starting)   0.0.0.0:8000->8000/tcp
-```
-
 #### Test API Health
 ```bash
 curl http://localhost:8000/health
 ```
 
-**Expected Output:**
-```json
-{"status":"healthy","timestamp":"2025-10-23T17:52:40.249451+00:00","version":"1.0.0"}
-```
-
 #### Test CLI Commands
 ```bash
-# Add CLI to PATH
 export PATH="$PATH:/home/<computer_user_name>/.local/bin"
-
-# Test fields command
 BioAnalyzer fields
-```
-
-**Expected Output:**
-```
-🧬 BioAnalyzer - BugSigDB Essential Fields
-==========================================
-
-📋 6 Essential Fields for BugSigDB Curation:
-
-🧬 Host Species (host_species):
-   Description: The host organism being studied (e.g., Human, Mouse, Rat)
-   Required: Yes
-...
 ```
 
 #### Test System Status
@@ -139,28 +70,16 @@ BioAnalyzer fields
 BioAnalyzer status
 ```
 
-**Expected Output:**
-```
-📊 BioAnalyzer System Status
-========================================
-Docker: ✅ Available
-Backend Image: ✅ Built
-Backend Container: ✅ Running
-API Health: ✅ Healthy
-🌐 Web Interface: http://localhost:3000
-🔧 API Documentation: http://localhost:8000/docs
-```
+## Access Points
 
-## 🌐 Access Points
+| Service | URL |
+|---------|-----|
+| API Server | http://localhost:8000 |
+| API Documentation | http://localhost:8000/docs |
+| Health Check | http://localhost:8000/health |
+| Fields Info | http://localhost:8000/api/v1/fields |
 
-| Service | URL | Status |
-|---------|-----|--------|
-| **API Server** | http://localhost:8000 | ✅ Running |
-| **API Documentation** | http://localhost:8000/docs | ✅ Available |
-| **Health Check** | http://localhost:8000/health | ✅ Healthy |
-| **Fields Info** | http://localhost:8000/api/v1/fields | ✅ Working |
-
-## 🔧 Configuration
+## Configuration
 
 ### Environment Variables (Optional)
 
@@ -253,7 +172,7 @@ docker compose ps
 docker compose logs --tail=20
 ```
 
-## 📊 System Status After Setup
+## System Status After Setup
 
 ✅ **Docker**: Available and working  
 ✅ **Backend Container**: Running and healthy  
@@ -262,7 +181,7 @@ docker compose logs --tail=20
 ✅ **Health Check**: All systems operational  
 ✅ **API Documentation**: Available at /docs  
 
-## 🎯 Next Steps
+## Next Steps
 
 1. **Configure API Keys** (optional): Set GEMINI_API_KEY and NCBI_API_KEY for full functionality
 2. **Test Analysis**: Try analyzing real PMIDs using the CLI or API

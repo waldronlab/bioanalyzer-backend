@@ -1,45 +1,32 @@
 # RAG Features Guide
 
-Comprehensive guide to BioAnalyzer's Retrieval-Augmented Generation (RAG) features for enhanced paper analysis.
-
-## Table of Contents
-
-- [Overview](#overview)
-- [What is RAG?](#what-is-rag)
-- [RAG Architecture](#rag-architecture)
-- [Configuration](#configuration)
-- [Usage Examples](#usage-examples)
-- [API Reference](#api-reference)
-- [Migration Guide](#migration-guide)
-- [Troubleshooting](#troubleshooting)
-- [Best Practices](#best-practices)
+Guide to BioAnalyzer's Retrieval-Augmented Generation (RAG) features for paper analysis.
 
 ## Overview
 
-BioAnalyzer's RAG (Retrieval-Augmented Generation) system enhances paper analysis by:
+BioAnalyzer's RAG system enhances paper analysis with:
 
-- **Contextual Summarization**: Generate query-aware summaries of relevant text chunks
-- **Chunk Re-ranking**: Prioritize the most relevant chunks for each field extraction
-- **Improved Accuracy**: Better field extraction through better context understanding
-- **Performance Optimization**: Caching and efficient processing
+- Contextual summarization: Query-aware summaries of relevant text chunks
+- Chunk re-ranking: Prioritizes the most relevant chunks for each field extraction
+- Improved accuracy: Better field extraction through better context understanding
+- Performance optimization: Caching and efficient processing
 
-RAG features are available in the **v2 API** endpoints, while the **v1 API** provides simple analysis for backward compatibility.
+RAG features are available in the v2 API endpoints. The v1 API provides simple analysis for backward compatibility.
 
-## What is RAG?
+## How RAG Works
 
-RAG (Retrieval-Augmented Generation) combines information retrieval with language model generation. In BioAnalyzer:
+RAG combines information retrieval with language model generation:
 
-1. **Retrieval**: Text chunks are retrieved from the paper
-2. **Re-ranking**: Chunks are ranked by relevance to the specific field being extracted
-3. **Summarization**: Top chunks are summarized with context about the query
-4. **Generation**: The LLM uses these summaries to extract field information
+1. Retrieval: Text chunks are retrieved from the paper
+2. Re-ranking: Chunks are ranked by relevance to the specific field being extracted
+3. Summarization: Top chunks are summarized with context about the query
+4. Generation: The LLM uses these summaries to extract field information
 
-### Why Use RAG?
-
-- **Better Context**: Query-aware summaries provide focused context
-- **Improved Accuracy**: Re-ranking ensures the most relevant information is used
-- **Handles Long Papers**: Efficiently processes full-text papers
-- **Field-Specific**: Each field gets context tailored to its extraction needs
+Benefits:
+- Better context through query-aware summaries
+- Improved accuracy by using the most relevant information
+- Handles long papers efficiently
+- Field-specific context for each extraction
 
 ## RAG Architecture
 
@@ -91,30 +78,30 @@ rag_service = AdvancedRAGService(
 )
 ```
 
-**Features:**
+Features:
 - Combines re-ranking and summarization
 - Configurable quality and speed settings
 - Automatic caching of summaries
 
 #### ChunkReRanker
 
-Re-ranks text chunks by relevance to the query:
+Re-ranks text chunks by relevance to the query.
 
-**Methods:**
+Methods:
 
-1. **Keyword** (`keyword`):
+1. Keyword (`keyword`):
    - Fast keyword-based scoring
    - No LLM required
    - Good for simple queries
    - Fastest method
 
-2. **LLM** (`llm`):
+2. LLM (`llm`):
    - Accurate LLM-based relevance scoring
    - Uses semantic understanding
    - Most accurate method
    - Slower than keyword
 
-3. **Hybrid** (`hybrid`) - **Recommended**:
+3. Hybrid (`hybrid`) - Recommended:
    - Combines keyword and LLM methods
    - Best balance of speed and accuracy
    - Default method
@@ -131,9 +118,9 @@ reranker = ChunkReRanker(
 
 #### ContextualSummarizationService
 
-Generates query-aware summaries of text chunks:
+Generates query-aware summaries of text chunks.
 
-**Configuration:**
+Configuration:
 - `summary_length`: `short`, `medium`, `long`
 - `quality`: `fast`, `balanced`, `high`
 - `max_key_points`: Maximum key points per summary

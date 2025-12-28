@@ -1,9 +1,4 @@
-"""
-Web Scraper Service for BioAnalyzer
-
-Uses Paper-QA's html2text pattern combined with requests for web scraping.
-Extracts study content to markdown format and downloads linked files.
-"""
+"""Web scraper service using html2text for converting web pages to markdown."""
 import asyncio
 import logging
 import re
@@ -20,62 +15,28 @@ logger = logging.getLogger(__name__)
 
 
 class WebScraperService:
-    """
-    Web scraper service that converts web pages to markdown.
+    """Web scraper service that converts web pages to markdown."""
     
-    Uses html2text (from Paper-QA) for HTML to Markdown conversion
-    and BeautifulSoup for link extraction.
-    """
-    
-    def __init__(
-        self,
-        download_dir: str = "downloads",
-        max_file_size_mb: int = 50,
-        timeout: int = 30
-    ):
-        """
-        Initialize the web scraper.
-        
-        Args:
-            download_dir: Directory to save downloaded files
-            max_file_size_mb: Maximum file size to download in MB
-            timeout: Request timeout in seconds
-        """
+    def __init__(self, download_dir: str = "downloads", max_file_size_mb: int = 50, timeout: int = 30):
+        """Initialize web scraper."""
         self.download_dir = Path(download_dir)
         self.download_dir.mkdir(parents=True, exist_ok=True)
         self.max_file_size = max_file_size_mb * 1024 * 1024
         self.timeout = timeout
         
-        # File extensions to download
         self.downloadable_extensions = {
             '.pdf', '.png', '.jpg', '.jpeg', '.gif', '.svg',
             '.xlsx', '.xls', '.csv', '.zip', '.tar', '.gz'
         }
         
-        # Image extensions for visual LLM processing
         self.image_extensions = {'.png', '.jpg', '.jpeg', '.gif', '.svg'}
     
     async def scrape_url_to_markdown(self, url: str) -> dict:
-        """
-        Scrape a URL and convert to markdown.
-        
-        Args:
-            url: URL to scrape
-            
-        Returns:
-            Dictionary containing:
-                - markdown: Converted markdown text
-                - images: List of image URLs
-                - files: List of downloaded file paths
-                - links: List of all extracted links
-        """
+        """Scrape URL and convert to markdown."""
         try:
             logger.info(f"Scraping URL: {url}")
             
-            # Fetch HTML content
             html_content = await self._fetch_html(url)
-            
-            # Parse HTML
             soup = BeautifulSoup(html_content, 'html.parser')
             
             # Extract links before conversion
@@ -137,7 +98,7 @@ class WebScraperService:
             absolute_url = urljoin(base_url, href)
             links.append(absolute_url)
         
-        return list(set(links))  # Remove duplicates
+        return list(set(links))
     
     def _is_image_url(self, url: str) -> bool:
         """Check if URL points to an image."""
@@ -229,10 +190,8 @@ class WebScraperService:
         parsed = urlparse(url)
         path = parsed.path
         
-        # Get the last part of the path
         filename = Path(path).name
         
-        # If no filename, generate one from the URL
         if not filename or '.' not in filename:
             # Use hash of URL as filename
             import hashlib

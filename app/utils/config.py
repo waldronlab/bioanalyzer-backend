@@ -2,15 +2,11 @@ import os
 from pathlib import Path
 import logging
 
-# Graceful python-dotenv import: keep backend usable even if optional dep is missing
 try:
     from dotenv import load_dotenv  # type: ignore
-except ImportError:  # pragma: no cover - safety net for bare installs
+except ImportError:
     def load_dotenv(*args, **kwargs):  # type: ignore[no-redef]
-        """
-        Lightweight fallback when python-dotenv is not installed.
-        We simply skip .env loading and log a clear warning once.
-        """
+        """Fallback when python-dotenv is not installed."""
         logger = logging.getLogger(__name__)
         logger.warning(
             "python-dotenv not installed; .env files will not be auto-loaded. "
@@ -19,8 +15,6 @@ except ImportError:  # pragma: no cover - safety net for bare installs
 
 import google.generativeai as genai
 
-# Load environment variables from .env file
-# Try multiple possible locations for .env file
 possible_env_paths = [
     Path(__file__).parents[1] / '.env',  # Original location
     Path('/app/.env'),  # Docker container location
@@ -36,26 +30,20 @@ for env_path in possible_env_paths:
         break
 
 if not env_loaded:
-    # Fallback: try loading from current directory
     load_dotenv()
 
-# API Keys
 NCBI_API_KEY = os.getenv('NCBI_API_KEY', '')
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY', '')
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY', '')
 ANTHROPIC_API_KEY = os.getenv('ANTHROPIC_API_KEY', '')
 EMAIL = os.getenv('EMAIL', '')
 
-# LLM Provider Configuration
-# Supported providers: openai, anthropic, gemini, ollama, llamafile
-LLM_PROVIDER = os.getenv('LLM_PROVIDER', '').lower() or None  # Auto-detect if not set
-LLM_MODEL = os.getenv('LLM_MODEL', '') or None  # Use provider default if not set
+LLM_PROVIDER = os.getenv('LLM_PROVIDER', '').lower() or None
+LLM_MODEL = os.getenv('LLM_MODEL', '') or None
 
-# Model Configuration (backward compatibility)
 DEFAULT_MODEL = os.getenv('DEFAULT_MODEL', 'gemini')
 AVAILABLE_MODELS = []
 
-# Initialize available models
 if GEMINI_API_KEY:
     AVAILABLE_MODELS.append('gemini')
 if OPENAI_API_KEY:

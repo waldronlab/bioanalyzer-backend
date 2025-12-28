@@ -1,6 +1,4 @@
-"""
-Shared utility functions for API endpoints.
-"""
+"""Utility functions for API endpoints."""
 import re
 import logging
 from typing import Dict, List, Optional
@@ -12,7 +10,6 @@ logger = logging.getLogger(__name__)
 
 def extract_taxa(text: str) -> List[str]:
     """Extract potential taxa from text."""
-    # This is a simplified implementation
     taxa_patterns = [
         r'\b[A-Z][a-z]+ [a-z]+\b',  # Genus species
         r'\b[A-Z][a-z]+\b',  # Genus only

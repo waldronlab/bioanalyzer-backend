@@ -1,9 +1,4 @@
-"""
-Paper-QA Agent Integration for BioAnalyzer
-
-This module integrates Paper-QA as an agent for BioAnalyzer, replacing direct
-Gemini API calls. Paper-QA supports multiple LLMs including Gemini via litellm.
-"""
+"""Paper-QA agent integration for BioAnalyzer."""
 import logging
 import os
 import tempfile
@@ -12,7 +7,6 @@ from typing import Dict, Optional, Union, List
 import asyncio
 import json
 
-# Paper-QA imports
 try:
     from paperqa import Docs, Settings
     from paperqa.settings import AgentSettings
@@ -29,27 +23,10 @@ logger = logging.getLogger(__name__)
 
 
 class PaperQAAgent:
-    """
-    Paper-QA Agent wrapper for BioAnalyzer.
+    """Paper-QA agent wrapper for BioAnalyzer."""
     
-    This class wraps Paper-QA's agent functionality to provide a unified
-    interface compatible with the existing BioAnalyzer codebase.
-    """
-    
-    def __init__(
-        self, 
-        api_key: Optional[str] = None, 
-        model: str = "gemini/gemini-2.0-flash",
-        paper_directory: Optional[Path] = None
-    ):
-        """
-        Initialize Paper-QA Agent.
-        
-        Args:
-            api_key: Gemini API key (or set GEMINI_API_KEY env var)
-            model: LLM model to use (default: gemini/gemini-2.0-flash)
-            paper_directory: Directory to store papers (optional)
-        """
+    def __init__(self, api_key: Optional[str] = None, model: str = "gemini/gemini-2.0-flash", paper_directory: Optional[Path] = None):
+        """Initialize Paper-QA agent."""
         if not PAPERQA_AVAILABLE:
             raise ImportError(
                 "Paper-QA is not installed. Please install it: "
@@ -64,16 +41,14 @@ class PaperQAAgent:
         if not self.api_key:
             logger.warning("No API key provided. Set GEMINI_API_KEY in your environment.")
         
-        # Configure Paper-QA settings with Gemini
         self.settings = Settings(
             llm=self.model,
             summary_llm=self.model,
             agent=AgentSettings(
                 agent_llm=self.model,
-                agent_type="simple",  # Use simple agent for faster responses
+                agent_type="simple",
             ),
             paper_directory=str(self.paper_directory),
-            # Use Gemini embedding if available, otherwise fallback
             embedding="gemini/text-embedding-004" if self.api_key else None,
         )
         
@@ -180,7 +155,6 @@ class PaperQAAgent:
             answer_text = response.session.answer if hasattr(response.session, 'answer') else str(response)
             
             # Parse the response to extract structured information
-            # For now, return a simplified structure
             return {
                 "analysis": answer_text,
                 "confidence": 0.8,
@@ -219,7 +193,6 @@ class PaperQAAgent:
             Dict with structured analysis results
         """
         try:
-            # Extract paper content from prompt if it's in a specific format
             # Otherwise, treat the entire prompt as the paper content
             content = prompt
             
@@ -326,7 +299,6 @@ class PaperQAAgent:
         try:
             docs = Docs()
             
-            # If context is provided, add it to docs
             if context:
                 temp_file = self.paper_directory / f"context_{hash(context)}.md"
                 temp_file.write_text(context, encoding='utf-8')

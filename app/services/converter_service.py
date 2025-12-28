@@ -1,9 +1,4 @@
-"""
-Converter Service for BioAnalyzer
-
-Converts downloaded files to markdown and merges with image descriptions.
-Uses Paper-QA's parsing functions for file conversion.
-"""
+"""Converter service for converting files to markdown and merging with image descriptions."""
 import asyncio
 import logging
 from pathlib import Path
@@ -16,49 +11,24 @@ logger = logging.getLogger(__name__)
 
 
 class ConverterService:
-    """
-    File converter service that merges study content with image descriptions.
-    
-    Uses Paper-QA's parsing functions to convert various file formats
-    to markdown and combines everything into a single enhanced document.
-    """
+    """File converter service for merging study content with image descriptions."""
     
     def __init__(self):
-        """Initialize the converter service."""
+        """Initialize converter service."""
         pass
     
-    async def create_enhanced_markdown(
-        self,
-        base_markdown: str,
-        image_descriptions: list[dict],
-        downloaded_files: list[dict],
-        source_url: str
-    ) -> str:
-        """
-        Create enhanced markdown by merging base content with images and files.
-        
-        Args:
-            base_markdown: Base markdown from web scraping
-            image_descriptions: List of dicts with 'url' and 'description'
-            downloaded_files: List of dicts with file info
-            source_url: Original source URL
-            
-        Returns:
-            Enhanced markdown string
-        """
+    async def create_enhanced_markdown(self, base_markdown: str, image_descriptions: list[dict], downloaded_files: list[dict], source_url: str) -> str:
+        """Create enhanced markdown by merging base content with images and files."""
         logger.info("Creating enhanced markdown document")
         
-        # Start with header
         enhanced = f"# Study Analysis\n\n"
         enhanced += f"**Source:** {source_url}\n\n"
         enhanced += "---\n\n"
         
-        # Add base content
         enhanced += "## Main Content\n\n"
         enhanced += base_markdown
         enhanced += "\n\n---\n\n"
         
-        # Add image descriptions
         if image_descriptions:
             enhanced += "## Figure Descriptions\n\n"
             for i, img_desc in enumerate(image_descriptions, 1):
@@ -68,7 +38,6 @@ class ConverterService:
                 enhanced += "\n\n"
             enhanced += "---\n\n"
         
-        # Add supplementary files
         if downloaded_files:
             enhanced += "## Supplementary Materials\n\n"
             

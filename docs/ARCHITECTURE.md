@@ -1,39 +1,24 @@
-# BioAnalyzer Backend Architecture Documentation
+# BioAnalyzer Backend Architecture
 
-## Table of Contents
-
-1. [System Overview](#system-overview)
-2. [Architecture Principles](#architecture-principles)
-3. [Component Architecture](#component-architecture)
-4. [Data Flow](#data-flow)
-5. [Service Layer Design](#service-layer-design)
-6. [API Design](#api-design)
-7. [CLI Architecture](#cli-architecture)
-8. [Error Handling Strategy](#error-handling-strategy)
-9. [Performance Considerations](#performance-considerations)
-10. [Security Architecture](#security-architecture)
-11. [Deployment Architecture](#deployment-architecture)
-12. [Monitoring and Observability](#monitoring-and-observability)
+BioAnalyzer Backend is a microservices-oriented system for scientific paper analysis and retrieval. Uses a layered architecture with clear separation of concerns.
 
 ## System Overview
 
-BioAnalyzer Backend is a microservices-oriented system designed for scientific paper analysis and retrieval. The system follows a layered architecture pattern with clear separation of concerns.
-
 ### Core Responsibilities
 
-- **Paper Retrieval**: Fetch metadata and full text from PubMed/PMC
-- **Field Analysis**: Extract 6 essential BugSigDB fields using AI
-- **Data Processing**: Transform and validate retrieved data
-- **API Services**: Provide RESTful endpoints for external consumption
-- **CLI Interface**: Command-line tools for direct user interaction
+- Paper Retrieval: Fetch metadata and full text from PubMed/PMC
+- Field Analysis: Extract 6 essential BugSigDB fields using AI
+- Data Processing: Transform and validate retrieved data
+- API Services: Provide RESTful endpoints for external consumption
+- CLI Interface: Command-line tools for direct user interaction
 
 ### System Characteristics
 
-- **Scalable**: Horizontal scaling through containerization
-- **Maintainable**: Modular design with clear interfaces
-- **Resilient**: Comprehensive error handling and fallback mechanisms
-- **Observable**: Built-in monitoring and logging capabilities
-- **Extensible**: Plugin architecture for new analysis methods
+- Scalable: Horizontal scaling through containerization
+- Maintainable: Modular design with clear interfaces
+- Resilient: Comprehensive error handling and fallback mechanisms
+- Observable: Built-in monitoring and logging capabilities
+- Extensible: Plugin architecture for new analysis methods
 
 ## Architecture Principles
 
@@ -73,26 +58,26 @@ Open for extension, closed for modification.
 
 ### Core Components
 
-#### 1. API Layer (`app/api/`)
+#### API Layer (`app/api/`)
 
-**Purpose**: Handle HTTP requests and responses
+Handles HTTP requests and responses.
 
-**Components**:
+Components:
 - `app.py`: FastAPI application instance
 - `routers/`: Route handlers for different endpoints
 - `models/`: Pydantic models for request/response validation
 - `utils/`: API-specific utilities
 
-**Responsibilities**:
+Responsibilities:
 - Request validation and parsing
 - Response formatting
 - Authentication and authorization
 - Rate limiting
 - Error handling and logging
 
-#### 2. Service Layer (`app/services/`)
+#### Service Layer (`app/services/`)
 
-**Purpose**: Implement business logic and orchestrate operations
+Implements business logic and orchestrates operations.
 
 **Components**:
 - `data_retrieval.py`: Core PubMed data retrieval

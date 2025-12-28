@@ -1,9 +1,4 @@
-"""
-Contextual Summarization Service (RCS - Retrieval Contextual Summarization)
-
-Implements advanced RAG with contextual summarization for better field extraction accuracy.
-Creates contextual summaries of evidence chunks based on the query/field being extracted.
-"""
+"""Contextual summarization service for creating query-aware summaries of text chunks."""
 import logging
 import hashlib
 import json
@@ -13,7 +8,6 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-# Try to import LiteLLM for summarization
 try:
     from app.models.llm_provider import LLMProviderManager, LITELLM_AVAILABLE
 except ImportError:
@@ -39,20 +33,15 @@ class ChunkSummary:
 @dataclass
 class SummarizationConfig:
     """Configuration for contextual summarization."""
-    summary_length: str = "medium"  # "short", "medium", "long"
-    quality: str = "balanced"  # "fast", "balanced", "high"
+    summary_length: str = "medium"
+    quality: str = "balanced"
     max_key_points: int = 5
-    temperature: float = 0.3  # Lower for more focused summaries
+    temperature: float = 0.3
     use_cache: bool = True
 
 
 class ContextualSummarizationService:
-    """
-    Service for creating contextual summaries of text chunks.
-    
-    Uses Retrieval Contextual Summarization (RCS) to create query-aware summaries
-    that improve field extraction accuracy.
-    """
+    """Service for creating contextual summaries of text chunks."""
     
     def __init__(
         self,
@@ -61,25 +50,14 @@ class ContextualSummarizationService:
         cache_dir: Optional[str] = None,
         config: Optional[SummarizationConfig] = None
     ):
-        """
-        Initialize the contextual summarization service.
-        
-        Args:
-            summary_llm_provider: LLM provider for summarization (can be cheaper/faster)
-            summary_llm_model: Model for summarization
-            cache_dir: Directory to cache summaries
-            config: Summarization configuration
-        """
+        """Initialize contextual summarization service."""
         self.config = config or SummarizationConfig()
         self.cache_dir = Path(cache_dir) if cache_dir else Path("cache/summaries")
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         
-        # Initialize summary LLM (can be different from main LLM)
         self.summary_llm = None
         if LITELLM_AVAILABLE and LLMProviderManager:
             try:
-                # Use a faster/cheaper model for summarization if available
-                # Default to same provider but can be overridden
                 self.summary_llm = LLMProviderManager(
                     provider=summary_llm_provider,
                     model=summary_llm_model
@@ -92,7 +70,6 @@ class ContextualSummarizationService:
                 logger.warning(f"Failed to initialize summary LLM: {e}")
                 self.summary_llm = None
         
-        # Summary prompt templates
         self.summary_templates = self._create_summary_templates()
     
     def _create_summary_templates(self) -> Dict[str, str]:
@@ -136,12 +113,12 @@ Summary should:
         }
     
     def _get_cache_key(self, chunk_text: str, query: str, summary_length: str) -> str:
-        """Generate a cache key for a summary."""
+        """Generate cache key for summary."""
         content = f"{chunk_text[:500]}_{query}_{summary_length}"
         return hashlib.md5(content.encode()).hexdigest()
     
     def _load_cached_summary(self, cache_key: str) -> Optional[Dict]:
-        """Load a cached summary if available."""
+        """Load cached summary if available."""
         if not self.config.use_cache:
             return None
         
@@ -155,7 +132,7 @@ Summary should:
         return None
     
     def _save_cached_summary(self, cache_key: str, summary_data: Dict):
-        """Save a summary to cache."""
+        """Save summary to cache."""
         if not self.config.use_cache:
             return
         
@@ -166,28 +143,12 @@ Summary should:
         except Exception as e:
             logger.warning(f"Failed to save cached summary: {e}")
     
-    async def summarize_chunk(
-        self,
-        chunk: Text,
-        query: str,
-        summary_length: Optional[str] = None
-    ) -> ChunkSummary:
-        """
-        Create a contextual summary of a text chunk based on a query.
-        
-        Args:
-            chunk: Text chunk to summarize
-            query: Query/field being extracted (provides context)
-            summary_length: Override config summary_length
-            
-        Returns:
-            ChunkSummary with summary and relevance information
-        """
+    async def summarize_chunk(self, chunk: Text, query: str, summary_length: Optional[str] = None) -> ChunkSummary:
+        """Create contextual summary of text chunk based on query."""
         summary_length = summary_length or self.config.summary_length
         chunk_text = chunk.text if hasattr(chunk, 'text') else str(chunk)
         chunk_id = getattr(chunk, 'name', f"chunk_{id(chunk)}")
         
-        # Check cache
         cache_key = self._get_cache_key(chunk_text, query, summary_length)
         cached = self._load_cached_summary(cache_key)
         if cached:
@@ -202,7 +163,6 @@ Summary should:
                 confidence=cached.get('confidence', 0.8)
             )
         
-        # Generate summary using LLM
         template = self.summary_templates.get(summary_length, self.summary_templates["medium"])
         prompt = template.format(query=query, text=chunk_text[:3000])  # Limit text length
         
