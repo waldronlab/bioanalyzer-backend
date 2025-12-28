@@ -1,15 +1,15 @@
 # BugSigDB Analyzer Docker Deployment Guide
 
-This guide provides comprehensive instructions for deploying the BugSigDB Analyzer using Docker and Docker Compose.
+Instructions for deploying the BugSigDB Analyzer using Docker and Docker Compose.
 
-## 🐳 Prerequisites
+## Prerequisites
 
 - Docker 20.0+ 
 - Docker Compose 2.0+ (or `docker compose` command)
 - At least 4GB RAM available
 - At least 10GB disk space
 
-## 🚀 Quick Start
+## Quick Start
 
 ### 1. Clone and Setup
 
@@ -63,7 +63,7 @@ docker compose -f docker-compose.prod.yml up -d
 docker compose -f docker-compose.prod.yml logs -f
 ```
 
-## 🏗️ Architecture Overview
+## Architecture Overview
 
 ```
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
@@ -84,24 +84,24 @@ docker compose -f docker-compose.prod.yml logs -f
                        └─────────────────┘
 ```
 
-## 📁 Configuration Files
+## Configuration Files
 
 ### Docker Compose Files
 
-- **`docker-compose.yml`**: Base configuration
-- **`docker-compose.dev.yml`**: Development environment
-- **`docker-compose.prod.yml`**: Production environment
+- `docker-compose.yml`: Base configuration
+- `docker-compose.dev.yml`: Development environment
+- `docker-compose.prod.yml`: Production environment
 
 ### Nginx Configuration
 
-- **`nginx/nginx.conf`**: Production Nginx configuration
-- **`nginx/nginx.dev.conf`**: Development Nginx configuration
+- `nginx/nginx.conf`: Production Nginx configuration
+- `nginx/nginx.dev.conf`: Development Nginx configuration
 
 ### Monitoring
 
 - **`monitoring/prometheus.yml`**: Prometheus metrics configuration
 
-## 🔧 Service Configuration
+## Service Configuration
 
 ### FastAPI Application
 
@@ -165,7 +165,7 @@ All services include built-in health checks:
 - **Redis**: `redis-cli ping` command
 - **PostgreSQL**: `pg_isready` command
 
-## 📊 Monitoring and Logging
+## Monitoring and Logging
 
 ### Prometheus Metrics
 

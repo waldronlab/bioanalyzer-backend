@@ -1,29 +1,17 @@
 # BioAnalyzer Settings System
 
-The BioAnalyzer settings system provides a flexible, configuration system with support for multiple loading sources, preset configurations, settings inheritance, and migration.
-
-## Table of Contents
-
-- [Overview](#overview)
-- [Quick Start](#quick-start)
-- [Settings Schema](#settings-schema)
-- [Loading Settings](#loading-settings)
-- [Preset Configurations](#preset-configurations)
-- [Settings Inheritance](#settings-inheritance)
-- [CLI Commands](#cli-commands)
-- [Migration](#migration)
-- [API Reference](#api-reference)
+Flexible configuration system with support for multiple loading sources, preset configurations, settings inheritance, and migration.
 
 ## Overview
 
 The settings system uses Pydantic models for validation and supports:
 
-- ✅ **Multiple loading sources**: File (JSON/YAML), environment variables, CLI arguments
-- ✅ **Preset configurations**: Fast, balanced, high_quality, development, production
-- ✅ **Settings inheritance**: Inherit from base settings files
-- ✅ **Validation**: Automatic validation with helpful error messages
-- ✅ **CLI commands**: View, save, load, and manage settings
-- ✅ **Migration**: Migrate old settings to new format
+- Multiple loading sources: File (JSON/YAML), environment variables, CLI arguments
+- Preset configurations: Fast, balanced, high_quality, development, production
+- Settings inheritance: Inherit from base settings files
+- Validation: Automatic validation with helpful error messages
+- CLI commands: View, save, load, and manage settings
+- Migration: Migrate old settings to new format
 
 ## Quick Start
 
@@ -124,11 +112,11 @@ The settings are organized into logical groups:
 
 Settings are loaded with the following priority (highest to lowest):
 
-1. **CLI overrides** (highest priority)
-2. **File settings** (JSON or YAML)
-3. **Preset settings**
-4. **Environment variables**
-5. **Defaults** (lowest priority)
+1. CLI overrides (highest priority)
+2. File settings (JSON or YAML)
+3. Preset settings
+4. Environment variables
+5. Defaults (lowest priority)
 
 ### From File
 

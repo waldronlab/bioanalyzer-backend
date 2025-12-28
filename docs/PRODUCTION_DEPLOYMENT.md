@@ -1,18 +1,6 @@
 # Production Deployment Guide
 
-This guide covers deploying BioAnalyzer Backend to production with best practices for security, performance, and maintainability.
-
-## Table of Contents
-
-1. [Prerequisites](#prerequisites)
-2. [Environment Configuration](#environment-configuration)
-3. [Docker Production Setup](#docker-production-setup)
-4. [Security Considerations](#security-considerations)
-5. [Performance Optimization](#performance-optimization)
-6. [Monitoring and Logging](#monitoring-and-logging)
-7. [Scaling and High Availability](#scaling-and-high-availability)
-8. [Backup and Recovery](#backup-and-recovery)
-9. [Troubleshooting](#troubleshooting)
+Guide for deploying BioAnalyzer Backend to production with best practices for security, performance, and maintainability.
 
 ## Prerequisites
 
