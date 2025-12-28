@@ -1,6 +1,4 @@
-"""
-System endpoints for health checks, configuration, and metrics.
-"""
+"""System endpoints for health checks, configuration, and metrics."""
 from fastapi import APIRouter, HTTPException
 from typing import Dict, List, Optional, Any
 import logging
@@ -28,12 +26,11 @@ from app.api.utils.api_utils import get_current_timestamp
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1", tags=["System"])
 
-# Lazy initialization of services to prevent startup failures
 _unified_qa = None
 _pubmed_retriever = None
 
 def get_unified_qa():
-    """Lazy initialization of UnifiedQA service."""
+    """Get or initialize UnifiedQA instance."""
     global _unified_qa
     if _unified_qa is None:
         try:
@@ -44,7 +41,7 @@ def get_unified_qa():
     return _unified_qa
 
 def get_pubmed_retriever():
-    """Lazy initialization of PubMedRetriever service."""
+    """Get or initialize PubMedRetriever instance."""
     global _pubmed_retriever
     if _pubmed_retriever is None:
         try:
@@ -64,21 +61,9 @@ async def root():
 
 @router.get("/health")
 async def health_check():
-    """
-    **Health check endpoint to verify the service is running.**
-    
-    This endpoint provides basic health status information
-    and can be used for load balancer health checks.
-    
-    **Response:**
-    Returns service health status and basic information.
-    """
+    """Health check endpoint to verify service is running."""
     try:
-        # Basic health check - lightweight, no service initialization required
         current_time = get_current_timestamp()
-        
-        # Simple health check - just verify the API is responding
-        # Don't initialize services here to keep it fast and reliable
         return HealthResponse(
             status="healthy",
             timestamp=current_time,
@@ -219,15 +204,12 @@ async def get_metrics():
     Returns comprehensive system metrics.
     """
     try:
-        # Get performance metrics from the logger
         perf_metrics = perf_logger.get_metrics()
         
-        # Get system resource metrics
         memory_info = psutil.virtual_memory()
         cpu_percent = psutil.cpu_percent(interval=1)
         disk_usage = psutil.disk_usage('/')
         
-        # Calculate cache hit rate (if available)
         cache_hit_rate = 0.0
         try:
             from app.services.cache_manager import CacheManager
@@ -268,16 +250,12 @@ async def get_system_status():
     Returns detailed system status information.
     """
     try:
-        # Get basic health status
         health_status = await health_check()
         
-        # Get configuration
         config = await get_config()
         
-        # Get metrics
         metrics = await get_metrics()
         
-        # Get Gemini health
         gemini_health = await gemini_health_check()
         
         # System uptime (approximate)
@@ -376,7 +354,6 @@ async def ask_question(request: Dict[str, Any]):
         
         logger.info(f"Q&A request: {question[:100]}...")
         
-        # Use UnifiedQA to get the answer
         unified_qa = get_unified_qa()
         if unified_qa is None:
             raise HTTPException(

@@ -1,10 +1,4 @@
-"""
-PubMed Data Retrieval Service
-=============================
-
-This module provides comprehensive PubMed data retrieval capabilities including
-metadata extraction and full text retrieval from PubMed Central (PMC).
-"""
+"""PubMed data retrieval service for metadata and full text extraction."""
 
 import requests
 import time
@@ -13,11 +7,9 @@ import logging
 from typing import List, Dict, Any, Optional
 from xml.etree import ElementTree
 
-# Import configuration with fallback values
 try:
     from app.utils.config import NCBI_RATE_LIMIT_DELAY, API_TIMEOUT, USE_FULLTEXT
 except ImportError:
-    # Fallback configuration if config module is not available
     NCBI_RATE_LIMIT_DELAY = 0.34
     API_TIMEOUT = 30
     USE_FULLTEXT = True
@@ -31,26 +23,14 @@ class PubMedRetrieverError(Exception):
 
 
 class PubMedRetriever:
-    """
-    Retrieves paper metadata and abstracts from PubMed using the NCBI E-Utilities API.
-    
-    This class provides comprehensive PubMed data retrieval capabilities including
-    metadata extraction, full text retrieval from PubMed Central, and robust error
-    handling for network issues and API limitations.
-    """
+    """Retrieves paper metadata and full text from PubMed using NCBI E-Utilities API."""
 
     BASE_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
     DEFAULT_TIMEOUT = 10
     MAX_RETRIES = 3
 
     def __init__(self, api_key: Optional[str] = None, email: str = "bioanalyzer@example.com"):
-        """
-        Initialize the PubMed retriever.
-        
-        Args:
-            api_key: Optional NCBI API key for higher rate limits
-            email: Contact email for NCBI (required for API usage)
-        """
+        """Initialize PubMed retriever with API key and email."""
         self.api_key = api_key
         self.email = email
         self.session = self._create_session()
@@ -65,39 +45,25 @@ class PubMedRetriever:
         return session
 
     def _verify_connectivity(self, retries: int = 3) -> None:
-        """
-        Test NCBI E-utilities reachability on startup with retries.
-        Logs actionable hints if not reachable.
-        """
+        """Test NCBI E-utilities reachability on startup with retries."""
         test_url = f"{self.BASE_URL}/esearch.fcgi"
         params = {"db": "pubmed", "term": "cancer", "retmax": 1}
         for attempt in range(retries):
             try:
-                # Use API_TIMEOUT from config (fallback to 10s if unset)
                 timeout_val = API_TIMEOUT if API_TIMEOUT else 10
                 resp = self.session.get(test_url, params=params, timeout=timeout_val)
                 resp.raise_for_status()
-                logger.info("✅ NCBI E-utilities reachable.")
-                return  # Success, exit early
+                logger.info("NCBI E-utilities reachable")
+                return
             except requests.exceptions.RequestException as e:
                 logger.warning(f"NCBI connectivity check failed (attempt {attempt+1}/{retries}): {e}")
                 if attempt < retries - 1:
-                    time.sleep(2 ** attempt)  # Exponential backoff
+                    time.sleep(2 ** attempt)
                 else:
-                    logger.warning(
-                        "⚠️ Unable to reach NCBI E-utilities after retries. Check your internet, firewall, or API key.\n"
-                        f"Details: {e}\n"
-                        "The app will continue with limited functionality (e.g., cached data only)."
-                    )
+                    logger.warning(f"Unable to reach NCBI E-utilities after retries: {e}. App will continue with limited functionality.")
 
     def _make_request(self, endpoint: str, params: Dict[str, Any], retries: int = None) -> Optional[str]:
-        """
-        Make a request to NCBI E-utilities with retry logic and rate limiting.
-        
-        Args:
-            endpoint: The E-utilities endpoint to call
-            params: Parameters for the request
-            retries: Number of retry attempts (defaults to MAX_RETRIES)
+        """Make request to NCBI E-utilities with retry logic and rate limiting."""
             
         Returns:
             Response text or None if all retries failed
@@ -157,7 +123,7 @@ class PubMedRetriever:
             time.sleep(backoff_time)
             return True
         
-        logger.error(f"❌ PubMed request failed after {max_retries} attempts: {error}")
+        logger.error(f"PubMed request failed after {max_retries} attempts: {error}")
         return False
     
     def _calculate_backoff_time(self, attempt: int, is_rate_limited: bool) -> float:
@@ -175,14 +141,14 @@ class PubMedRetriever:
         xml_data = self._make_request("efetch.fcgi", {"db": "pubmed", "id": pmid, "retmode": "xml"})
 
         if not xml_data:
-            logger.error(f"❌ No data returned from PubMed for PMID {pmid}.")
+            logger.error(f"No data returned from PubMed for PMID {pmid}")
             return {"error": "PubMed unreachable or invalid response."}
 
         try:
             root = ElementTree.fromstring(xml_data)
             article = root.find(".//PubmedArticle/MedlineCitation/Article")
             if article is None:
-                logger.warning(f"⚠️ No article node found for PMID {pmid}.")
+                logger.warning(f"No article node found for PMID {pmid}")
                 return {"error": "No article metadata found."}
 
             title = article.findtext("ArticleTitle", default="N/A")
@@ -256,18 +222,13 @@ class PubMedRetriever:
         return await asyncio.to_thread(self.fetch_paper_metadata, pmid)
 
     def get_pmc_fulltext(self, pmid: str) -> str:
-        """
-        Retrieve full text from PubMed Central (PMC) if available.
-        This method attempts to find the PMC ID and retrieve the full text.
-        """
+        """Retrieve full text from PubMed Central if available."""
         try:
-            # First, try to get PMC ID from PubMed
             pmc_id = self._get_pmc_id_from_pmid(pmid)
             if not pmc_id:
                 logger.info(f"No PMC ID found for PMID {pmid}")
                 return ""
             
-            # Retrieve full text from PMC
             return self._get_pmc_fulltext_by_id(pmc_id)
             
         except Exception as e:
@@ -288,12 +249,9 @@ class PubMedRetriever:
                 return None
                 
             root = ElementTree.fromstring(xml_data)
-            # Look for LinkSetDb with PMC links
             for linksetdb in root.findall(".//LinkSetDb"):
-                # Check if DbTo child element equals "pmc"
                 db_to_elem = linksetdb.find("DbTo")
                 if db_to_elem is not None and db_to_elem.text == "pmc":
-                    # Look for the direct PMC link (not references)
                     link_name_elem = linksetdb.find("LinkName")
                     if link_name_elem is not None and link_name_elem.text == "pubmed_pmc":
                         for id_elem in linksetdb.findall(".//Id"):

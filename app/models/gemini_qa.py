@@ -13,19 +13,18 @@ import time
 logger = logging.getLogger(__name__)
 
 class GeminiQA:
-    """Enhanced QA system using an external model API for biomedical paper analysis."""
+    """QA system using Gemini API for biomedical paper analysis."""
 
     def __init__(self, api_key: Optional[str] = None, model: str = "gemini-2.5-flash", results_dir: Optional[Path] = None):
         self.api_key = api_key or os.getenv("GEMINI_API_KEY", "")
         self.model = model
-        logger.info(f"Initializing GeminiQA with model: {self.model}")  # Debug log for model name
+        logger.info(f"Initializing GeminiQA with model: {self.model}")
         self.results_dir = results_dir or Path("results")
         self.results_dir.mkdir(parents=True, exist_ok=True)
         if not self.api_key:
             logger.warning("No model API key provided. Set GEMINI_API_KEY in your environment.")
         genai.configure(api_key=self.api_key)
         
-        # Debug: List available Gemini models
         try:
             available_models = [m.name for m in genai.list_models() if 'gemini' in m.name.lower()]
             logger.info(f"Available Gemini models: {available_models}")

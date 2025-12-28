@@ -1,15 +1,4 @@
-"""
-Advanced RAG Service with Contextual Summarization
-
-Integrates contextual summarization and re-ranking for improved field extraction.
-
-Features:
-- Evidence retrieval with embedding search
-- LLM-based re-ranking with 0-10 relevance scale
-- Configurable evidence_k parameter
-- max_sources parameter for final answer
-- Performance metrics tracking
-"""
+"""Advanced RAG service with contextual summarization and re-ranking."""
 import logging
 from typing import List, Dict, Optional, Tuple, Any
 from pathlib import Path
@@ -36,14 +25,7 @@ logger = logging.getLogger(__name__)
 
 
 class AdvancedRAGService:
-    """
-    Advanced RAG service that combines:
-    - Contextual summarization (RCS)
-    - Chunk re-ranking
-    - Relevance scoring
-    
-    Provides improved field extraction accuracy through better context understanding.
-    """
+    """Advanced RAG service combining contextual summarization and chunk re-ranking."""
     
     def __init__(
         self,
@@ -55,19 +37,7 @@ class AdvancedRAGService:
         max_sources: Optional[int] = None,
         use_10_scale: bool = True
     ):
-        """
-        Initialize the advanced RAG service.
-        
-        Args:
-            summary_provider: LLM provider for summarization
-            summary_model: Model for summarization
-            rerank_method: Re-ranking method ("keyword", "llm", "hybrid")
-            cache_dir: Directory for caching summaries
-            evidence_k: Number of evidence chunks to retrieve before re-ranking
-            max_sources: Maximum number of sources to use for final answer
-            use_10_scale: Use 0-10 scale for LLM-based re-ranking (True) or 0-1.0 (False)
-        """
-        # Initialize summarization service
+        """Initialize advanced RAG service."""
         summary_config = SummarizationConfig(
             summary_length=RAG_SUMMARY_LENGTH,
             quality=RAG_SUMMARY_QUALITY,
@@ -82,7 +52,6 @@ class AdvancedRAGService:
             config=summary_config
         )
         
-        # Initialize re-ranker with evidence_k and 0-10 scale
         self.reranker = ChunkReRanker(
             rerank_method=rerank_method or RAG_RERANK_METHOD,
             llm_provider=summary_provider or RAG_SUMMARY_PROVIDER,
@@ -134,7 +103,7 @@ class AdvancedRAGService:
         ranked_chunks = await self.reranker.rerank_chunks(
             chunks=chunks,
             query=query,
-            top_k=top_k * 2,  # Get more chunks for summarization, then filter
+            top_k=top_k * 2,
             evidence_k=evidence_k
         )
         

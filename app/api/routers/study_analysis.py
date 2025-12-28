@@ -1,8 +1,4 @@
-"""
-Study Analysis API Router
-
-Handles URL-based study analysis requests.
-"""
+"""Study Analysis API Router for URL-based analysis."""
 import asyncio
 import logging
 import uuid
@@ -23,7 +19,6 @@ from app.utils.config import GEMINI_API_KEY
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1", tags=["Study Analysis"])
 
-# In-memory storage for job status (use Redis in production)
 job_store = {}
 
 
@@ -44,32 +39,16 @@ class JobStatus(BaseModel):
 
 
 @router.post("/analyze-url")
-async def analyze_url(
-    request: AnalyzeURLRequest,
-    background_tasks: BackgroundTasks
-) -> JobStatus:
-    """
-    Start analysis of a study URL.
-    
-    This endpoint initiates the complete workflow:
-    1. Scrape URL to markdown
-    2. Process images with visual LLM
-    3. Convert and merge content
-    4. Chunk and vectorize
-    5. Extract experiments and signatures
-    
-    Returns a job ID for tracking progress.
-    """
+async def analyze_url(request: AnalyzeURLRequest, background_tasks: BackgroundTasks) -> JobStatus:
+    """Start analysis of a study URL. Returns job ID for tracking progress."""
     job_id = str(uuid.uuid4())
     
-    # Initialize job status
     job_store[job_id] = JobStatus(
         job_id=job_id,
         status="pending",
         progress="Job queued"
     )
     
-    # Start background processing
     background_tasks.add_task(
         process_url_analysis,
         job_id=job_id,

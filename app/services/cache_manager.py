@@ -12,7 +12,7 @@ from app.utils.performance_logger import perf_logger
 logger = logging.getLogger(__name__)
 
 class CacheManager:
-    """Manages caching of analysis results and metadata to avoid repeated API calls."""
+    """Manages caching of analysis results and metadata."""
     
     def __init__(self, cache_dir: str = "cache", db_path: str = "cache/analysis_cache.db"):
         self.cache_dir = Path(cache_dir)
@@ -20,10 +20,8 @@ class CacheManager:
         self.db_path = Path(db_path)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         
-        # Initialize database
         self._init_database()
         
-        # Add connection pool for better performance
         self._connection_pool = []
         self._max_connections = 5
         
@@ -41,12 +39,11 @@ class CacheManager:
             conn.close()
     
     def _init_database(self):
-        """Initialize the SQLite database for caching analysis results."""
+        """Initialize SQLite database for caching."""
         try:
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
             
-            # Create tables if they don't exist
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS analysis_cache (
                     pmid TEXT PRIMARY KEY,
@@ -76,7 +73,6 @@ class CacheManager:
                 )
             ''')
             
-            # Create indexes for better performance
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_analysis_timestamp ON analysis_cache(timestamp)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_metadata_timestamp ON metadata_cache(timestamp)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_fulltext_timestamp ON fulltext_cache(timestamp)')

@@ -1,9 +1,4 @@
-"""
-BugSigDB Analysis API Router v2 - With RAG Support
-
-This router provides enhanced endpoints with RAG (Retrieval Augmented Generation)
-features including contextual summarization and chunk re-ranking.
-"""
+"""BugSigDB Analysis API Router v2 with RAG support."""
 from fastapi import APIRouter, HTTPException, Query
 from typing import Optional, List
 import logging

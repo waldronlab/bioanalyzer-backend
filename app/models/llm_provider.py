@@ -1,12 +1,4 @@
-"""
-LLM Provider Abstraction Layer using LiteLLM
-
-This module provides a unified interface for multiple LLM providers including:
-- OpenAI (GPT-4, GPT-4o, etc.)
-- Anthropic (Claude)
-- Google Gemini
-- Local models (Ollama, llamafile)
-"""
+"""LLM provider abstraction layer using LiteLLM for multiple providers."""
 import os
 import logging
 from typing import Optional, Dict, List, Any
@@ -14,7 +6,6 @@ from enum import Enum
 
 logger = logging.getLogger(__name__)
 
-# Try to import litellm
 try:
     import litellm
     LITELLM_AVAILABLE = True
@@ -34,13 +25,8 @@ class LLMProvider(str, Enum):
 
 
 class LLMProviderManager:
-    """
-    Manages LLM provider configuration and initialization.
+    """Manages LLM provider configuration and provides unified interface."""
     
-    Provides a unified interface for multiple LLM providers using LiteLLM.
-    """
-    
-    # Default models for each provider
     DEFAULT_MODELS = {
         LLMProvider.OPENAI: "gpt-4o",
         LLMProvider.ANTHROPIC: "claude-3-5-sonnet-20241022",
@@ -49,7 +35,6 @@ class LLMProviderManager:
         LLMProvider.LLAMAFILE: "llamafile/llama-3.2-3b",
     }
     
-    # Required environment variables for each provider
     REQUIRED_ENV_VARS = {
         LLMProvider.OPENAI: ["OPENAI_API_KEY"],
         LLMProvider.ANTHROPIC: ["ANTHROPIC_API_KEY"],
@@ -59,45 +44,27 @@ class LLMProviderManager:
     }
     
     def __init__(self, provider: Optional[str] = None, model: Optional[str] = None):
-        """
-        Initialize the LLM provider manager.
-        
-        Args:
-            provider: Provider name (openai, anthropic, gemini, ollama, llamafile)
-                    If None, auto-detect from environment variables
-            model: Model name (e.g., "gpt-4o", "claude-3-5-sonnet-20241022")
-                  If None, use default for provider
-        """
+        """Initialize LLM provider manager."""
         if not LITELLM_AVAILABLE:
-            raise ImportError(
-                "LiteLLM is not installed. Install with: pip install litellm"
-            )
+            raise ImportError("LiteLLM is not installed. Install with: pip install litellm")
         
-        # Auto-detect provider if not specified
         if provider is None:
             provider = self._detect_provider()
         
         try:
             self.provider = LLMProvider(provider.lower())
         except ValueError:
-            raise ValueError(
-                f"Unknown provider: {provider}. "
-                f"Supported providers: {[p.value for p in LLMProvider]}"
-            )
+            raise ValueError(f"Unknown provider: {provider}. Supported providers: {[p.value for p in LLMProvider]}")
         
-        # Set model
         self.model = model or self.DEFAULT_MODELS.get(self.provider, "gpt-4o")
         
-        # Validate provider configuration
         self._validate_provider_config()
-        
-        # Configure LiteLLM
         self._configure_litellm()
         
         logger.info(f"LLMProviderManager initialized: provider={self.provider.value}, model={self.model}")
     
     def _detect_provider(self) -> str:
-        """Auto-detect provider from environment variables."""
+        """Detect provider from environment variables."""
         # Check in order of preference
         if os.getenv("OPENAI_API_KEY"):
             return LLMProvider.OPENAI.value

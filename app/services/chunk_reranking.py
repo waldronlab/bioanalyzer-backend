@@ -1,15 +1,4 @@
-"""
-Chunk Re-ranking Service
-
-Implements re-ranking of evidence chunks based on relevance scoring.
-Uses cross-encoder or LLM-based re-ranking to improve retrieval quality.
-
-Features:
-- Evidence retrieval with embedding search
-- LLM-based re-ranking with 0-10 relevance scale
-- Configurable evidence_k parameter
-- Performance metrics tracking
-"""
+"""Chunk re-ranking service for relevance-based chunk prioritization."""
 import logging
 import time
 from typing import List, Tuple, Optional, Dict, Any
@@ -17,7 +6,6 @@ from dataclasses import dataclass, field
 
 logger = logging.getLogger(__name__)
 
-# Try to import LiteLLM for LLM-based re-ranking
 try:
     from app.models.llm_provider import LLMProviderManager, LITELLM_AVAILABLE
 except ImportError:
@@ -32,51 +20,29 @@ from paperqa.types import Text
 class RankedChunk:
     """Chunk with relevance ranking information."""
     chunk: Text
-    relevance_score: float  # 0-10 scale for LLM-based, 0-1.0 for keyword (normalized)
+    relevance_score: float
     rank: int
     reasoning: Optional[str] = None
-    processing_time: Optional[float] = None  # Time taken to score this chunk
+    processing_time: Optional[float] = None
 
 
 class ChunkReRanker:
-    """
-    Service for re-ranking chunks based on query relevance.
-    
-    Supports multiple re-ranking strategies:
-    - Keyword-based scoring (fast, no LLM needed) - uses 0-1.0 scale
-    - LLM-based relevance scoring (more accurate) - uses 0-10 scale
-    - Hybrid approach (combines both)
-    
-    Features:
-    - Evidence retrieval with embedding search (via VectorStoreService)
-    - LLM-based re-ranking with 0-10 relevance scale
-    - Configurable evidence_k parameter
-    - Performance metrics tracking
-    """
+    """Service for re-ranking chunks based on query relevance."""
     
     def __init__(
         self,
-        rerank_method: str = "hybrid",  # "keyword", "llm", "hybrid"
+        rerank_method: str = "hybrid",
         llm_provider: Optional[str] = None,
         llm_model: Optional[str] = None,
-        evidence_k: Optional[int] = None,  # Number of evidence chunks to retrieve before re-ranking
-        use_10_scale: bool = True  # Use 0-10 scale for LLM-based re-ranking
+        evidence_k: Optional[int] = None,
+        use_10_scale: bool = True
     ):
-        """
-        Initialize the chunk re-ranker.
-        
-        Args:
-            rerank_method: Re-ranking method ("keyword", "llm", "hybrid")
-            llm_provider: LLM provider for LLM-based re-ranking
-            llm_model: Model for LLM-based re-ranking
-            evidence_k: Number of evidence chunks to retrieve before re-ranking (None = use all)
-            use_10_scale: Use 0-10 scale for LLM-based re-ranking (True) or 0-1.0 (False)
-        """
+        """Initialize chunk re-ranker with specified method and configuration."""
         self.rerank_method = rerank_method.lower()
         self.llm_manager = None
         self.evidence_k = evidence_k
         self.use_10_scale = use_10_scale
-        self._metrics: Dict[str, Any] = {}  # Performance metrics
+        self._metrics: Dict[str, Any] = {}
         
         if self.rerank_method in ["llm", "hybrid"]:
             if LITELLM_AVAILABLE and LLMProviderManager:

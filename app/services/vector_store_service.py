@@ -1,8 +1,4 @@
-"""
-Vector Store Service for BioAnalyzer
-
-Uses Paper-QA's vector store implementations (NumpyVectorStore or QdrantVectorStore).
-"""
+"""Vector store service using Paper-QA's implementations."""
 import logging
 from pathlib import Path
 from typing import Optional
@@ -15,41 +11,17 @@ logger = logging.getLogger(__name__)
 
 
 class VectorStoreService:
-    """
-    Vector store service using Paper-QA's implementations.
+    """Vector store service using Paper-QA's implementations."""
     
-    Supports both in-memory (NumpyVectorStore) and persistent (QdrantVectorStore) options.
-    """
-    
-    def __init__(
-        self,
-        store_type: str = "numpy",
-        collection_name: str = "bioanalyzer_studies",
-        qdrant_path: Optional[str] = None,
-        embedding_model: str = "gemini/text-embedding-004"
-    ):
-        """
-        Initialize the vector store service.
-        
-        Args:
-            store_type: "numpy" for in-memory or "qdrant" for persistent
-            collection_name: Name of the collection (for Qdrant)
-            qdrant_path: Path to Qdrant data directory
-            embedding_model: Embedding model identifier (litellm format)
-                Examples:
-                - "gemini/text-embedding-004" (Gemini)
-                - "ollama/nomic-embed-text" (OLLAMA)
-                - "st-all-MiniLM-L6-v2" (SentenceTransformer)
-        """
+    def __init__(self, store_type: str = "numpy", collection_name: str = "bioanalyzer_studies", qdrant_path: Optional[str] = None, embedding_model: str = "gemini/text-embedding-004"):
+        """Initialize vector store service."""
         self.store_type = store_type.lower()
         self.collection_name = collection_name
         self.embedding_model_name = embedding_model
         
-        # Create embedding model using Paper-QA's factory
         self.embedding_model = embedding_model_factory(embedding_model)
         logger.info(f"Initialized embedding model: {embedding_model}")
         
-        # Create vector store
         if self.store_type == "numpy":
             self.vector_store = NumpyVectorStore()
             logger.info("Using NumpyVectorStore (in-memory)")

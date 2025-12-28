@@ -1,9 +1,4 @@
-"""
-Enhanced Field Validation and Extraction Utilities
-
-This module provides comprehensive validation and extraction utilities for the 6 essential BugSigDB curation fields.
-It ensures consistent field structure and improves extraction accuracy.
-"""
+"""Field validation and extraction utilities for BugSigDB curation fields."""
 
 import re
 import logging
@@ -23,10 +18,9 @@ class FieldValidationResult:
     suggestions_for_curation: str
 
 class EnhancedFieldValidator:
-    """Enhanced field validator for BugSigDB curation fields."""
+    """Field validator for BugSigDB curation fields."""
     
     def __init__(self):
-        # Define field-specific validation patterns
         self.field_patterns = {
             "host_species": {
                 "human": [r"human", r"patients?", r"participants?", r"subjects?", r"volunteers?"],
@@ -68,7 +62,6 @@ class EnhancedFieldValidator:
             }
         }
         
-        # Define confidence thresholds
         self.confidence_thresholds = {
             "PRESENT": (0.8, 1.0),
             "PARTIALLY_PRESENT": (0.4, 0.7),
@@ -76,19 +69,8 @@ class EnhancedFieldValidator:
         }
     
     def validate_field(self, field_name: str, field_data: Dict, text: Optional[str] = '') -> Dict:
-        """
-        Validate a specific field based on extracted data and optional text content.
-        
-        Args:
-            field_name: Name of the field to validate
-            field_data: Data extracted by the LLM for this field
-            text: Optional full text content for validation
-            
-        Returns:
-            Dict with validation details: {'score': float, 'notes': str}
-        """
+        """Validate a field based on extracted data and optional text content."""
         try:
-            # Get the content value for the field - check all possible field keys
             content_value = (
                 field_data.get('value', '') or 
                 field_data.get('primary', '') or 

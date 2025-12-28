@@ -1,29 +1,14 @@
 #!/usr/bin/env python3
-"""
-BioAnalyzer Backend - Main Entry Point
-======================================
-
-This is the main entry point for the BioAnalyzer Backend API server.
-It can be run directly or imported as a module.
-
-Usage:
-    python main.py                    # Start API server
-    python main.py --port 8080        # Start on custom port
-    python main.py --host 0.0.0.0     # Start on all interfaces
-    python main.py --reload           # Start with auto-reload
-"""
+"""Main entry point for BioAnalyzer Backend API server."""
 
 import sys
 import os
 import argparse
 from pathlib import Path
 
-# Add the project root to Python path
 project_root = Path(__file__).parent
 sys.path.insert(0, str(project_root))
 
-# Import and run the FastAPI application
-# Wrap import in try-except to provide better error messages
 try:
     from app.api.app import app
 except Exception as e:
@@ -38,7 +23,7 @@ except Exception as e:
     sys.exit(1)
 
 def main():
-    """Main function to start the API server."""
+    """Start the API server."""
     parser = argparse.ArgumentParser(description="BioAnalyzer Backend API Server")
     parser.add_argument("--host", default="0.0.0.0", help="Host to bind to (default: 0.0.0.0)")
     parser.add_argument("--port", type=int, default=8000, help="Port to bind to (default: 8000)")
@@ -48,7 +33,6 @@ def main():
     
     args = parser.parse_args()
     
-    # Check for environment variable override
     reload_flag = args.reload or os.getenv("UVICORN_RELOAD", "false").lower() in ("true", "1", "yes")
     
     print("🚀 Starting BioAnalyzer Backend API Server...")
@@ -65,10 +49,8 @@ def main():
         import uvicorn
         import os
         
-        # Get worker count from environment (for production)
         workers = int(os.getenv("UVICORN_WORKERS", "1"))
         
-        # Use workers in production (not in development with reload)
         if workers > 1 and not reload_flag:
             import multiprocessing
             uvicorn.run(

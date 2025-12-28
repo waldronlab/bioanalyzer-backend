@@ -1,6 +1,4 @@
-"""
-Simplified API router focused only on the 6 essential BugSigDB fields.
-"""
+"""API router for BugSigDB field analysis."""
 from fastapi import APIRouter, HTTPException
 import logging
 
@@ -88,9 +86,7 @@ async def _run_analysis(pmid: str):
 
 @router.get("/analyze/{pmid}")
 async def analyze_paper(pmid: str):
-    """
-    Analyze a single paper for the 6 essential BugSigDB fields (GET variant).
-    """
+    """Analyze paper for BugSigDB fields."""
     try:
         return await _run_analysis(pmid)
     except HTTPException:
@@ -102,9 +98,7 @@ async def analyze_paper(pmid: str):
 
 @router.post("/analyze/{pmid}")
 async def analyze_paper_post(pmid: str):
-    """
-    Analyze a single paper for the 6 essential BugSigDB fields (POST variant).
-    """
+    """Analyze paper for BugSigDB fields (POST method)."""
     try:
         return await _run_analysis(pmid)
     except HTTPException:
@@ -116,9 +110,7 @@ async def analyze_paper_post(pmid: str):
 
 @router.get("/fields")
 async def get_essential_fields():
-    """
-    Get information about the 6 essential BugSigDB fields.
-    """
+    """Get information about BugSigDB fields."""
     return {
         "essential_fields": ESSENTIAL_FIELDS_INFO,
         "status_values": STATUS_VALUES
@@ -127,9 +119,7 @@ async def get_essential_fields():
 
 @router.get("/fields/{field_name}")
 async def get_field_details(field_name: str):
-    """
-    Get information about a single BugSigDB field.
-    """
+    """Get details for a specific BugSigDB field."""
     normalized_name = field_name.strip().lower()
     if normalized_name not in ESSENTIAL_FIELDS_INFO:
         raise HTTPException(

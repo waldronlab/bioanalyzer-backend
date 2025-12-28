@@ -1,13 +1,4 @@
-"""
-Comprehensive Settings System for BioAnalyzer
-
-This module provides a flexible, Paper-QA-like settings system with:
-- Pydantic models for validation
-- Multiple loading sources (file, env, CLI)
-- Preset configurations
-- Settings inheritance
-- Migration support
-"""
+"""Settings system for BioAnalyzer with Pydantic models and multiple loading sources."""
 
 import os
 import json
@@ -20,10 +11,6 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-
-# ===============================
-# Enums for Settings Validation
-# ===============================
 
 class SummaryLength(str, Enum):
     """Summary length options."""
@@ -61,10 +48,6 @@ class Environment(str, Enum):
     STAGING = "staging"
     PRODUCTION = "production"
 
-
-# ===============================
-# Settings Sub-models
-# ===============================
 
 class APIConfig(BaseModel):
     """API configuration settings."""
@@ -161,36 +144,15 @@ class SecurityConfig(BaseModel):
     enable_request_id: bool = Field(default=True, description="Enable request ID tracking")
 
 
-# ===============================
-# Main Settings Model
-# ===============================
-
 class BioAnalyzerSettings(BaseModel):
-    """
-    Comprehensive settings for BioAnalyzer.
-    
-    Supports:
-    - Loading from JSON/YAML files
-    - Environment variable overrides
-    - CLI argument overrides
-    - Preset configurations
-    - Settings inheritance
-    """
+    """Settings for BioAnalyzer with support for file/env/CLI loading and presets."""
     model_config = ConfigDict(extra="allow", validate_assignment=True)
     
-    # Version for migration tracking
     version: str = Field(default="1.0.0", description="Settings schema version")
-    
-    # Preset name (if using a preset)
     preset: Optional[str] = Field(default=None, description="Preset configuration name")
-    
-    # Inherit from another settings file
     inherit_from: Optional[str] = Field(default=None, description="Path to settings file to inherit from")
-    
-    # Environment
     environment: Environment = Field(default=Environment.DEVELOPMENT, description="Environment")
     
-    # Sub-configurations
     api: APIConfig = Field(default_factory=APIConfig, description="API configuration")
     llm: LLMConfig = Field(default_factory=LLMConfig, description="LLM configuration")
     rag: RAGConfig = Field(default_factory=RAGConfig, description="RAG configuration")
@@ -535,10 +497,6 @@ class BioAnalyzerSettings(BaseModel):
         os.environ["ENABLE_REQUEST_ID"] = str(self.security.enable_request_id).lower()
 
 
-# ===============================
-# Settings Manager
-# ===============================
-
 class SettingsManager:
     """Manager for loading and managing settings."""
     
@@ -546,12 +504,7 @@ class SettingsManager:
     DEFAULT_SETTINGS_FILE = DEFAULT_SETTINGS_DIR / "settings.json"
     
     def __init__(self, settings_file: Optional[Path] = None):
-        """
-        Initialize settings manager.
-        
-        Args:
-            settings_file: Path to settings file (default: ~/.bioanalyzer/settings.json)
-        """
+        """Initialize settings manager."""
         self.settings_file = settings_file or self.DEFAULT_SETTINGS_FILE
         self._settings: Optional[BioAnalyzerSettings] = None
     
@@ -560,41 +513,21 @@ class SettingsManager:
              from_env: bool = True,
              from_preset: Optional[str] = None,
              cli_overrides: Optional[Dict[str, Any]] = None) -> BioAnalyzerSettings:
-        """
-        Load settings from multiple sources with priority:
-        1. CLI overrides (highest priority)
-        2. File settings
-        3. Preset settings
-        4. Environment variables
-        5. Defaults (lowest priority)
-        
-        Args:
-            from_file: Path to settings file
-            from_env: Whether to load from environment variables
-            from_preset: Preset name to use
-            cli_overrides: CLI argument overrides
-        
-        Returns:
-            BioAnalyzerSettings instance
-        """
+        """Load settings from multiple sources with priority: CLI > File > Preset > Env > Defaults."""
         settings = BioAnalyzerSettings()
         
-        # Load from preset if specified
         if from_preset:
             settings = settings.merge(BioAnalyzerSettings.from_preset(from_preset))
         
-        # Load from file if specified
         file_path = from_file or self.settings_file
         if file_path and Path(file_path).exists():
             file_settings = BioAnalyzerSettings.from_file(file_path)
             settings = settings.merge(file_settings)
         
-        # Load from environment variables
         if from_env:
             env_settings = BioAnalyzerSettings.from_env()
             settings = settings.merge(env_settings)
         
-        # Apply CLI overrides
         if cli_overrides:
             override_settings = BioAnalyzerSettings.from_dict(cli_overrides)
             settings = settings.merge(override_settings)
@@ -605,14 +538,7 @@ class SettingsManager:
     def save(self, settings: Optional[BioAnalyzerSettings] = None, 
              file_path: Optional[Path] = None,
              format: Literal['json', 'yaml'] = 'json'):
-        """
-        Save settings to file.
-        
-        Args:
-            settings: Settings to save (uses loaded settings if not provided)
-            file_path: Path to save to (uses default if not provided)
-            format: File format ('json' or 'yaml')
-        """
+        """Save settings to file."""
         settings = settings or self._settings
         if settings is None:
             raise ValueError("No settings to save. Load settings first or provide settings parameter.")
@@ -628,17 +554,7 @@ class SettingsManager:
         return self._settings
     
     def migrate_settings(self, old_file: Path, new_file: Optional[Path] = None) -> BioAnalyzerSettings:
-        """
-        Migrate settings from old format to new format.
-        
-        Args:
-            old_file: Path to old settings file
-            new_file: Path to save migrated settings (default: old_file with .new extension)
-        
-        Returns:
-            Migrated settings
-        """
-        # Try to load old settings
+        """Migrate settings from old format to new format."""
         try:
             if old_file.suffix.lower() in ['.yaml', '.yml']:
                 with open(old_file, 'r') as f:
@@ -649,13 +565,9 @@ class SettingsManager:
         except Exception as e:
             raise ValueError(f"Failed to load old settings: {e}")
         
-        # Convert old format to new format
         new_settings = BioAnalyzerSettings()
         
-        # Map old keys to new structure
-        # This is a basic migration - can be extended based on actual old format
         if isinstance(old_data, dict):
-            # Map top-level keys
             for key, value in old_data.items():
                 if key == 'api_timeout':
                     new_settings.api.timeout = value
@@ -663,9 +575,7 @@ class SettingsManager:
                     new_settings.llm.provider = value
                 elif key == 'rag_enabled':
                     new_settings.rag.enabled = value
-                # Add more mappings as needed
         
-        # Save migrated settings
         if new_file is None:
             new_file = old_file.with_suffix('.new' + old_file.suffix)
         
@@ -674,10 +584,6 @@ class SettingsManager:
         
         return new_settings
 
-
-# ===============================
-# Global Settings Instance
-# ===============================
 
 _settings_manager: Optional[SettingsManager] = None
 _settings: Optional[BioAnalyzerSettings] = None
