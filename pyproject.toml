@@ -45,7 +45,9 @@ dependencies = [
     "tiktoken>=0.5.0",
     "litellm>=1.50.0",
     # Paper-QA agent integration
-    "paper-qa>=5.0.0",
+    # Note: paper-qa>=5.0.0 requires Python >=3.11
+    # For Python <3.11, install paper-qa>=4.9.0,<5.0.0
+    "paper-qa>=4.9.0",
     # Web and data retrieval
     "requests>=2.31.0",
     "beautifulsoup4>=4.12.2",
