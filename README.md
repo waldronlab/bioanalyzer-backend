@@ -1,9 +1,11 @@
 # BioAnalyzer Backend
 
+[![CI/CD Pipeline](https://github.com/waldronlab/bioanalyzer-backend/actions/workflows/ci.yml/badge.svg)](https://github.com/waldronlab/bioanalyzer-backend/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://python.org)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.104+-green.svg)](https://fastapi.tiangolo.com)
 [![Docker](https://img.shields.io/badge/Docker-20.0+-blue.svg)](https://docker.com)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Code Quality](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
 Backend system for analyzing scientific papers to identify curatable microbiome signatures. Extracts essential BugSigDB fields and retrieves full text from PubMed/PMC.
 

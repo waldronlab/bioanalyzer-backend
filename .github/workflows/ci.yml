@@ -1,0 +1,231 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+env:
+  PYTHON_DEFAULT_VERSION: "3.11"
+
+jobs:
+  test:
+    name: Test Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.8", "3.9", "3.10", "3.11"]
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+        cache: 'pip'
+    
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y gcc g++ curl git
+    
+    - name: Upgrade pip, setuptools, and wheel
+      run: |
+        python -m pip install --upgrade pip setuptools wheel build
+    
+    - name: Install PyTorch CPU (for faster CI)
+      run: |
+        pip install --no-cache-dir --default-timeout=600 \
+          --extra-index-url https://download.pytorch.org/whl/cpu \
+          torch==2.1.0+cpu \
+          torchvision==0.16.0+cpu \
+          torchaudio==2.1.0+cpu
+    
+    - name: Install project dependencies
+      run: |
+        pip install --no-cache-dir -e ".[dev]"
+        # Install remaining dependencies that aren't in dev extras
+        pip install --no-cache-dir \
+          transformers>=4.34.0 \
+          scikit-learn>=1.3.0 \
+          pandas>=2.1.1 \
+          numpy>=1.26.0 \
+          biopython>=1.81 \
+          sentencepiece>=0.1.99 \
+          accelerate>=0.24.0 \
+          datasets>=2.14.0 \
+          google-generativeai>=0.7.2 \
+          tiktoken>=0.5.0 \
+          litellm>=1.50.0 \
+          paper-qa>=5.0.0 \
+          requests>=2.31.0 \
+          beautifulsoup4>=4.12.2 \
+          lxml>=4.9.0 \
+          openpyxl>=3.1.0 \
+          xlrd>=2.0.1 \
+          tqdm>=4.65.0 \
+          python-dotenv>=1.0.0 \
+          psutil>=5.9.0 \
+          fastapi>=0.104.0 \
+          "uvicorn[standard]>=0.23.2" \
+          aiohttp>=3.8.6 \
+          websockets>=11.0.3 \
+          python-multipart>=0.0.5 \
+          aiofiles>=0.7.0 \
+          pydantic>=2.4.2 \
+          typing-extensions>=3.10.0.2 \
+          starlette>=0.31.1 \
+          click>=8.0.1 \
+          h11>=0.12.0 \
+          httptools>=0.3.0 \
+          PyYAML>=5.4.1 \
+          "watchfiles[watchdog]>=1.0.0" \
+          wsproto>=1.0.0 \
+          tokenizers>=0.14.1 \
+          pytz>=2023.3 \
+          qdrant-client>=1.7.0
+    
+    - name: Run tests
+      env:
+        # Set dummy API keys for testing (tests should handle missing keys gracefully)
+        GEMINI_API_KEY: "test_key_1234567890abcdef"
+        NCBI_API_KEY: "test_ncbi_key_1234567890"
+        EMAIL: "test@example.com"
+      run: |
+        pytest tests/ -v --tb=short --cov=app --cov-report=xml --cov-report=term-missing
+    
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v4
+      with:
+        file: ./coverage.xml
+        flags: unittests
+        name: codecov-umbrella
+        fail_ci_if_error: false
+
+  lint:
+    name: Lint Code
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ env.PYTHON_DEFAULT_VERSION }}
+        cache: 'pip'
+    
+    - name: Install linting dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install black>=23.0.0 flake8>=6.0.0
+    
+    - name: Check code formatting with Black
+      run: |
+        black --check --diff app/ tests/ cli.py main.py
+    
+    - name: Lint with flake8
+      run: |
+        flake8 app/ tests/ cli.py main.py --max-line-length=120 --extend-ignore=E203,W503 --exclude=__pycache__,*.pyc
+
+  type-check:
+    name: Type Check
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ env.PYTHON_DEFAULT_VERSION }}
+        cache: 'pip'
+    
+    - name: Install type checking dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install mypy>=1.5.0 types-requests types-PyYAML
+    
+    - name: Run mypy
+      run: |
+        mypy app/ --ignore-missing-imports --no-strict-optional --show-error-codes || true
+      continue-on-error: true  # Don't fail CI on type errors for now
+
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ env.PYTHON_DEFAULT_VERSION }}
+        cache: 'pip'
+    
+    - name: Install security scanning tools
+      run: |
+        python -m pip install --upgrade pip
+        pip install bandit safety
+    
+    - name: Run Bandit security scan
+      run: |
+        bandit -r app/ -f json -o bandit-report.json || true
+        bandit -r app/ -ll || true
+      continue-on-error: true
+    
+    - name: Check dependencies with Safety
+      run: |
+        pip install -e ".[dev]"
+        safety check --json || true
+        safety check || true
+      continue-on-error: true
+
+  docker-build:
+    name: Docker Build Test
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+    
+    - name: Build Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        file: ./Dockerfile
+        push: false
+        tags: bioanalyzer-backend:test
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+    
+    - name: Test Docker image
+      run: |
+        docker run --rm bioanalyzer-backend:test python -c "import app; print('Docker image works!')"
+
+  all-checks:
+    name: All Checks Summary
+    runs-on: ubuntu-latest
+    needs: [test, lint, type-check, security, docker-build]
+    if: always()
+    
+    steps:
+    - name: Check job status
+      run: |
+        echo "Test job: ${{ needs.test.result }}"
+        echo "Lint job: ${{ needs.lint.result }}"
+        echo "Type-check job: ${{ needs.type-check.result }}"
+        echo "Security job: ${{ needs.security.result }}"
+        echo "Docker-build job: ${{ needs.docker-build.result }}"
+
