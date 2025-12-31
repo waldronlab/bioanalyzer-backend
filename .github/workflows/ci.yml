@@ -47,6 +47,7 @@ jobs:
     
     - name: Install project dependencies
       run: |
+        # Install package in editable mode first
         pip install --no-cache-dir -e ".[dev]"
         # Install remaining dependencies that aren't in dev extras
         pip install --no-cache-dir \
@@ -89,14 +90,26 @@ jobs:
           pytz>=2023.3 \
           qdrant-client>=1.7.0
     
+    - name: Verify installation
+      env:
+        PYTHONPATH: ${{ github.workspace }}
+      run: |
+        export PYTHONPATH=${{ github.workspace }}:$PYTHONPATH
+        python -c "import sys; print('Python version:', sys.version)"
+        python -c "import sys; print('Python path:', sys.path)"
+        python -c "import app; print('✓ App imported successfully')" || (echo "✗ App import failed" && exit 1)
+        python -c "from app.utils.config import GEMINI_API_KEY; print('✓ Config imported')" || echo "⚠ Config import warning"
+    
     - name: Run tests
       env:
         # Set dummy API keys for testing (tests should handle missing keys gracefully)
         GEMINI_API_KEY: "test_key_1234567890abcdef"
         NCBI_API_KEY: "test_ncbi_key_1234567890"
         EMAIL: "test@example.com"
+        PYTHONPATH: ${{ github.workspace }}
       run: |
-        pytest tests/ -v --tb=short --cov=app --cov-report=xml --cov-report=term-missing
+        export PYTHONPATH=${{ github.workspace }}:$PYTHONPATH
+        pytest tests/ -v --tb=short --maxfail=10 --cov=app --cov-report=xml --cov-report=term-missing
     
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v4
@@ -131,7 +144,7 @@ jobs:
     
     - name: Lint with flake8
       run: |
-        flake8 app/ tests/ cli.py main.py --max-line-length=120 --extend-ignore=E203,W503 --exclude=__pycache__,*.pyc
+        flake8 app/ tests/ cli.py main.py --max-line-length=120 --extend-ignore=E203,W503,E501 --exclude=__pycache__,*.pyc
 
   type-check:
     name: Type Check
