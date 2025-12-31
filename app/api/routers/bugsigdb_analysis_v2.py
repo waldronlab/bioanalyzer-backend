@@ -3,6 +3,7 @@ from fastapi import APIRouter, HTTPException, Query
 from typing import Optional, List
 import logging
 from datetime import datetime
+from app.utils.credential_masking import mask_exception_message
 
 from app.services.bugsigdb_analyzer import analyze_paper_simple, analyze_paper_with_rag
 from app.api.models.api_models import (
@@ -140,7 +141,8 @@ async def analyze_paper(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error in v2 analysis for PMID {pmid}: {e}")
+        safe_error = mask_exception_message(e)
+        logger.error(f"Error in v2 analysis for PMID {pmid}: {safe_error}")
         raise HTTPException(status_code=500, detail=f"Analysis error: {str(e)}")
 
 
@@ -183,7 +185,8 @@ async def analyze_paper_post(request: AnalysisRequestV2) -> PaperAnalysisResultV
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error in v2 POST analysis for PMID {request.pmid}: {e}")
+        safe_error = mask_exception_message(e)
+        logger.error(f"Error in v2 POST analysis for PMID {request.pmid}: {safe_error}")
         raise HTTPException(status_code=500, detail=f"Analysis error: {str(e)}")
 
 
@@ -222,7 +225,8 @@ async def analyze_papers_batch(request: BatchAnalysisRequestV2) -> List[PaperAna
                         use_rag=request.use_rag
                     )
                 except Exception as e:
-                    logger.error(f"Error analyzing PMID {pmid} in batch: {e}")
+                    safe_error = mask_exception_message(e)
+                    logger.error(f"Error analyzing PMID {pmid} in batch: {safe_error}")
                     return None
         
         tasks = [analyze_with_semaphore(pmid) for pmid in request.pmids]
@@ -237,7 +241,8 @@ async def analyze_papers_batch(request: BatchAnalysisRequestV2) -> List[PaperAna
         return valid_results
         
     except Exception as e:
-        logger.error(f"Error in batch analysis: {e}")
+        safe_error = mask_exception_message(e)
+        logger.error(f"Error in batch analysis: {safe_error}")
         raise HTTPException(status_code=500, detail=f"Batch analysis error: {str(e)}")
 
 
@@ -262,7 +267,8 @@ async def get_rag_config() -> RAGConfigResponse:
             available_providers=available_providers or ["gemini", "openai", "anthropic"]
         )
     except Exception as e:
-        logger.error(f"Error getting RAG config: {e}")
+        safe_error = mask_exception_message(e)
+        logger.error(f"Error getting RAG config: {safe_error}")
         raise HTTPException(status_code=500, detail=f"Error getting RAG config: {str(e)}")
 
 

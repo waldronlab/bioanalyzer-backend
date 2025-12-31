@@ -6,6 +6,7 @@ import psutil
 import asyncio
 from datetime import datetime
 import pytz
+from app.utils.credential_masking import mask_exception_message
 
 from app.utils.config import (
     AVAILABLE_MODELS,
@@ -36,7 +37,8 @@ def get_unified_qa():
         try:
             _unified_qa = UnifiedQA(use_gemini=True, gemini_api_key=GEMINI_API_KEY)
         except Exception as e:
-            logger.warning(f"Failed to initialize UnifiedQA: {e}")
+            safe_error = mask_exception_message(e)
+            logger.warning(f"Failed to initialize UnifiedQA: {safe_error}")
             _unified_qa = None
     return _unified_qa
 
@@ -47,7 +49,8 @@ def get_pubmed_retriever():
         try:
             _pubmed_retriever = PubMedRetriever(api_key=NCBI_API_KEY)
         except Exception as e:
-            logger.warning(f"Failed to initialize PubMedRetriever: {e}")
+            safe_error = mask_exception_message(e)
+            logger.warning(f"Failed to initialize PubMedRetriever: {safe_error}")
             _pubmed_retriever = None
     return _pubmed_retriever
 
@@ -71,7 +74,8 @@ async def health_check():
         )
         
     except Exception as e:
-        logger.error(f"Error in health check: {e}")
+        safe_error = mask_exception_message(e)
+        logger.error(f"Error in health check: {safe_error}")
         return HealthResponse(
             status="unhealthy",
             timestamp=get_current_timestamp(),
@@ -102,7 +106,8 @@ async def get_config():
         )
         
     except Exception as e:
-        logger.error(f"Error getting config: {e}")
+        safe_error = mask_exception_message(e)
+        logger.error(f"Error getting config: {safe_error}")
         raise HTTPException(status_code=500, detail=f"Error getting configuration: {str(e)}")
 
 
@@ -152,7 +157,8 @@ async def gemini_health_check():
             }
             
     except Exception as e:
-        logger.error(f"Error in Gemini health check: {e}")
+        safe_error = mask_exception_message(e)
+        logger.error(f"Error in Gemini health check: {safe_error}")
         return {
             "status": "unhealthy",
             "api_key_configured": bool(GEMINI_API_KEY),
@@ -183,7 +189,8 @@ async def ncbi_health_check(pmid: str = "31452104"):
             "pmid": pmid
         }
     except Exception as e:
-        logger.error(f"NCBI health check error: {e}", exc_info=True)
+        safe_error = mask_exception_message(e)
+        logger.error(f"NCBI health check error: {safe_error}", exc_info=False)  # Don't log full traceback to avoid credential exposure
         return {
             "status": "unhealthy",
             "error": "An internal error occurred. Please try again later.",
@@ -234,7 +241,8 @@ async def get_metrics():
         )
         
     except Exception as e:
-        logger.error(f"Error getting metrics: {e}")
+        safe_error = mask_exception_message(e)
+        logger.error(f"Error getting metrics: {safe_error}")
         raise HTTPException(status_code=500, detail=f"Error getting metrics: {str(e)}")
 
 
@@ -274,7 +282,8 @@ async def get_system_status():
         }
         
     except Exception as e:
-        logger.error(f"Error getting system status: {e}")
+        safe_error = mask_exception_message(e)
+        logger.error(f"Error getting system status: {safe_error}")
         raise HTTPException(status_code=500, detail=f"Error getting system status: {str(e)}")
 
 
@@ -303,7 +312,8 @@ async def get_version():
         }
         
     except Exception as e:
-        logger.error(f"Error getting version: {e}")
+        safe_error = mask_exception_message(e)
+        logger.error(f"Error getting version: {safe_error}")
         raise HTTPException(status_code=500, detail=f"Error getting version: {str(e)}")
 
 
@@ -380,5 +390,6 @@ async def ask_question(request: Dict[str, Any]):
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error in Q&A endpoint: {e}")
+        safe_error = mask_exception_message(e)
+        logger.error(f"Error in Q&A endpoint: {safe_error}")
         raise HTTPException(status_code=500, detail=f"Error processing question: {str(e)}")

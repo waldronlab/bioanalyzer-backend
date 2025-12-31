@@ -3,6 +3,7 @@ import os
 import logging
 from typing import Optional, Dict, List, Any
 from enum import Enum
+from app.utils.credential_masking import mask_exception_message, mask_string
 
 logger = logging.getLogger(__name__)
 
@@ -167,11 +168,13 @@ class LLMProviderManager:
                 "error": "timeout",
             }
         except Exception as e:
-            logger.error(f"LLM request failed: {e}")
+            # Mask any credentials in error message
+            safe_error = mask_exception_message(e)
+            logger.error(f"LLM request failed: {safe_error}")
             return {
-                "text": f"Error: {str(e)}",
+                "text": f"Error: {safe_error}",
                 "confidence": 0.0,
-                "error": str(e),
+                "error": safe_error,
             }
     
     async def analyze_image(
@@ -229,8 +232,10 @@ class LLMProviderManager:
             logger.error(f"Image analysis timed out after {timeout}s")
             return "Image analysis timed out."
         except Exception as e:
-            logger.error(f"Image analysis failed: {e}")
-            return f"Error analyzing image: {str(e)}"
+            # Mask any credentials in error message
+            safe_error = mask_exception_message(e)
+            logger.error(f"Image analysis failed: {safe_error}")
+            return f"Error analyzing image: {safe_error}"
     
     @staticmethod
     def get_available_providers() -> List[str]:

@@ -22,6 +22,7 @@ except ImportError:
     from .gemini_qa import GeminiQA
 
 from app.utils.config import GEMINI_TIMEOUT, GEMINI_API_KEY, LLM_PROVIDER, LLM_MODEL
+from app.utils.credential_masking import mask_exception_message, mask_string
 
 logger = logging.getLogger(__name__)
 
@@ -113,7 +114,8 @@ class UnifiedQA:
                 )
                 return response
             except Exception as e:
-                logger.error(f"UnifiedQA.chat (LiteLLM) error: {e}")
+                safe_error = mask_exception_message(e)
+                logger.error(f"UnifiedQA.chat (LiteLLM) error: {safe_error}")
         
         if not self.qa_system:
             return {"text": "Model not available. Check API keys or LLM_PROVIDER config.", "confidence": 0.0}
@@ -124,7 +126,8 @@ class UnifiedQA:
                 return await self._fallback_to_gemini(prompt)
             return response
         except Exception as e:
-            logger.error(f"UnifiedQA.chat error: {e}")
+            safe_error = mask_exception_message(e)
+            logger.error(f"UnifiedQA.chat error: {safe_error}")
             logger.info("Attempting fallback to GeminiQA after error")
             return await self._fallback_to_gemini(prompt)
     
@@ -141,8 +144,9 @@ class UnifiedQA:
             logger.info("Fallback to GeminiQA successful")
             return response
         except Exception as e:
-            logger.error(f"Fallback to GeminiQA also failed: {e}")
-            return {"text": f"Error: All QA systems failed. Last error: {e}", "confidence": 0.0}
+            safe_error = mask_exception_message(e)
+            logger.error(f"Fallback to GeminiQA also failed: {safe_error}")
+            return {"text": f"Error: All QA systems failed. Last error: {safe_error}", "confidence": 0.0}
 
     async def ask_question(self, question: str, context: Optional[str] = None, pmid: Optional[str] = None) -> Dict:
         """Ask a question with optional context. Returns {'answer': str, 'confidence': float}."""

@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 import logging
+from .credential_masking import mask_exception_message, mask_string
 
 try:
     from dotenv import load_dotenv  # type: ignore
@@ -61,7 +62,9 @@ def validate_gemini_key():
         genai.configure(api_key=GEMINI_API_KEY)
         return True
     except Exception as e:
-        print(f"Gemini API key validation failed: {str(e)}")
+        # Mask any potential credentials in error message
+        safe_error = mask_exception_message(e)
+        print(f"Gemini API key validation failed: {safe_error}")
         return False
 
 def validate_env_vars():
