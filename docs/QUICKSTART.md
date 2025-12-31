@@ -45,8 +45,9 @@ sudo apt install python3.12-venv python3-full
 python3 -m venv .venv
 source .venv/bin/activate
 
-pip install -r config/requirements.txt
+# Install package from pyproject.toml (modern Python packaging)
 pip install -e .
+# Or with development dependencies: pip install -e .[dev]
 
 cat > .env << EOF
 NCBI_API_KEY=your_ncbi_key_here

@@ -178,9 +178,12 @@ cd bioanalyzer-backend
 python3 -m venv .venv
 source .venv/bin/activate
 
-# Install dependencies
-pip install -r config/requirements.txt
+# Install dependencies and package
+# The package uses pyproject.toml (PEP 518/621) for modern Python packaging
 pip install -e .
+# Or install with optional dependencies:
+# pip install -e .[dev]  # for development dependencies
+# pip install -e .[cli]   # for CLI enhancements
 
 # Set up environment (optional)
 cp .env.example .env
@@ -648,9 +651,10 @@ bioanalyzer-backend/
 │       ├── chunking.py           # Text chunking service
 │       └── performance_logger.py # Performance monitoring
 ├── config/                       # Configuration files
-│   ├── requirements.txt         # Python dependencies
-│   ├── setup.py                 # Package configuration
+│   ├── requirements.txt         # Python dependencies (legacy)
 │   └── pytest.ini              # Test configuration
+├── pyproject.toml                # Modern Python packaging (PEP 518/621)
+├── setup.py                      # Legacy setup.py (kept for backward compatibility)
 ├── docs/                         # Documentation
 │   ├── README.md                # Main documentation
 │   ├── DOCKER_DEPLOYMENT.md     # Docker deployment guide
@@ -750,9 +754,9 @@ cd bioanalyzer-backend
 python -m venv .venv
 source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 
-# Install dependencies
-pip install -r config/requirements.txt
-pip install -e .[dev]
+# Install dependencies and package
+# The package uses pyproject.toml (PEP 518/621) for modern Python packaging
+pip install -e .[dev]  # Installs package with development dependencies
 
 # Set up pre-commit hooks
 pre-commit install

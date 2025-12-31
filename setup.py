@@ -1,3 +1,18 @@
+"""
+Legacy setup.py - kept for backward compatibility.
+
+This project uses pyproject.toml (PEP 518/621) as the primary source for package metadata.
+Modern tools (pip, build, etc.) will automatically use pyproject.toml when available.
+
+This setup.py is maintained for:
+- Backward compatibility with older tools
+- Fallback support if pyproject.toml is not available
+- Tools that haven't migrated to pyproject.toml yet
+
+For new installations, use: pip install -e .
+This will automatically use pyproject.toml.
+"""
+
 from setuptools import setup, find_packages
 
 # Read the README file

@@ -130,8 +130,9 @@ cd bioanalyzer-backend
 python3 -m venv .venv
 source .venv/bin/activate
 
-pip install -r config/requirements.txt
+# Install package from pyproject.toml (modern Python packaging, PEP 518/621)
 pip install -e .
+# This installs all dependencies defined in pyproject.toml
 
 # Create .env file with your API keys
 
