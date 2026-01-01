@@ -11,21 +11,17 @@ env:
 
 jobs:
   test:
-    name: Test Python ${{ matrix.python-version }}
+    name: Test Python ${{ env.PYTHON_DEFAULT_VERSION }}
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: ["3.8", "3.9", "3.10", "3.11"]
     
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
     
-    - name: Set up Python ${{ matrix.python-version }}
+    - name: Set up Python ${{ env.PYTHON_DEFAULT_VERSION }}
       uses: actions/setup-python@v5
       with:
-        python-version: ${{ matrix.python-version }}
+        python-version: ${{ env.PYTHON_DEFAULT_VERSION }}
         cache: 'pip'
     
     - name: Install system dependencies
@@ -89,18 +85,12 @@ jobs:
           pytz>=2023.3 \
           qdrant-client>=1.7.0
     
-    - name: Install paper-qa (version based on Python version)
+    - name: Install paper-qa from GitHub
       run: |
-        if [ "${{ matrix.python-version }}" == "3.11" ]; then
-          # For Python 3.11, install latest paper-qa from GitHub (supports >=5.0.0)
-          echo "Installing paper-qa from GitHub for Python 3.11"
-          pip install --no-cache-dir git+https://github.com/Future-House/paper-qa.git || \
-          pip install --no-cache-dir "paper-qa>=4.9.0,<5.0.0"
-        else
-          # For Python 3.8-3.10, install latest stable version compatible with older Python
-          echo "Installing paper-qa 4.9.0 for Python ${{ matrix.python-version }}"
-          pip install --no-cache-dir "paper-qa>=4.9.0,<5.0.0"
-        fi
+        # For Python 3.11, install latest paper-qa from GitHub (supports >=5.0.0)
+        echo "Installing paper-qa from GitHub for Python 3.11"
+        pip install --no-cache-dir git+https://github.com/Future-House/paper-qa.git || \
+        pip install --no-cache-dir "paper-qa>=4.9.0,<5.0.0"
     
     - name: Verify installation
       env:
