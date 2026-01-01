@@ -10,11 +10,11 @@ from pathlib import Path
 # Try to import services, skip tests if FastAPI not available
 try:
     from fastapi import FastAPI
-from app.services.web_scraper import WebScraperService
-from app.services.image_processor import ImageProcessorService
-from app.services.converter_service import ConverterService
-from app.services.vector_store_service import VectorStoreService
-from app.utils.chunking import ChunkingService
+    from app.services.web_scraper import WebScraperService
+    from app.services.image_processor import ImageProcessorService
+    from app.services.converter_service import ConverterService
+    from app.services.vector_store_service import VectorStoreService
+    from app.utils.chunking import ChunkingService
     FASTAPI_AVAILABLE = True
 except ImportError:
     FASTAPI_AVAILABLE = False

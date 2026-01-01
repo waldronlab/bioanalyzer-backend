@@ -5,8 +5,8 @@ import pytest
 
 # Try to import torch and the module, skip tests if not available
 try:
-import torch
-from app.utils.text_processing import AdvancedTextProcessor
+    import torch
+    from app.utils.text_processing import AdvancedTextProcessor
     TORCH_AVAILABLE = True
 except ImportError:
     TORCH_AVAILABLE = False

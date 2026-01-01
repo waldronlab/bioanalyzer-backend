@@ -10,7 +10,7 @@ from pathlib import Path
 # Import CacheManager directly to avoid import chain issues
 try:
     # Try direct import first
-from app.services.cache_manager import CacheManager
+    from app.services.cache_manager import CacheManager
 except ImportError:
     # If that fails, try importing the module directly
     import sys
