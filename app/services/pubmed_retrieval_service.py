@@ -22,7 +22,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional
 if TYPE_CHECKING:
     from app.services.data_retrieval import PubMedRetriever
 
-_PubMedRetrieverClass: type[PubMedRetriever] | None
+_PubMedRetrieverClass: type["PubMedRetriever"] | None  # type: ignore[name-defined]
 
 try:
     from app.services.data_retrieval import PubMedRetriever  # noqa: F811
