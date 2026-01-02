@@ -760,7 +760,8 @@ source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 # The package uses pyproject.toml (PEP 518/621) for modern Python packaging
 pip install -e .[dev]  # Installs package with development dependencies
 
-# Set up pre-commit hooks
+# Set up pre-commit hooks (see CONTRIBUTING.md for details)
+pip install pre-commit
 pre-commit install
 ```
 
@@ -856,6 +857,13 @@ python main.py
 - API Documentation: http://localhost:8000/docs (when running)
 
 ## Contributing
+
+Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on contributing to this project, including:
+- Development setup
+- Pre-commit hooks installation and usage
+- Code style guidelines
+- Testing requirements
+- Pull request process
 
 1. Fork the repository
 2. Create a feature branch (`git checkout -b feature/amazing-feature`)
