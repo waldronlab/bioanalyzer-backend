@@ -2,11 +2,9 @@
 import asyncio
 import logging
 import os
-from typing import Dict, List, Optional, Union
+from typing import TYPE_CHECKING, Dict, List, Optional, Union
 
 # Try to import LiteLLM provider manager first
-from typing import TYPE_CHECKING
-
 if TYPE_CHECKING:
     from .llm_provider import LLMProviderManager
 

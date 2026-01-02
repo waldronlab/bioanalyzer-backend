@@ -15,10 +15,9 @@ import json
 import logging
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 # Import with fallback configuration
-from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from app.services.data_retrieval import PubMedRetriever
