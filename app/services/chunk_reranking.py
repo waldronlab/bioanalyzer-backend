@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from app.models.llm_provider import LLMProviderManager
 
-_LLMProviderManagerClass: type["LLMProviderManager"] | None  # type: ignore[name-defined]
+_LLMProviderManagerClass: type["LLMProviderManager"] | None
 
 try:
     from app.models.llm_provider import LITELLM_AVAILABLE, LLMProviderManager  # noqa: F811
