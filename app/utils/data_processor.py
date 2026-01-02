@@ -52,7 +52,7 @@ class BugSigConversationDataset(Dataset):
     ) -> Dict[str, torch.Tensor]:
         """Prepare model inputs from conversation data"""
         # Clean and encode query
-        query_clean = clean_scientific_text(query)
+        query_clean = self.text_processor.clean_scientific_text(query)
         query_encoded = self.text_processor.encode_text(query_clean)
 
         # Pad or truncate query to max_length
@@ -64,7 +64,7 @@ class BugSigConversationDataset(Dataset):
 
         # Prepare context if available
         if context:
-            context_clean = clean_scientific_text(context)
+            context_clean = self.text_processor.clean_scientific_text(context)
             context_encoded = self.text_processor.encode_text(context_clean)
             context_padded = torch.zeros(self.max_length, dtype=torch.long)
             context_len = min(len(context_encoded), self.max_length)
@@ -79,7 +79,7 @@ class BugSigConversationDataset(Dataset):
         # Prepare knowledge if available
         if knowledge_indices:
             knowledge_texts = [self.knowledge_base.iloc[idx]["text"] for idx in knowledge_indices]
-            knowledge_clean = [clean_scientific_text(text) for text in knowledge_texts]
+            knowledge_clean = [self.text_processor.clean_scientific_text(text) for text in knowledge_texts]
             knowledge_encoded = self.text_processor.batch_encode(knowledge_clean)
             # Pad each knowledge item
             knowledge_padded = torch.zeros(len(knowledge_indices), self.max_length, dtype=torch.long)
@@ -122,7 +122,7 @@ class BugSigConversationDataset(Dataset):
         inputs = self._prepare_conversation_input(query=query, context=context, knowledge_indices=knowledge_indices)
 
         # Prepare target (response)
-        response_clean = clean_scientific_text(response)
+        response_clean = self.text_processor.clean_scientific_text(response)
         response_encoded = self.text_processor.encode_text(response_clean)
 
         # Pad or truncate response

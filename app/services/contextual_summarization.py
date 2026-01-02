@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from app.models.llm_provider import LLMProviderManager
 
 try:
-    from app.models.llm_provider import LITELLM_AVAILABLE, LLMProviderManager
+    from app.models.llm_provider import LITELLM_AVAILABLE, LLMProviderManager  # noqa: F811
 except ImportError:
     LITELLM_AVAILABLE = False
     LLMProviderManager = None  # type: ignore[assignment,misc]

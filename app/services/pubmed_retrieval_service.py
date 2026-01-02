@@ -23,7 +23,7 @@ if TYPE_CHECKING:
     from app.services.data_retrieval import PubMedRetriever
 
 try:
-    from app.services.data_retrieval import PubMedRetriever
+    from app.services.data_retrieval import PubMedRetriever  # noqa: F811
     from app.utils.config import NCBI_API_KEY
 except ImportError:
     # Fallback if config is not available
