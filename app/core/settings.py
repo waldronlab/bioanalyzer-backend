@@ -331,7 +331,7 @@ class BioAnalyzerSettings(BaseModel):
     @classmethod
     def from_preset(cls, preset_name: str) -> "BioAnalyzerSettings":
         """Load settings from a preset configuration."""
-        presets = {
+        presets: Mapping[str, Mapping[str, Any]] = {
             "fast": {
                 "api": {
                     "timeout": 15,
@@ -409,7 +409,7 @@ class BioAnalyzerSettings(BaseModel):
             raise ValueError(f"Unknown preset: {preset_name}. Valid presets: {list(presets.keys())}")
 
         settings = cls()
-        preset_data: Mapping[str, Any] = presets[preset_name]
+        preset_data = presets[preset_name]
 
         # Create update dict with preset values
         update_dict: Dict[str, Any] = {"preset": preset_name}
