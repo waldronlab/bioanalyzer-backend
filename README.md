@@ -761,8 +761,15 @@ source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 pip install -e .[dev]  # Installs package with development dependencies
 
 # Set up pre-commit hooks (see CONTRIBUTING.md for details)
-pip install pre-commit
-pre-commit install
+# Using Docker (recommended):
+./scripts/pre-commit-docker.sh
+
+# Or manually with Docker:
+docker run --rm \
+  -v "$(pwd):/workspace" -w /workspace \
+  -v ~/.cache/pre-commit:/root/.cache/pre-commit \
+  python:3.11-slim \
+  bash -c "pip install --quiet pre-commit && pre-commit run --all-files"
 ```
 
 ### Code Quality

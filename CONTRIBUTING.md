@@ -29,25 +29,39 @@ Thank you for your interest in contributing to BioAnalyzer Backend! This documen
 
 Pre-commit hooks automatically run code quality checks before each commit, ensuring consistent code style and catching issues early.
 
-### Installation
+### Installation (Using Docker - Recommended)
 
-1. **Install pre-commit:**
+Since this project uses Docker containers, we recommend using Docker for pre-commit operations:
+
+1. **Run pre-commit hooks using Docker:**
    ```bash
+   # Run all hooks on all files
+   docker run --rm \
+     -v "$(pwd):/workspace" \
+     -w /workspace \
+     -v ~/.cache/pre-commit:/root/.cache/pre-commit \
+     python:3.11-slim \
+     bash -c "pip install --quiet pre-commit && pre-commit run --all-files"
+   ```
+
+2. **Install git hooks (optional - for automatic running on commit):**
+   
+   **Note:** If you want hooks to run automatically on `git commit`, you'll need to install pre-commit locally. However, since you're using Docker, you can also run hooks manually before committing.
+
+   For local installation (if you have a virtual environment):
+   ```bash
+   # Create a virtual environment first
+   python3 -m venv venv
+   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   
+   # Install pre-commit
    pip install pre-commit
-   ```
-
-   Or if using Docker:
-   ```bash
-   docker run --rm -v "$(pwd):/workspace" -w /workspace python:3.11-slim \
-     pip install pre-commit
-   ```
-
-2. **Install the git hooks:**
-   ```bash
+   
+   # Install git hooks
    pre-commit install
    ```
 
-   This will install hooks that run automatically on `git commit`.
+   **Alternative:** Use Docker to run hooks manually before committing (recommended for Docker users).
 
 ### Available Hooks
 
@@ -193,12 +207,21 @@ docker run --rm -p 8000:8000 bioanalyzer-backend
 ### Running Pre-commit in Docker
 
 ```bash
-docker run --rm -v "$(pwd):/workspace" -w /workspace \
+# Run all hooks
+docker run --rm \
+  -v "$(pwd):/workspace" \
+  -w /workspace \
   -v ~/.cache/pre-commit:/root/.cache/pre-commit \
-  python:3.11-slim bash -c "
-    pip install pre-commit && \
-    pre-commit run --all-files
-  "
+  python:3.11-slim \
+  bash -c "pip install --quiet pre-commit && pre-commit run --all-files"
+
+# Run specific hook
+docker run --rm \
+  -v "$(pwd):/workspace" \
+  -w /workspace \
+  -v ~/.cache/pre-commit:/root/.cache/pre-commit \
+  python:3.11-slim \
+  bash -c "pip install --quiet pre-commit && pre-commit run black --all-files"
 ```
 
 ## Troubleshooting
