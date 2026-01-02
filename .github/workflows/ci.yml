@@ -217,6 +217,7 @@ jobs:
         context: .
         file: ./Dockerfile
         push: false
+        load: true
         tags: bioanalyzer-backend:test
         cache-from: type=gha
         cache-to: type=gha,mode=max
