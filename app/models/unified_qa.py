@@ -10,6 +10,7 @@ if TYPE_CHECKING:
 
 try:
     from .llm_provider import LITELLM_AVAILABLE, LLMProviderManager
+
     _LLMProviderManagerClass = LLMProviderManager
 except ImportError:
     LITELLM_AVAILABLE = False

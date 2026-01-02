@@ -25,6 +25,7 @@ if TYPE_CHECKING:
 try:
     from app.services.data_retrieval import PubMedRetriever  # noqa: F811
     from app.utils.config import NCBI_API_KEY
+
     _PubMedRetrieverClass = PubMedRetriever
 except ImportError:
     # Fallback if config is not available

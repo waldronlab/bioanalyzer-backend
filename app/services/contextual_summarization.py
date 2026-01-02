@@ -16,6 +16,7 @@ if TYPE_CHECKING:
 
 try:
     from app.models.llm_provider import LITELLM_AVAILABLE, LLMProviderManager  # noqa: F811
+
     _LLMProviderManagerClass = LLMProviderManager
 except ImportError:
     LITELLM_AVAILABLE = False
