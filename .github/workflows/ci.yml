@@ -111,7 +111,7 @@ jobs:
         PYTHONPATH: ${{ github.workspace }}
       run: |
         export PYTHONPATH=${{ github.workspace }}:$PYTHONPATH
-        pytest tests/ -v --tb=short --maxfail=10 --cov=app --cov-report=xml --cov-report=term-missing
+        pytest tests/ -v --tb=short --maxfail=10 --cov=app --cov-report=xml --cov-report=term-missing --cov-fail-under=60
     
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v4
@@ -165,8 +165,8 @@ jobs:
     
     - name: Run mypy
       run: |
-        mypy app/ --ignore-missing-imports --no-strict-optional --show-error-codes || true
-      continue-on-error: true  # Don't fail CI on type errors for now
+        mypy app/ --config-file mypy.ini || (echo "⚠️ Type checking found issues. Review and fix type errors." && exit 1)
+      continue-on-error: false  # Type checking is now required
 
   security:
     name: Security Scan
@@ -189,16 +189,16 @@ jobs:
     
     - name: Run Bandit security scan
       run: |
-        bandit -r app/ -f json -o bandit-report.json || true
-        bandit -r app/ -ll || true
-      continue-on-error: true
+        bandit -r app/ -f json -o bandit-report.json
+        bandit -r app/ -ll
+      continue-on-error: false  # Security issues must be addressed
     
     - name: Check dependencies with Safety
       run: |
         pip install -e ".[dev]"
-        safety check --json || true
-        safety check || true
-      continue-on-error: true
+        safety check --json
+        safety check
+      continue-on-error: false  # Vulnerable dependencies must be fixed
 
   docker-build:
     name: Docker Build Test
@@ -235,9 +235,31 @@ jobs:
     steps:
     - name: Check job status
       run: |
-        echo "Test job: ${{ needs.test.result }}"
-        echo "Lint job: ${{ needs.lint.result }}"
-        echo "Type-check job: ${{ needs.type-check.result }}"
-        echo "Security job: ${{ needs.security.result }}"
-        echo "Docker-build job: ${{ needs.docker-build.result }}"
+        echo "## CI/CD Pipeline Status" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "| Job | Status |" >> $GITHUB_STEP_SUMMARY
+        echo "|-----|--------|" >> $GITHUB_STEP_SUMMARY
+        echo "| Tests | ${{ needs.test.result }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Lint | ${{ needs.lint.result }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Type Check | ${{ needs.type-check.result }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Security | ${{ needs.security.result }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Docker Build | ${{ needs.docker-build.result }} |" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        # Fail if any critical check failed
+        if [ "${{ needs.test.result }}" != "success" ] || \
+           [ "${{ needs.lint.result }}" != "success" ] || \
+           [ "${{ needs.type-check.result }}" != "success" ] || \
+           [ "${{ needs.security.result }}" != "success" ] || \
+           [ "${{ needs.docker-build.result }}" != "success" ]; then
+          echo "❌ One or more critical checks failed!" >> $GITHUB_STEP_SUMMARY
+          echo "Test: ${{ needs.test.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "Lint: ${{ needs.lint.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "Type-check: ${{ needs.type-check.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "Security: ${{ needs.security.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "Docker-build: ${{ needs.docker-build.result }}" >> $GITHUB_STEP_SUMMARY
+          exit 1
+        else
+          echo "✅ All checks passed!" >> $GITHUB_STEP_SUMMARY
+        fi
 

@@ -1,0 +1,94 @@
+name: Security Scanning
+
+on:
+  pull_request:
+    branches: [ main, develop ]
+  push:
+    branches: [ main, develop ]
+  schedule:
+    # Run weekly security scans
+    - cron: '0 0 * * 1'
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  security-scan:
+    name: Security Vulnerability Scan
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+        cache: 'pip'
+    
+    - name: Install security tools
+      run: |
+        python -m pip install --upgrade pip
+        pip install --quiet \
+          bandit>=1.7.0 \
+          safety>=3.0.0 \
+          pip-audit>=2.6.0
+    
+    - name: Run Bandit security scan
+      run: |
+        echo "Running Bandit security scan..."
+        bandit -r app/ -f json -o bandit-report.json -ll
+        bandit -r app/ -ll
+    
+    - name: Check dependencies with Safety
+      run: |
+        echo "Checking for vulnerable dependencies with Safety..."
+        pip install -e ".[dev]"
+        safety check --json
+        safety check
+    
+    - name: Audit dependencies with pip-audit
+      run: |
+        echo "Auditing dependencies with pip-audit..."
+        pip-audit --desc
+      continue-on-error: true
+    
+    - name: Check for hardcoded secrets
+      run: |
+        echo "Checking for hardcoded secrets..."
+        # Use git-secrets or similar pattern matching
+        SECRET_PATTERNS=(
+          "AKIA[0-9A-Z]{16}"  # AWS Access Key
+          "sk_live_[0-9a-zA-Z]{32}"  # Stripe Live Key
+          "sk_test_[0-9a-zA-Z]{32}"  # Stripe Test Key
+          "AIza[0-9A-Za-z_-]{35}"  # Google API Key
+        )
+        
+        FOUND_SECRETS=false
+        
+        for pattern in "${SECRET_PATTERNS[@]}"; do
+          if git grep -iE "$pattern" -- ':!tests/*' ':!*.md' ':!*.txt'; then
+            echo "⚠️ Potential secret detected: $pattern"
+            FOUND_SECRETS=true
+          fi
+        done
+        
+        if [ "$FOUND_SECRETS" = true ]; then
+          echo "❌ Potential secrets detected. Please review and remove."
+          exit 1
+        fi
+        
+        echo "✅ No hardcoded secrets detected"
+      continue-on-error: false
+    
+    - name: Upload security reports
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: security-reports
+        path: |
+          bandit-report.json
+        retention-days: 30
+
