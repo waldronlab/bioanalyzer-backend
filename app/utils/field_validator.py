@@ -130,7 +130,7 @@ class EnhancedFieldValidator:
         text_lower = text.lower()
         content_lower = content_value.lower()
 
-        best_match = {"confidence": 0.0, "matches": []}
+        best_match: Dict[str, Any] = {"confidence": 0.0, "matches": []}
 
         for category, patterns in self.field_patterns[field_name].items():
             category_matches = []

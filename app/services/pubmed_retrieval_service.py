@@ -28,7 +28,7 @@ try:
 except ImportError:
     # Fallback if config is not available
     NCBI_API_KEY = None
-    PubMedRetriever = None  # type: ignore[assignment,misc]
+    PubMedRetriever = None
 
 logger = logging.getLogger(__name__)
 
@@ -172,7 +172,7 @@ class PubMedRetrievalService:
                     )
                 else:
                     if isinstance(result, dict):
-                        paper_data_list.append(result)  # type: ignore[arg-type]
+                        paper_data_list.append(result)
 
             logger.info(f"Completed retrieval of {len(pmids)} papers")
             return paper_data_list

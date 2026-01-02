@@ -2,7 +2,7 @@
 import asyncio
 import logging
 import os
-from typing import TYPE_CHECKING, Dict, List, Optional, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 
 # Try to import LiteLLM provider manager first
 if TYPE_CHECKING:
@@ -32,6 +32,8 @@ logger = logging.getLogger(__name__)
 
 class UnifiedQA:
     """Unified QA system supporting multiple LLM providers."""
+
+    qa_system: Any  # Can be PaperQAAgent or GeminiQA
 
     def __init__(
         self,

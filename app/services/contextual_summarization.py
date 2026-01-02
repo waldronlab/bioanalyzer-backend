@@ -18,7 +18,7 @@ try:
     from app.models.llm_provider import LITELLM_AVAILABLE, LLMProviderManager  # noqa: F811
 except ImportError:
     LITELLM_AVAILABLE = False
-    LLMProviderManager = None  # type: ignore[assignment,misc]
+    LLMProviderManager = None
 
 from paperqa.types import Text
 
@@ -342,6 +342,6 @@ Summary should:
                     )
                 else:
                     if isinstance(result, ChunkSummary):
-                        summaries.append(result)  # type: ignore[arg-type]
+                        summaries.append(result)
 
         return summaries

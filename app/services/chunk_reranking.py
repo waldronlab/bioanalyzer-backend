@@ -16,7 +16,7 @@ try:
     from app.models.llm_provider import LITELLM_AVAILABLE, LLMProviderManager  # noqa: F811
 except ImportError:
     LITELLM_AVAILABLE = False
-    LLMProviderManager = None  # type: ignore[assignment,misc]
+    LLMProviderManager = None
 
 from paperqa.types import Text
 
