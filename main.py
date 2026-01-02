@@ -49,8 +49,6 @@ def main():
     print("\nPress Ctrl+C to stop the server")
 
     try:
-        import os
-
         import uvicorn
 
         workers = int(os.getenv("UVICORN_WORKERS", "1"))
