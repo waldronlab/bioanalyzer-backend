@@ -67,7 +67,8 @@ class PubMedRetriever:
                     logger.warning(f"Unable to reach NCBI E-utilities after retries: {safe_error}. App will continue with limited functionality.")
 
     def _make_request(self, endpoint: str, params: Dict[str, Any], retries: int = None) -> Optional[str]:
-        """Make request to NCBI E-utilities with retry logic and rate limiting."""
+        """
+        Make request to NCBI E-utilities with retry logic and rate limiting.
             
         Returns:
             Response text or None if all retries failed

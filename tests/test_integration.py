@@ -8,8 +8,8 @@ from unittest.mock import patch, MagicMock, AsyncMock
 
 # Try to import FastAPI-dependent modules, skip tests if not available
 try:
-from fastapi.testclient import TestClient
-from app.api.app import app
+    from fastapi.testclient import TestClient
+    from app.api.app import app
     FASTAPI_AVAILABLE = True
 except ImportError:
     FASTAPI_AVAILABLE = False
@@ -82,7 +82,7 @@ class TestCacheIntegration:
         """Test that caching and retrieval work together."""
         # Import CacheManager directly to avoid import chain issues
         try:
-        from app.services.cache_manager import CacheManager
+            from app.services.cache_manager import CacheManager
         except ImportError:
             # Fallback: use importlib to load directly from file
             import sys
@@ -202,7 +202,7 @@ class TestTextProcessingIntegration:
     def test_text_cleaning_and_processing_workflow(self):
         """Test that text cleaning and processing work together."""
         try:
-        from app.utils.text_processing import AdvancedTextProcessor
+            from app.utils.text_processing import AdvancedTextProcessor
         except ImportError:
             pytest.skip("torch not available")
         
@@ -223,7 +223,7 @@ class TestTextProcessingIntegration:
     def test_text_encoding_decoding_workflow(self):
         """Test that encoding and decoding work together."""
         try:
-        from app.utils.text_processing import AdvancedTextProcessor
+            from app.utils.text_processing import AdvancedTextProcessor
         except ImportError:
             pytest.skip("torch not available")
         
@@ -301,7 +301,7 @@ class TestErrorHandlingIntegration:
         """Test that cache errors are handled gracefully."""
         # Import CacheManager directly to avoid import chain issues
         try:
-        from app.services.cache_manager import CacheManager
+            from app.services.cache_manager import CacheManager
         except ImportError:
             # Fallback: use importlib to load directly from file
             import sys
@@ -359,7 +359,7 @@ class TestDataFlowIntegration:
         """Test data flow from API request through to cache."""
         # Import CacheManager directly to avoid import chain issues
         try:
-        from app.services.cache_manager import CacheManager
+            from app.services.cache_manager import CacheManager
         except ImportError:
             # Fallback: use importlib to load directly from file
             import sys
@@ -417,7 +417,7 @@ class TestAsyncIntegration:
         """Test that async cache operations work correctly."""
         # Import CacheManager directly to avoid import chain issues
         try:
-        from app.services.cache_manager import CacheManager
+            from app.services.cache_manager import CacheManager
         except ImportError:
             # Fallback: use importlib to load directly from file
             import sys
