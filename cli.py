@@ -157,7 +157,7 @@ class BioAnalyzerCLI:
             else:
                 print("   Create a .env file in the project root or export them before running.")
                 print("   Example:")
-                print("     export GEMINI_API_KEY=...; export NCBI_API_KEY=...; export EMAIL=you@example.com")
+                print("     export GEMINI_API_KEY=your_key; export NCBI_API_KEY=your_key; export EMAIL=you@example.com")
     
     def print_banner(self):
         """Print the BioAnalyzer banner."""

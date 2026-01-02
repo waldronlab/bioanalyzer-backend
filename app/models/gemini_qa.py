@@ -7,6 +7,7 @@ import google.generativeai as genai
 import os
 import json
 from app.utils.config import GEMINI_TIMEOUT
+from app.utils.credential_masking import mask_string, mask_exception_message
 import asyncio
 import time
 
@@ -592,7 +593,8 @@ CRITICAL: If the paper contains ANY specific microbial taxa identification, abun
                 }
             }
         except Exception as e:
-            error_msg = str(e)
+            # Mask any credentials in error message before logging
+            error_msg = mask_string(str(e))
             error_type = type(e).__name__
             
             if "quota" in error_msg.lower() or "quota exceeded" in error_msg.lower():

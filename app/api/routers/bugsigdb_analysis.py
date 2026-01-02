@@ -1,6 +1,7 @@
 """API router for BugSigDB field analysis."""
 from fastapi import APIRouter, HTTPException
 import logging
+from app.utils.credential_masking import mask_exception_message
 
 from app.services.bugsigdb_analyzer import analyze_paper_simple
 
@@ -92,7 +93,8 @@ async def analyze_paper(pmid: str):
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error in analysis for PMID {pmid}: {e}")
+        safe_error = mask_exception_message(e)
+        logger.error(f"Error in analysis for PMID {pmid}: {safe_error}")
         raise HTTPException(status_code=500, detail=f"Analysis error: {str(e)}")
 
 
@@ -104,7 +106,8 @@ async def analyze_paper_post(pmid: str):
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error in analysis for PMID {pmid}: {e}")
+        safe_error = mask_exception_message(e)
+        logger.error(f"Error in analysis for PMID {pmid}: {safe_error}")
         raise HTTPException(status_code=500, detail=f"Analysis error: {str(e)}")
 
 

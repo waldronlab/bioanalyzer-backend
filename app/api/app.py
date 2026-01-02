@@ -110,16 +110,22 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     """Handle unexpected exceptions."""
+    from app.utils.credential_masking import mask_exception_message, mask_string
+    
+    # Mask any credentials in exception message and traceback
+    safe_exc_msg = mask_exception_message(exc)
+    safe_traceback = mask_string(traceback.format_exc())
+    
     logger.error(
-        f"Unhandled exception: {str(exc)}\n"
-        f"Traceback: {traceback.format_exc()}\n"
+        f"Unhandled exception: {safe_exc_msg}\n"
+        f"Traceback: {safe_traceback}\n"
         f"Request ID: {getattr(request.state, 'request_id', None)}"
     )
     
     if ENVIRONMENT == "production":
         detail = "An internal error occurred. Please try again later."
     else:
-        detail = str(exc)
+        detail = safe_exc_msg
     
     return JSONResponse(
         status_code=500,

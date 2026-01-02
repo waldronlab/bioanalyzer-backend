@@ -14,6 +14,8 @@ except ImportError:
     API_TIMEOUT = 30
     USE_FULLTEXT = True
 
+from app.utils.credential_masking import mask_exception_message
+
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
@@ -56,11 +58,13 @@ class PubMedRetriever:
                 logger.info("NCBI E-utilities reachable")
                 return
             except requests.exceptions.RequestException as e:
-                logger.warning(f"NCBI connectivity check failed (attempt {attempt+1}/{retries}): {e}")
+                safe_error = mask_exception_message(e)
+                logger.warning(f"NCBI connectivity check failed (attempt {attempt+1}/{retries}): {safe_error}")
                 if attempt < retries - 1:
                     time.sleep(2 ** attempt)
                 else:
-                    logger.warning(f"Unable to reach NCBI E-utilities after retries: {e}. App will continue with limited functionality.")
+                    safe_error = mask_exception_message(e)
+                    logger.warning(f"Unable to reach NCBI E-utilities after retries: {safe_error}. App will continue with limited functionality.")
 
     def _make_request(self, endpoint: str, params: Dict[str, Any], retries: int = None) -> Optional[str]:
         """Make request to NCBI E-utilities with retry logic and rate limiting."""
@@ -113,8 +117,12 @@ class PubMedRetriever:
         status = getattr(error.response, "status_code", None) if hasattr(error, "response") else None
         is_rate_limited = status == 429
         
+        # Mask any credentials in error message
+        from app.utils.credential_masking import mask_exception_message
+        safe_error = mask_exception_message(error)
+        
         logger.warning(
-            f"NCBI request failed (attempt {attempt+1}/{max_retries}): {error} "
+            f"NCBI request failed (attempt {attempt+1}/{max_retries}): {safe_error} "
             f"{'(rate limited)' if is_rate_limited else ''}"
         )
         
@@ -123,7 +131,7 @@ class PubMedRetriever:
             time.sleep(backoff_time)
             return True
         
-        logger.error(f"PubMed request failed after {max_retries} attempts: {error}")
+        logger.error(f"PubMed request failed after {max_retries} attempts: {safe_error}")
         return False
     
     def _calculate_backoff_time(self, attempt: int, is_rate_limited: bool) -> float:
@@ -176,7 +184,8 @@ class PubMedRetriever:
             return metadata
 
         except ElementTree.ParseError as e:
-            logger.error(f"XML parsing error for PMID {pmid}: {e}")
+            safe_error = mask_exception_message(e)
+            logger.error(f"XML parsing error for PMID {pmid}: {safe_error}")
 
         # fallback to esummary
         try:
@@ -201,7 +210,8 @@ class PubMedRetriever:
             fields.setdefault("abstract", "")
             return fields
         except Exception as e:
-            logger.error(f"Error parsing fallback esummary for PMID {pmid}: {e}")
+            safe_error = mask_exception_message(e)
+            logger.error(f"Error parsing fallback esummary for PMID {pmid}: {safe_error}")
             return {"error": "Fallback retrieval failed."}
 
     def search(self, query: str, max_results: int = 10) -> List[str]:
@@ -215,7 +225,8 @@ class PubMedRetriever:
             root = ElementTree.fromstring(xml_data)
             return [id_elem.text for id_elem in root.findall(".//Id")]
         except ElementTree.ParseError as e:
-            logger.error(f"Error parsing search results: {e}")
+            safe_error = mask_exception_message(e)
+            logger.error(f"Error parsing search results: {safe_error}")
             return []
 
     async def get_paper_metadata_async(self, pmid: str) -> Dict[str, Any]:
@@ -232,7 +243,8 @@ class PubMedRetriever:
             return self._get_pmc_fulltext_by_id(pmc_id)
             
         except Exception as e:
-            logger.warning(f"Error retrieving full text for PMID {pmid}: {e}")
+            safe_error = mask_exception_message(e)
+            logger.warning(f"Error retrieving full text for PMID {pmid}: {safe_error}")
             return ""
 
     def _get_pmc_id_from_pmid(self, pmid: str) -> Optional[str]:
@@ -264,7 +276,8 @@ class PubMedRetriever:
             return None
             
         except Exception as e:
-            logger.warning(f"Error getting PMC ID for PMID {pmid}: {e}")
+            safe_error = mask_exception_message(e)
+            logger.warning(f"Error getting PMC ID for PMID {pmid}: {safe_error}")
             return None
 
     def _get_pmc_fulltext_by_id(self, pmc_id: str) -> str:
@@ -311,7 +324,8 @@ class PubMedRetriever:
             return "\n\n".join(full_text_parts)
             
         except Exception as e:
-            logger.warning(f"Error retrieving PMC full text for {pmc_id}: {e}")
+            safe_error = mask_exception_message(e)
+            logger.warning(f"Error retrieving PMC full text for {pmc_id}: {safe_error}")
             return ""
 
     async def get_pmc_fulltext_async(self, pmid: str) -> str:
@@ -351,7 +365,8 @@ class PubMedRetriever:
             return paper_data
             
         except Exception as e:
-            logger.error(f"Error retrieving full paper data for PMID {pmid}: {e}")
+            safe_error = mask_exception_message(e)
+            logger.error(f"Error retrieving full paper data for PMID {pmid}: {safe_error}")
             return {
                 "pmid": pmid,
                 "error": f"Failed to retrieve paper data: {str(e)}",
@@ -374,14 +389,16 @@ class PubMedRetriever:
             try:
                 return await asyncio.wait_for(self.get_paper_metadata_async(pmid), timeout=6)
             except Exception as e:
-                logger.error(f"Metadata fetch error for PMID {pmid}: {e}")
+                safe_error = mask_exception_message(e)
+                logger.error(f"Metadata fetch error for PMID {pmid}: {safe_error}")
                 return {}
 
         async def fetch_fulltext():
             try:
                 return await asyncio.wait_for(self.get_pmc_fulltext_async(pmid), timeout=8)
             except Exception as e:
-                logger.warning(f"Full text fetch error for PMID {pmid}: {e}")
+                safe_error = mask_exception_message(e)
+                logger.warning(f"Full text fetch error for PMID {pmid}: {safe_error}")
                 return ""
 
         if USE_FULLTEXT:

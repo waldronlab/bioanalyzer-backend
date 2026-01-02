@@ -5,6 +5,7 @@ import uuid
 from typing import Optional
 from fastapi import APIRouter, HTTPException, BackgroundTasks
 from pydantic import BaseModel, HttpUrl
+from app.utils.credential_masking import mask_exception_message
 
 from app.services.web_scraper import WebScraperService
 from app.services.image_processor import ImageProcessorService
@@ -142,7 +143,8 @@ async def process_url_analysis(
                     gemini_api_key=GEMINI_API_KEY
                 )
             except Exception as e:
-                logger.warning(f"Job {job_id}: Unable to initialize visual LLM: {e}")
+                safe_error = mask_exception_message(e)
+                logger.warning(f"Job {job_id}: Unable to initialize visual LLM: {safe_error}")
 
         image_descriptions = []
         
@@ -228,6 +230,7 @@ async def process_url_analysis(
         logger.info(f"Job {job_id}: Completed successfully")
         
     except Exception as e:
-        logger.error(f"Job {job_id}: Failed with error: {e}")
+        safe_error = mask_exception_message(e)
+        logger.error(f"Job {job_id}: Failed with error: {safe_error}")
         job_store[job_id].status = "failed"
         job_store[job_id].error = str(e)

@@ -135,7 +135,9 @@ def get_paper_metadata_from_csv(pmid: str, csv_path: str = 'data/full_dump.csv')
                         'publication_date': row.get('publication_date', '')
                     }
     except Exception as e:
-        logger.error(f"Error reading CSV metadata for PMID {pmid}: {e}")
+        from app.utils.credential_masking import mask_exception_message
+        safe_error = mask_exception_message(e)
+        logger.error(f"Error reading CSV metadata for PMID {pmid}: {safe_error}")
     
     return None
 
