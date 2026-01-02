@@ -228,6 +228,30 @@ docker run --rm \
 
 ### Pre-commit Hooks Not Running
 
+**If using Docker (Recommended):**
+
+1. Check cache directory permissions:
+   ```bash
+   # Fix cache directory permissions if needed
+   chmod -R u+w ~/.cache/pre-commit 2>/dev/null || true
+   ```
+
+2. Run hooks manually with Docker:
+   ```bash
+   ./scripts/pre-commit-docker.sh
+   ```
+
+3. If you get permission errors, try:
+   ```bash
+   # Remove the lock file if it exists
+   rm -f ~/.cache/pre-commit/.lock
+   
+   # Then run again
+   ./scripts/pre-commit-docker.sh
+   ```
+
+**If using local installation:**
+
 1. Verify installation:
    ```bash
    pre-commit --version
