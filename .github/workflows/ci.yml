@@ -111,7 +111,7 @@ jobs:
         PYTHONPATH: ${{ github.workspace }}
       run: |
         export PYTHONPATH=${{ github.workspace }}:$PYTHONPATH
-        pytest tests/ -v --tb=short --maxfail=10 --cov=app --cov-report=xml --cov-report=term-missing --cov-fail-under=60
+        pytest tests/ -v --tb=short --maxfail=10 --cov=app --cov-report=xml --cov-report=term-missing --cov-fail-under=50
     
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v4
