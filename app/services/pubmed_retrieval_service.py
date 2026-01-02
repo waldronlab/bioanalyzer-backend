@@ -25,10 +25,11 @@ if TYPE_CHECKING:
 try:
     from app.services.data_retrieval import PubMedRetriever  # noqa: F811
     from app.utils.config import NCBI_API_KEY
+    _PubMedRetrieverClass: type[PubMedRetriever] | None = PubMedRetriever  # type: ignore[valid-type]
 except ImportError:
     # Fallback if config is not available
     NCBI_API_KEY = None
-    PubMedRetriever = None
+    _PubMedRetrieverClass = None
 
 logger = logging.getLogger(__name__)
 
@@ -60,9 +61,9 @@ class PubMedRetrievalService:
 
         # Initialize retriever with error handling
         try:
-            if PubMedRetriever is None:
+            if _PubMedRetrieverClass is None:
                 raise PubMedRetrievalServiceError("PubMedRetriever not available")
-            self.retriever = PubMedRetriever(api_key=self.api_key)
+            self.retriever = _PubMedRetrieverClass(api_key=self.api_key)
         except Exception as e:
             logger.error(f"Failed to initialize PubMedRetriever: {e}")
             raise PubMedRetrievalServiceError(f"Service initialization failed: {e}")

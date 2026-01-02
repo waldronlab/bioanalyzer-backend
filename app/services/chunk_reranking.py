@@ -14,9 +14,10 @@ if TYPE_CHECKING:
 
 try:
     from app.models.llm_provider import LITELLM_AVAILABLE, LLMProviderManager  # noqa: F811
+    _LLMProviderManagerClass = LLMProviderManager
 except ImportError:
     LITELLM_AVAILABLE = False
-    LLMProviderManager = None
+    _LLMProviderManagerClass = None
 
 from paperqa.types import Text
 
@@ -53,9 +54,9 @@ class ChunkReRanker:
         self._metrics: Dict[str, Any] = {}
 
         if self.rerank_method in ["llm", "hybrid"]:
-            if LITELLM_AVAILABLE and LLMProviderManager:
+            if LITELLM_AVAILABLE and _LLMProviderManagerClass:
                 try:
-                    self.llm_manager = LLMProviderManager(provider=llm_provider, model=llm_model)
+                    self.llm_manager = _LLMProviderManagerClass(provider=llm_provider, model=llm_model)
                     logger.info(
                         f"ChunkReRanker: Using LLM for re-ranking (scale: {'0-10' if use_10_scale else '0-1.0'})"
                     )

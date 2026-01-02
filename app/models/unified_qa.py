@@ -10,9 +10,10 @@ if TYPE_CHECKING:
 
 try:
     from .llm_provider import LITELLM_AVAILABLE, LLMProviderManager
+    _LLMProviderManagerClass = LLMProviderManager
 except ImportError:
     LITELLM_AVAILABLE = False
-    LLMProviderManager = None
+    _LLMProviderManagerClass = None
 
 # Try to import Paper-QA first, fallback to GeminiQA if not available
 try:
@@ -61,9 +62,9 @@ class UnifiedQA:
         self.use_paperqa = bool(use_paperqa) and PAPERQA_AVAILABLE
 
         self.llm_manager = None
-        if LITELLM_AVAILABLE and LLMProviderManager:
+        if LITELLM_AVAILABLE and _LLMProviderManagerClass:
             try:
-                self.llm_manager = LLMProviderManager(provider=provider, model=model)
+                self.llm_manager = _LLMProviderManagerClass(provider=provider, model=model)
                 logger.info(
                     f"UnifiedQA: Using LiteLLM with provider={self.llm_manager.provider.value}, model={self.llm_manager.model}"
                 )

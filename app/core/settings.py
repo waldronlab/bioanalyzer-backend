@@ -5,7 +5,7 @@ import logging
 import os
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Dict, List, Literal, Mapping, Optional
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -409,11 +409,11 @@ class BioAnalyzerSettings(BaseModel):
             raise ValueError(f"Unknown preset: {preset_name}. Valid presets: {list(presets.keys())}")
 
         settings = cls()
-        preset_data = presets[preset_name]
+        preset_data: Mapping[str, Any] = presets[preset_name]
 
         # Create update dict with preset values
         update_dict: Dict[str, Any] = {"preset": preset_name}
-        update_dict.update(preset_data)  # type: ignore[arg-type]
+        update_dict.update(preset_data)
 
         # Use Pydantic's model_validate to properly convert enum values
         # Merge with existing settings

@@ -16,9 +16,10 @@ if TYPE_CHECKING:
 
 try:
     from app.models.llm_provider import LITELLM_AVAILABLE, LLMProviderManager  # noqa: F811
+    _LLMProviderManagerClass = LLMProviderManager
 except ImportError:
     LITELLM_AVAILABLE = False
-    LLMProviderManager = None
+    _LLMProviderManagerClass = None
 
 from paperqa.types import Text
 
@@ -65,9 +66,9 @@ class ContextualSummarizationService:
         self.cache_dir.mkdir(parents=True, exist_ok=True)
 
         self.summary_llm = None
-        if LITELLM_AVAILABLE and LLMProviderManager:
+        if LITELLM_AVAILABLE and _LLMProviderManagerClass:
             try:
-                self.summary_llm = LLMProviderManager(provider=summary_llm_provider, model=summary_llm_model)
+                self.summary_llm = _LLMProviderManagerClass(provider=summary_llm_provider, model=summary_llm_model)
                 logger.info(
                     f"ContextualSummarizationService: Using {self.summary_llm.provider.value} "
                     f"model {self.summary_llm.model} for summarization"
