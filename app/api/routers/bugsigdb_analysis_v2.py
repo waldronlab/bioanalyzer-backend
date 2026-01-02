@@ -1,28 +1,30 @@
 """BugSigDB Analysis API Router v2 with RAG support."""
-from fastapi import APIRouter, HTTPException, Query
-from typing import Optional, List
+
 import logging
 from datetime import datetime
-from app.utils.credential_masking import mask_exception_message
+from typing import List, Optional
 
-from app.services.bugsigdb_analyzer import analyze_paper_simple, analyze_paper_with_rag
+from fastapi import APIRouter, HTTPException, Query
+
 from app.api.models.api_models import (
     AnalysisRequestV2,
     BatchAnalysisRequestV2,
     PaperAnalysisResultV2,
     RAGConfig,
     RAGConfigResponse,
-    RAGStats
+    RAGStats,
 )
+from app.services.bugsigdb_analyzer import analyze_paper_simple, analyze_paper_with_rag
 from app.utils.config import (
-    RAG_SUMMARY_PROVIDER,
-    RAG_SUMMARY_MODEL,
-    RAG_SUMMARY_LENGTH,
-    RAG_SUMMARY_QUALITY,
     RAG_RERANK_METHOD,
+    RAG_SUMMARY_LENGTH,
+    RAG_SUMMARY_MODEL,
+    RAG_SUMMARY_PROVIDER,
+    RAG_SUMMARY_QUALITY,
+    RAG_TOP_K_CHUNKS,
     RAG_USE_SUMMARY_CACHE,
-    RAG_TOP_K_CHUNKS
 )
+from app.utils.credential_masking import mask_exception_message
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v2", tags=["BugSigDB Analysis v2"])
@@ -31,39 +33,39 @@ ESSENTIAL_FIELDS_INFO = {
     "host_species": {
         "name": "Host Species",
         "description": "The host organism being studied (e.g., Human, Mouse, Rat)",
-        "required": True
+        "required": True,
     },
     "body_site": {
-        "name": "Body Site", 
+        "name": "Body Site",
         "description": "Where the microbiome sample was collected (e.g., Gut, Oral, Skin)",
-        "required": True
+        "required": True,
     },
     "condition": {
         "name": "Condition",
         "description": "What disease, treatment, or exposure is being studied",
-        "required": True
+        "required": True,
     },
     "sequencing_type": {
         "name": "Sequencing Type",
         "description": "What molecular method was used (e.g., 16S, metagenomics)",
-        "required": True
+        "required": True,
     },
     "taxa_level": {
         "name": "Taxa Level",
         "description": "What taxonomic level was analyzed (e.g., phylum, genus, species)",
-        "required": True
+        "required": True,
     },
     "sample_size": {
         "name": "Sample Size",
         "description": "Number of samples or participants analyzed",
-        "required": True
-    }
+        "required": True,
+    },
 }
 
 STATUS_VALUES = {
     "PRESENT": "Information is complete and clear",
-    "PARTIALLY_PRESENT": "Some information available but incomplete", 
-    "ABSENT": "Information is missing"
+    "PARTIALLY_PRESENT": "Some information available but incomplete",
+    "ABSENT": "Information is missing",
 }
 
 
@@ -80,7 +82,7 @@ def _get_default_rag_config() -> RAGConfig:
         summary_provider=RAG_SUMMARY_PROVIDER,
         summary_model=RAG_SUMMARY_MODEL,
         use_cache=RAG_USE_SUMMARY_CACHE,
-        use_10_scale=True  # Use 0-10 scale by default
+        use_10_scale=True,  # Use 0-10 scale by default
     )
 
 
@@ -93,16 +95,16 @@ async def analyze_paper(
     max_sources: Optional[int] = Query(None, description="Maximum number of sources to use for final answer"),
     rerank_method: Optional[str] = Query(None, description="Re-ranking method: keyword, llm, hybrid"),
     summary_length: Optional[str] = Query(None, description="Summary length: short, medium, long"),
-    summary_quality: Optional[str] = Query(None, description="Summary quality: fast, balanced, high")
+    summary_quality: Optional[str] = Query(None, description="Summary quality: fast, balanced, high"),
 ) -> PaperAnalysisResultV2:
     """
     Analyze a single paper for the 6 essential BugSigDB fields with RAG support (GET variant).
-    
+
     **RAG Features:**
     - Contextual summarization of relevant chunks
     - Chunk re-ranking by relevance
     - Query-aware context generation
-    
+
     **Parameters:**
     - `pmid`: PubMed ID of the paper to analyze
     - `use_rag`: Enable/disable RAG features (default: True)
@@ -129,15 +131,15 @@ async def analyze_paper(
                 summary_provider=default_config.summary_provider,
                 summary_model=default_config.summary_model,
                 use_cache=default_config.use_cache,
-                use_10_scale=default_config.use_10_scale
+                use_10_scale=default_config.use_10_scale,
             )
-        
+
         result = await analyze_paper_with_rag(pmid, rag_config=rag_config, use_rag=use_rag)
         if not result:
             raise HTTPException(status_code=404, detail=f"Analysis failed for PMID {pmid}")
-        
+
         return result
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -150,7 +152,7 @@ async def analyze_paper(
 async def analyze_paper_post(request: AnalysisRequestV2) -> PaperAnalysisResultV2:
     """
     Analyze a single paper for the 6 essential BugSigDB fields with RAG support (POST variant).
-    
+
     **Request Body:**
     ```json
     {
@@ -171,17 +173,13 @@ async def analyze_paper_post(request: AnalysisRequestV2) -> PaperAnalysisResultV
         if request.use_rag and not rag_config:
             # Use default config if RAG enabled but no config provided
             rag_config = _get_default_rag_config()
-        
-        result = await analyze_paper_with_rag(
-            request.pmid,
-            rag_config=rag_config,
-            use_rag=request.use_rag
-        )
+
+        result = await analyze_paper_with_rag(request.pmid, rag_config=rag_config, use_rag=request.use_rag)
         if not result:
             raise HTTPException(status_code=404, detail=f"Analysis failed for PMID {request.pmid}")
-        
+
         return result
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -194,7 +192,7 @@ async def analyze_paper_post(request: AnalysisRequestV2) -> PaperAnalysisResultV
 async def analyze_papers_batch(request: BatchAnalysisRequestV2) -> List[PaperAnalysisResultV2]:
     """
     Analyze multiple papers in batch with RAG support.
-    
+
     **Request Body:**
     ```json
     {
@@ -206,40 +204,33 @@ async def analyze_papers_batch(request: BatchAnalysisRequestV2) -> List[PaperAna
     ```
     """
     import asyncio
-    
+
     try:
         rag_config = request.rag_config
         if request.use_rag and not rag_config:
             rag_config = _get_default_rag_config()
-        
+
         # Process in batches with concurrency limit
         semaphore = asyncio.Semaphore(request.max_concurrent)
         results = []
-        
+
         async def analyze_with_semaphore(pmid: str):
             async with semaphore:
                 try:
-                    return await analyze_paper_with_rag(
-                        pmid,
-                        rag_config=rag_config,
-                        use_rag=request.use_rag
-                    )
+                    return await analyze_paper_with_rag(pmid, rag_config=rag_config, use_rag=request.use_rag)
                 except Exception as e:
                     safe_error = mask_exception_message(e)
                     logger.error(f"Error analyzing PMID {pmid} in batch: {safe_error}")
                     return None
-        
+
         tasks = [analyze_with_semaphore(pmid) for pmid in request.pmids]
         results = await asyncio.gather(*tasks, return_exceptions=True)
-        
+
         # Filter out None and exceptions
-        valid_results = [
-            r for r in results
-            if r is not None and not isinstance(r, Exception)
-        ]
-        
+        valid_results = [r for r in results if r is not None and not isinstance(r, Exception)]
+
         return valid_results
-        
+
     except Exception as e:
         safe_error = mask_exception_message(e)
         logger.error(f"Error in batch analysis: {safe_error}")
@@ -250,21 +241,25 @@ async def analyze_papers_batch(request: BatchAnalysisRequestV2) -> List[PaperAna
 async def get_rag_config() -> RAGConfigResponse:
     """
     Get RAG configuration information and available options.
-    
+
     Returns default configuration and available options for RAG features.
     """
     try:
         from app.models.llm_provider import LLMProviderManager
-        
+
         default_config = _get_default_rag_config()
-        available_providers = LLMProviderManager.get_available_providers() if hasattr(LLMProviderManager, 'get_available_providers') else []
-        
+        available_providers = (
+            LLMProviderManager.get_available_providers()
+            if hasattr(LLMProviderManager, "get_available_providers")
+            else []
+        )
+
         return RAGConfigResponse(
             default_config=default_config,
             available_rerank_methods=["keyword", "llm", "hybrid"],
             available_summary_lengths=["short", "medium", "long"],
             available_summary_qualities=["fast", "balanced", "high"],
-            available_providers=available_providers or ["gemini", "openai", "anthropic"]
+            available_providers=available_providers or ["gemini", "openai", "anthropic"],
         )
     except Exception as e:
         safe_error = mask_exception_message(e)
@@ -276,36 +271,26 @@ async def get_rag_config() -> RAGConfigResponse:
 async def get_essential_fields():
     """
     Get information about the 6 essential BugSigDB fields.
-    
+
     Same as v1 endpoint, maintained for backward compatibility.
     """
-    return {
-        "essential_fields": ESSENTIAL_FIELDS_INFO,
-        "status_values": STATUS_VALUES,
-        "api_version": "v2"
-    }
+    return {"essential_fields": ESSENTIAL_FIELDS_INFO, "status_values": STATUS_VALUES, "api_version": "v2"}
 
 
 @router.get("/fields/{field_name}")
 async def get_field_details(field_name: str):
     """
     Get information about a single BugSigDB field.
-    
+
     Same as v1 endpoint, maintained for backward compatibility.
     """
     normalized_name = field_name.strip().lower()
     if normalized_name not in ESSENTIAL_FIELDS_INFO:
         raise HTTPException(
-            status_code=404,
-            detail=f"Field '{field_name}' is not one of the 6 essential BugSigDB fields"
+            status_code=404, detail=f"Field '{field_name}' is not one of the 6 essential BugSigDB fields"
         )
-    
+
     field_details = ESSENTIAL_FIELDS_INFO[normalized_name].copy()
     field_details["field_key"] = normalized_name
-    
-    return {
-        "field": field_details,
-        "status_values": STATUS_VALUES,
-        "api_version": "v2"
-    }
 
+    return {"field": field_details, "status_values": STATUS_VALUES, "api_version": "v2"}

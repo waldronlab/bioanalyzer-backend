@@ -1,14 +1,17 @@
 """LLM provider abstraction layer using LiteLLM for multiple providers."""
-import os
+
 import logging
-from typing import Optional, Dict, List, Any
+import os
 from enum import Enum
+from typing import Any, Dict, List, Optional
+
 from app.utils.credential_masking import mask_exception_message, mask_string
 
 logger = logging.getLogger(__name__)
 
 try:
     import litellm
+
     LITELLM_AVAILABLE = True
 except ImportError:
     LITELLM_AVAILABLE = False
@@ -18,6 +21,7 @@ except ImportError:
 
 class LLMProvider(str, Enum):
     """Supported LLM providers."""
+
     OPENAI = "openai"
     ANTHROPIC = "anthropic"
     GEMINI = "gemini"
@@ -27,7 +31,7 @@ class LLMProvider(str, Enum):
 
 class LLMProviderManager:
     """Manages LLM provider configuration and provides unified interface."""
-    
+
     DEFAULT_MODELS = {
         LLMProvider.OPENAI: "gpt-4o",
         LLMProvider.ANTHROPIC: "claude-3-5-sonnet-20241022",
@@ -35,7 +39,7 @@ class LLMProviderManager:
         LLMProvider.OLLAMA: "ollama/llama3",
         LLMProvider.LLAMAFILE: "llamafile/llama-3.2-3b",
     }
-    
+
     REQUIRED_ENV_VARS = {
         LLMProvider.OPENAI: ["OPENAI_API_KEY"],
         LLMProvider.ANTHROPIC: ["ANTHROPIC_API_KEY"],
@@ -43,27 +47,27 @@ class LLMProviderManager:
         LLMProvider.OLLAMA: [],  # No API key needed for local Ollama
         LLMProvider.LLAMAFILE: [],  # No API key needed for local llamafile
     }
-    
+
     def __init__(self, provider: Optional[str] = None, model: Optional[str] = None):
         """Initialize LLM provider manager."""
         if not LITELLM_AVAILABLE:
             raise ImportError("LiteLLM is not installed. Install with: pip install litellm")
-        
+
         if provider is None:
             provider = self._detect_provider()
-        
+
         try:
             self.provider = LLMProvider(provider.lower())
         except ValueError:
             raise ValueError(f"Unknown provider: {provider}. Supported providers: {[p.value for p in LLMProvider]}")
-        
+
         self.model = model or self.DEFAULT_MODELS.get(self.provider, "gpt-4o")
-        
+
         self._validate_provider_config()
         self._configure_litellm()
-        
+
         logger.info(f"LLMProviderManager initialized: provider={self.provider.value}, model={self.model}")
-    
+
     def _detect_provider(self) -> str:
         """Detect provider from environment variables."""
         # Check in order of preference
@@ -80,22 +84,22 @@ class LLMProviderManager:
             if os.getenv("GEMINI_API_KEY"):
                 return LLMProvider.GEMINI.value
             return LLMProvider.OPENAI.value
-    
+
     def _validate_provider_config(self):
         """Validate that required environment variables are set."""
         required_vars = self.REQUIRED_ENV_VARS.get(self.provider, [])
         missing_vars = []
-        
+
         for var in required_vars:
             if not os.getenv(var):
                 missing_vars.append(var)
-        
+
         if missing_vars:
             logger.warning(
                 f"Provider {self.provider.value} requires environment variables: {missing_vars}. "
                 f"Some features may not work."
             )
-    
+
     def _configure_litellm(self):
         """Configure LiteLLM with provider-specific settings."""
         # Set API keys in environment for LiteLLM
@@ -112,10 +116,10 @@ class LLMProviderManager:
             # Configure Ollama base URL if provided
             ollama_base = os.getenv("OLLAMA_BASE_URL") or os.getenv("OLLAMA_HOST", "http://localhost:11434")
             os.environ["OLLAMA_BASE_URL"] = ollama_base
-        
+
         # Configure LiteLLM settings
         litellm.set_verbose = os.getenv("LITELLM_VERBOSE", "false").lower() == "true"
-    
+
     async def chat(
         self,
         messages: List[Dict[str, str]],
@@ -125,18 +129,18 @@ class LLMProviderManager:
     ) -> Dict[str, Any]:
         """
         Send a chat completion request using LiteLLM.
-        
+
         Args:
             messages: List of message dicts with 'role' and 'content' keys
             temperature: Sampling temperature (0.0 to 2.0)
             max_tokens: Maximum tokens to generate
             timeout: Request timeout in seconds
-            
+
         Returns:
             Response dict with 'text' and 'confidence' keys
         """
         import asyncio
-        
+
         try:
             response = await asyncio.wait_for(
                 litellm.acompletion(
@@ -147,13 +151,13 @@ class LLMProviderManager:
                 ),
                 timeout=timeout,
             )
-            
+
             # Extract text from response
             text = response.choices[0].message.content if response.choices else ""
-            
+
             # Estimate confidence (higher for longer, more complete responses)
             confidence = min(1.0, 0.5 + (len(text) / 1000) * 0.1)
-            
+
             return {
                 "text": text,
                 "confidence": confidence,
@@ -176,7 +180,7 @@ class LLMProviderManager:
                 "confidence": 0.0,
                 "error": safe_error,
             }
-    
+
     async def analyze_image(
         self,
         image_url: str,
@@ -185,17 +189,17 @@ class LLMProviderManager:
     ) -> str:
         """
         Analyze an image using vision-capable models.
-        
+
         Args:
             image_url: Image URL (data URL or HTTP URL)
             prompt: Text prompt for image analysis
             timeout: Request timeout in seconds
-            
+
         Returns:
             Image description/analysis text
         """
         import asyncio
-        
+
         # Check if model supports vision
         vision_models = [
             "gpt-4o",
@@ -206,10 +210,10 @@ class LLMProviderManager:
             "gemini/gemini-2.0-flash",
             "gemini/gemini-pro-vision",
         ]
-        
+
         if not any(model in self.model for model in vision_models):
             return f"Model {self.model} does not support image analysis. Use a vision-capable model."
-        
+
         try:
             response = await asyncio.wait_for(
                 litellm.acompletion(
@@ -226,7 +230,7 @@ class LLMProviderManager:
                 ),
                 timeout=timeout,
             )
-            
+
             return response.choices[0].message.content if response.choices else ""
         except asyncio.TimeoutError:
             logger.error(f"Image analysis timed out after {timeout}s")
@@ -236,12 +240,12 @@ class LLMProviderManager:
             safe_error = mask_exception_message(e)
             logger.error(f"Image analysis failed: {safe_error}")
             return f"Error analyzing image: {safe_error}"
-    
+
     @staticmethod
     def get_available_providers() -> List[str]:
         """Get list of available providers based on environment variables."""
         available = []
-        
+
         if os.getenv("OPENAI_API_KEY"):
             available.append(LLMProvider.OPENAI.value)
         if os.getenv("ANTHROPIC_API_KEY"):
@@ -251,9 +255,9 @@ class LLMProviderManager:
         if os.getenv("OLLAMA_BASE_URL") or os.getenv("OLLAMA_HOST"):
             available.append(LLMProvider.OLLAMA.value)
         # llamafile is always available if installed locally
-        
+
         return available
-    
+
     @staticmethod
     def get_supported_models(provider: str) -> List[str]:
         """Get list of supported models for a provider."""
@@ -288,4 +292,3 @@ class LLMProviderManager:
             ],
         }
         return models.get(provider.lower(), [])
-

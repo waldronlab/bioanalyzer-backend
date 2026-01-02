@@ -1,22 +1,27 @@
-import logging
-from typing import Dict, List, Optional, Union
-from pathlib import Path
-from datetime import datetime
-import pytz
-import google.generativeai as genai
-import os
-import json
-from app.utils.config import GEMINI_TIMEOUT
-from app.utils.credential_masking import mask_string, mask_exception_message
 import asyncio
+import json
+import logging
+import os
 import time
+from datetime import datetime
+from pathlib import Path
+from typing import Dict, List, Optional, Union
+
+import google.generativeai as genai
+import pytz
+
+from app.utils.config import GEMINI_TIMEOUT
+from app.utils.credential_masking import mask_exception_message, mask_string
 
 logger = logging.getLogger(__name__)
+
 
 class GeminiQA:
     """QA system using Gemini API for biomedical paper analysis."""
 
-    def __init__(self, api_key: Optional[str] = None, model: str = "gemini-2.5-flash", results_dir: Optional[Path] = None):
+    def __init__(
+        self, api_key: Optional[str] = None, model: str = "gemini-2.5-flash", results_dir: Optional[Path] = None
+    ):
         self.api_key = api_key or os.getenv("GEMINI_API_KEY", "")
         self.model = model
         logger.info(f"Initializing GeminiQA with model: {self.model}")
@@ -25,9 +30,9 @@ class GeminiQA:
         if not self.api_key:
             logger.warning("No model API key provided. Set GEMINI_API_KEY in your environment.")
         genai.configure(api_key=self.api_key)
-        
+
         try:
-            available_models = [m.name for m in genai.list_models() if 'gemini' in m.name.lower()]
+            available_models = [m.name for m in genai.list_models() if "gemini" in m.name.lower()]
             logger.info(f"Available Gemini models: {available_models}")
         except Exception as e:
             logger.warning(f"Could not list models: {e}")
@@ -41,9 +46,44 @@ class GeminiQA:
         categories = {
             "microbiome": ["microbiome", "microbial", "bacteria", "microbiota"],
             "methods": ["16s", "metagenomic", "sequencing", "amplicon", "shotgun", "transcriptomic", "qpcr", "fish"],
-            "analysis": ["enriched", "depleted", "increased", "decreased", "differential", "higher abundance", "lower abundance"],
-            "body_sites": ["gut", "oral", "skin", "lung", "vaginal", "intestinal", "colon", "mouth", "dermal", "epidermis", "airway", "bronchial", "cervical"],
-            "diseases": ["ibd", "cancer", "tumor", "carcinoma", "neoplasm", "obesity", "diabetes", "infection", "autoimmune", "arthritis", "lupus", "multiple sclerosis"]
+            "analysis": [
+                "enriched",
+                "depleted",
+                "increased",
+                "decreased",
+                "differential",
+                "higher abundance",
+                "lower abundance",
+            ],
+            "body_sites": [
+                "gut",
+                "oral",
+                "skin",
+                "lung",
+                "vaginal",
+                "intestinal",
+                "colon",
+                "mouth",
+                "dermal",
+                "epidermis",
+                "airway",
+                "bronchial",
+                "cervical",
+            ],
+            "diseases": [
+                "ibd",
+                "cancer",
+                "tumor",
+                "carcinoma",
+                "neoplasm",
+                "obesity",
+                "diabetes",
+                "infection",
+                "autoimmune",
+                "arthritis",
+                "lupus",
+                "multiple sclerosis",
+            ],
         }
         text = " ".join(key_findings).lower()
         scores = {}
@@ -57,13 +97,13 @@ class GeminiQA:
         suggested_topics = []
         in_suggested = False
         for line in key_findings:
-            if 'Suggested Topics' in line or 'Suggested Topics for Future Research' in line:
+            if "Suggested Topics" in line or "Suggested Topics for Future Research" in line:
                 in_suggested = True
                 continue
             if in_suggested:
-                if line.strip().startswith('*') or line.strip().startswith('-'):
-                    suggested_topics.append(line.strip('*- ').strip())
-                elif line.strip() == '' or line.strip().startswith('**'):
+                if line.strip().startswith("*") or line.strip().startswith("-"):
+                    suggested_topics.append(line.strip("*- ").strip())
+                elif line.strip() == "" or line.strip().startswith("**"):
                     continue
                 else:
                     in_suggested = False
@@ -75,9 +115,44 @@ class GeminiQA:
         categories = {
             "microbiome": ["microbiome", "microbial", "bacteria", "microbiota"],
             "methods": ["16s", "metagenomic", "sequencing", "amplicon", "shotgun", "transcriptomic", "qpcr", "fish"],
-            "analysis": ["enriched", "depleted", "increased", "decreased", "differential", "higher abundance", "lower abundance"],
-            "body_sites": ["gut", "oral", "skin", "lung", "vaginal", "intestinal", "colon", "mouth", "dermal", "epidermis", "airway", "bronchial", "cervical"],
-            "diseases": ["ibd", "cancer", "tumor", "carcinoma", "neoplasm", "obesity", "diabetes", "infection", "autoimmune", "arthritis", "lupus", "multiple sclerosis"]
+            "analysis": [
+                "enriched",
+                "depleted",
+                "increased",
+                "decreased",
+                "differential",
+                "higher abundance",
+                "lower abundance",
+            ],
+            "body_sites": [
+                "gut",
+                "oral",
+                "skin",
+                "lung",
+                "vaginal",
+                "intestinal",
+                "colon",
+                "mouth",
+                "dermal",
+                "epidermis",
+                "airway",
+                "bronchial",
+                "cervical",
+            ],
+            "diseases": [
+                "ibd",
+                "cancer",
+                "tumor",
+                "carcinoma",
+                "neoplasm",
+                "obesity",
+                "diabetes",
+                "infection",
+                "autoimmune",
+                "arthritis",
+                "lupus",
+                "multiple sclerosis",
+            ],
         }
         text = " ".join(key_findings).lower()
         found = {}
@@ -87,7 +162,7 @@ class GeminiQA:
 
     def parse_enhanced_analysis(self, analysis_text: str) -> Dict[str, Union[str, float, List[str]]]:
         try:
-            lines = analysis_text.split('\n')
+            lines = analysis_text.split("\n")
             curation_analysis = {
                 "readiness": "UNKNOWN",
                 "explanation": "",
@@ -105,15 +180,15 @@ class GeminiQA:
                 "human_animal_factors_present": [],
                 "environmental_factors_present": [],
                 "missing_critical_factors": [],
-                "factor_based_score": 0.0
+                "factor_based_score": 0.0,
             }
-            
+
             current_section = ""
             for line in lines:
                 line = line.strip()
                 if not line:
                     continue
-                    
+
                 if "CURATION READINESS ASSESSMENT:" in line:
                     current_section = "readiness"
                     continue
@@ -138,7 +213,7 @@ class GeminiQA:
                 elif "EXAMPLES AND EVIDENCE:" in line:
                     current_section = "examples"
                     continue
-                
+
                 if current_section == "readiness":
                     line_upper = line.upper()
                     if "READY FOR CURATION" in line_upper:
@@ -156,16 +231,24 @@ class GeminiQA:
                 elif current_section == "factor_analysis":
                     if "General Factors Present:" in line:
                         factors_text = line.split(":", 1)[1] if ":" in line else ""
-                        curation_analysis["general_factors_present"] = [f.strip() for f in factors_text.split(",") if f.strip()]
+                        curation_analysis["general_factors_present"] = [
+                            f.strip() for f in factors_text.split(",") if f.strip()
+                        ]
                     elif "Human/Animal Factors Present:" in line:
                         factors_text = line.split(":", 1)[1] if ":" in line else ""
-                        curation_analysis["human_animal_factors_present"] = [f.strip() for f in factors_text.split(",") if f.strip()]
+                        curation_analysis["human_animal_factors_present"] = [
+                            f.strip() for f in factors_text.split(",") if f.strip()
+                        ]
                     elif "Environmental Factors Present:" in line:
                         factors_text = line.split(":", 1)[1] if ":" in line else ""
-                        curation_analysis["environmental_factors_present"] = [f.strip() for f in factors_text.split(",") if f.strip()]
+                        curation_analysis["environmental_factors_present"] = [
+                            f.strip() for f in factors_text.split(",") if f.strip()
+                        ]
                     elif "Missing Critical Factors:" in line:
                         factors_text = line.split(":", 1)[1] if ":" in line else ""
-                        curation_analysis["missing_critical_factors"] = [f.strip() for f in factors_text.split(",") if f.strip()]
+                        curation_analysis["missing_critical_factors"] = [
+                            f.strip() for f in factors_text.split(",") if f.strip()
+                        ]
                 elif current_section == "signatures":
                     if "Presence of microbial signatures:" in line:
                         if "yes" in line.lower():
@@ -207,22 +290,25 @@ class GeminiQA:
                         curation_analysis["specific_reasons"].append(line.lstrip("- *").strip())
                 elif current_section == "confidence":
                     import re
-                    confidence_match = re.search(r'(\d+\.?\d*)', line)
+
+                    confidence_match = re.search(r"(\d+\.?\d*)", line)
                     if confidence_match:
                         curation_analysis["confidence"] = float(confidence_match.group(1))
                 elif current_section == "examples":
                     if line.startswith("-") or line.startswith("*"):
                         curation_analysis["examples"].append(line.lstrip("- *").strip())
-            
+
             curation_analysis["explanation"] = curation_analysis["explanation"].strip()
-            total_factors = len(curation_analysis["general_factors_present"]) + \
-                           len(curation_analysis["human_animal_factors_present"]) + \
-                           len(curation_analysis["environmental_factors_present"])
+            total_factors = (
+                len(curation_analysis["general_factors_present"])
+                + len(curation_analysis["human_animal_factors_present"])
+                + len(curation_analysis["environmental_factors_present"])
+            )
             max_factors = 16
             curation_analysis["factor_based_score"] = min(1.0, total_factors / max_factors)
-            
+
             return curation_analysis
-            
+
         except Exception as e:
             logger.error(f"Error parsing enhanced analysis: {str(e)}")
             return {
@@ -242,14 +328,14 @@ class GeminiQA:
                 "human_animal_factors_present": [],
                 "environmental_factors_present": [],
                 "missing_critical_factors": [],
-                "factor_based_score": 0.0
+                "factor_based_score": 0.0,
             }
 
     async def analyze_paper(self, paper_content: Dict[str, str]) -> Dict[str, Union[str, float, Dict[str, float]]]:
         try:
             content = f"Title: {paper_content.get('title', '')}\n"
             content += f"Abstract: {paper_content.get('abstract', '')}\n"
-            if paper_content.get('full_text'):
+            if paper_content.get("full_text"):
                 content += f"Full Text: {paper_content['full_text']}\n"
 
             prompt = """You are an expert scientific curator specializing in microbial signature analysis. Your task is to analyze this paper and provide a comprehensive assessment of its curation readiness based on the methods and experimental design.
@@ -347,33 +433,30 @@ CRITICAL: If the paper contains ANY specific microbial taxa identification, abun
             response = await model.generate_content_async(
                 f"{prompt}\n\nAnalyze this paper:\n{content}",
                 generation_config=genai.types.GenerationConfig(
-                    temperature=0.1,
-                    max_output_tokens=500,
-                    top_p=0.8,
-                    top_k=20
+                    temperature=0.1, max_output_tokens=500, top_p=0.8, top_k=20
                 ),
                 safety_settings=[
                     {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_ONLY_HIGH"},
                     {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_ONLY_HIGH"},
                     {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_ONLY_HIGH"},
                     {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_ONLY_HIGH"},
-                ]
+                ],
             )
             analysis_text = response.text.strip()
 
             if self.results_dir:
                 timestamp = datetime.now(pytz.UTC).strftime("%Y%m%d_%H%M%S")
-                paper_title = paper_content.get('title', 'unknown').replace(' ', '_')
+                paper_title = paper_content.get("title", "unknown").replace(" ", "_")
                 filename = self.results_dir / f"model_analysis_{timestamp}_{paper_title[:50]}.txt"
-                with open(filename, 'w') as f:
+                with open(filename, "w") as f:
                     f.write(analysis_text)
                 logger.info(f"Analysis saved to {filename}")
 
             logger.info(f"Raw model response for debugging:\n{analysis_text}")
             curation_analysis = self.parse_enhanced_analysis(analysis_text)
             logger.info(f"Parsed curation analysis: {curation_analysis}")
-            
-            key_findings_raw = [line.strip() for line in analysis_text.split('\n') if line.strip()]
+
+            key_findings_raw = [line.strip() for line in analysis_text.split("\n") if line.strip()]
             confidence = self.estimate_confidence(key_findings_raw)
             category_scores = self.estimate_category_scores(key_findings_raw)
             findings, suggested_topics = self.parse_gemini_output(key_findings_raw)
@@ -388,7 +471,7 @@ CRITICAL: If the paper contains ANY specific microbial taxa identification, abun
                 "category_scores": category_scores,
                 "num_tokens": len(analysis_text.split()),
                 "curation_analysis": curation_analysis,
-                "raw_analysis": analysis_text
+                "raw_analysis": analysis_text,
             }
         except asyncio.TimeoutError:
             logger.error("Paper analysis request timed out")
@@ -406,8 +489,8 @@ CRITICAL: If the paper contains ANY specific microbial taxa identification, abun
                     "explanation": "Analysis timed out",
                     "microbial_signatures": "Unknown",
                     "missing_fields": [],
-                    "confidence": 0.0
-                }
+                    "confidence": 0.0,
+                },
             }
         except Exception as e:
             error_str = str(e)
@@ -426,8 +509,8 @@ CRITICAL: If the paper contains ANY specific microbial taxa identification, abun
                     "explanation": f"Error during analysis: {error_str}",
                     "microbial_signatures": "Unknown",
                     "missing_fields": [],
-                    "confidence": 0.0
-                }
+                    "confidence": 0.0,
+                },
             }
 
     async def analyze_paper_enhanced(self, prompt: str) -> Dict[str, Union[str, float, List[str]]]:
@@ -443,12 +526,12 @@ CRITICAL: If the paper contains ANY specific microbial taxa identification, abun
                     "debug_info": {
                         "issue": "Missing API key",
                         "solution": "Set GEMINI_API_KEY environment variable",
-                        "timestamp": datetime.now().isoformat()
-                    }
+                        "timestamp": datetime.now().isoformat(),
+                    },
                 }
-            
+
             model = genai.GenerativeModel(self.model)
-            
+
             enhanced_structured_prompt = f"""
             You are a specialized AI assistant for BugSigDB curation with expertise in microbial signature analysis. Your task is to analyze scientific papers and extract specific information in a structured JSON format with high accuracy.
 
@@ -524,60 +607,56 @@ CRITICAL: If the paper contains ANY specific microbial taxa identification, abun
 
             logger.info(f"Starting model API call with {GEMINI_TIMEOUT}s timeout...")
             start_time = time.time()
-            
+
             loop = asyncio.get_event_loop()
             response = await asyncio.wait_for(
-                loop.run_in_executor(None, lambda: model.generate_content(
-                    enhanced_structured_prompt,
-                    generation_config=genai.types.GenerationConfig(
-                        temperature=0.1,
-                        max_output_tokens=500,
-                        top_p=0.7,
-                        top_k=10
-                    )
-                )),
-                timeout=GEMINI_TIMEOUT
+                loop.run_in_executor(
+                    None,
+                    lambda: model.generate_content(
+                        enhanced_structured_prompt,
+                        generation_config=genai.types.GenerationConfig(
+                            temperature=0.1, max_output_tokens=500, top_p=0.7, top_k=10
+                        ),
+                    ),
+                ),
+                timeout=GEMINI_TIMEOUT,
             )
-            
+
             elapsed_time = time.time() - start_time
             logger.info(f"Gemini API call completed in {elapsed_time:.2f}s")
-            
+
             if not response or not response.text:
-                return {
-                    "error": "No response generated",
-                    "key_findings": "{}",
-                    "confidence": 0.0
-                }
-            
+                return {"error": "No response generated", "key_findings": "{}", "confidence": 0.0}
+
             response_text = response.text.strip()
-            json_start = response_text.find('{')
-            json_end = response_text.rfind('}') + 1
-            
+            json_start = response_text.find("{")
+            json_end = response_text.rfind("}") + 1
+
             if json_start >= 0 and json_end > json_start:
                 json_text = response_text[json_start:json_end]
             else:
                 json_text = response_text
-            
+
             try:
                 parsed_json = json.loads(json_text)
                 validated_json = self._validate_and_normalize_json(parsed_json)
                 confidence = self._calculate_enhanced_confidence(validated_json)
-                
+
                 return {
                     "key_findings": json.dumps(validated_json, indent=2),
                     "confidence": confidence,
-                    "status": "success"
+                    "status": "success",
                 }
             except json.JSONDecodeError as e:
                 logger.warning(f"Failed to parse JSON response: {e}")
                 logger.warning(f"Raw response: {response_text[:500]}...")
                 fallback_json = self._create_fallback_json()
-                
+
                 return {
                     "key_findings": json.dumps(fallback_json, indent=2),
                     "confidence": 0.0,
                     "status": "fallback",
-                    "error": f"JSON parsing failed: {str(e)}"
+                    "error": f"JSON parsing failed: {str(e)}",
                 }
         except asyncio.TimeoutError:
             logger.error("Enhanced paper analysis request timed out")
@@ -587,16 +666,13 @@ CRITICAL: If the paper contains ANY specific microbial taxa identification, abun
                 "key_findings": "{}",
                 "confidence": 0.0,
                 "status": "error",
-                "debug_info": {
-                    "issue": "Timeout during API call",
-                    "timestamp": datetime.now().isoformat()
-                }
+                "debug_info": {"issue": "Timeout during API call", "timestamp": datetime.now().isoformat()},
             }
         except Exception as e:
             # Mask any credentials in error message before logging
             error_msg = mask_string(str(e))
             error_type = type(e).__name__
-            
+
             if "quota" in error_msg.lower() or "quota exceeded" in error_msg.lower():
                 error_detail = "Model API quota exceeded. Please check your API usage limits."
                 logger.error(f"Model API quota exceeded: {error_msg}")
@@ -615,11 +691,11 @@ CRITICAL: If the paper contains ANY specific microbial taxa identification, abun
             else:
                 error_detail = f"Unexpected error: {error_msg}"
                 logger.error(f"Unexpected error in Model API: {error_msg}")
-            
+
             logger.error(f"Error type: {error_type}")
             logger.error(f"Error details: {error_detail}")
             logger.error(f"Full error: {error_msg}")
-            
+
             return {
                 "error": error_detail,
                 "error_type": error_type,
@@ -629,20 +705,56 @@ CRITICAL: If the paper contains ANY specific microbial taxa identification, abun
                 "debug_info": {
                     "original_error": error_msg,
                     "error_type": error_type,
-                    "timestamp": datetime.now().isoformat()
-                }
+                    "timestamp": datetime.now().isoformat(),
+                },
             }
 
     def _validate_and_normalize_json(self, parsed_json: Dict) -> Dict:
         required_fields = {
-            "host_species": {"primary": "Unknown", "confidence": 0.0, "status": "ABSENT", "reason_if_missing": "Field not found in analysis", "suggestions_for_curation": "Review paper for host species information"},
-            "body_site": {"site": "Unknown", "confidence": 0.0, "status": "ABSENT", "reason_if_missing": "Field not found in analysis", "suggestions_for_curation": "Review paper for body site information"},
-            "condition": {"description": "Unknown", "confidence": 0.0, "status": "ABSENT", "reason_if_missing": "Field not found in analysis", "suggestions_for_curation": "Review paper for condition information"},
-            "sequencing_type": {"method": "Unknown", "confidence": 0.0, "status": "ABSENT", "reason_if_missing": "Field not found in analysis", "suggestions_for_curation": "Review paper for sequencing method information"},
-            "taxa_level": {"level": "Unknown", "confidence": 0.0, "status": "ABSENT", "reason_if_missing": "Field not found in analysis", "suggestions_for_curation": "Review paper for taxonomic level information"},
-            "sample_size": {"size": "Unknown", "confidence": 0.0, "status": "ABSENT", "reason_if_missing": "Field not found in analysis", "suggestions_for_curation": "Review paper for sample size information"},
+            "host_species": {
+                "primary": "Unknown",
+                "confidence": 0.0,
+                "status": "ABSENT",
+                "reason_if_missing": "Field not found in analysis",
+                "suggestions_for_curation": "Review paper for host species information",
+            },
+            "body_site": {
+                "site": "Unknown",
+                "confidence": 0.0,
+                "status": "ABSENT",
+                "reason_if_missing": "Field not found in analysis",
+                "suggestions_for_curation": "Review paper for body site information",
+            },
+            "condition": {
+                "description": "Unknown",
+                "confidence": 0.0,
+                "status": "ABSENT",
+                "reason_if_missing": "Field not found in analysis",
+                "suggestions_for_curation": "Review paper for condition information",
+            },
+            "sequencing_type": {
+                "method": "Unknown",
+                "confidence": 0.0,
+                "status": "ABSENT",
+                "reason_if_missing": "Field not found in analysis",
+                "suggestions_for_curation": "Review paper for sequencing method information",
+            },
+            "taxa_level": {
+                "level": "Unknown",
+                "confidence": 0.0,
+                "status": "ABSENT",
+                "reason_if_missing": "Field not found in analysis",
+                "suggestions_for_curation": "Review paper for taxonomic level information",
+            },
+            "sample_size": {
+                "size": "Unknown",
+                "confidence": 0.0,
+                "status": "ABSENT",
+                "reason_if_missing": "Field not found in analysis",
+                "suggestions_for_curation": "Review paper for sample size information",
+            },
         }
-        
+
         for field_name, default_structure in required_fields.items():
             if field_name not in parsed_json:
                 parsed_json[field_name] = default_structure.copy()
@@ -654,27 +766,69 @@ CRITICAL: If the paper contains ANY specific microbial taxa identification, abun
                     for key, default_value in default_structure.items():
                         if key not in field_data:
                             field_data[key] = default_value
-        
+
         missing_fields = [
-            field for field in required_fields.keys()
-            if parsed_json.get(field, {}).get("status") != "PRESENT"
+            field for field in required_fields.keys() if parsed_json.get(field, {}).get("status") != "PRESENT"
         ]
-        
+
         parsed_json["missing_fields"] = missing_fields
         parsed_json["curation_preparation_summary"] = self._generate_curation_summary(parsed_json, missing_fields)
-        
+
         return parsed_json
 
     def _create_fallback_json(self) -> Dict:
         return {
-            "host_species": {"primary": "Unknown", "confidence": 0.0, "status": "ABSENT", "reason_if_missing": "Analysis failed - re-run required", "suggestions_for_curation": "Re-run analysis with corrected prompt"},
-            "body_site": {"site": "Unknown", "confidence": 0.0, "status": "ABSENT", "reason_if_missing": "Analysis failed - re-run required", "suggestions_for_curation": "Re-run analysis with corrected prompt"},
-            "condition": {"description": "Unknown", "confidence": 0.0, "status": "ABSENT", "reason_if_missing": "Analysis failed - re-run required", "suggestions_for_curation": "Re-run analysis with corrected prompt"},
-            "sequencing_type": {"method": "Unknown", "confidence": 0.0, "status": "ABSENT", "reason_if_missing": "Analysis failed - re-run required", "suggestions_for_curation": "Re-run analysis with corrected prompt"},
-            "taxa_level": {"level": "Unknown", "confidence": 0.0, "status": "ABSENT", "reason_if_missing": "Analysis failed - re-run required", "suggestions_for_curation": "Re-run analysis with corrected prompt"},
-            "sample_size": {"size": "Unknown", "confidence": 0.0, "status": "ABSENT", "reason_if_missing": "Analysis failed - re-run required", "suggestions_for_curation": "Re-run analysis with corrected prompt"},
-            "missing_fields": ["host_species", "body_site", "condition", "sequencing_type", "taxa_level", "sample_size"],
-            "curation_preparation_summary": "Analysis failed - re-run required"
+            "host_species": {
+                "primary": "Unknown",
+                "confidence": 0.0,
+                "status": "ABSENT",
+                "reason_if_missing": "Analysis failed - re-run required",
+                "suggestions_for_curation": "Re-run analysis with corrected prompt",
+            },
+            "body_site": {
+                "site": "Unknown",
+                "confidence": 0.0,
+                "status": "ABSENT",
+                "reason_if_missing": "Analysis failed - re-run required",
+                "suggestions_for_curation": "Re-run analysis with corrected prompt",
+            },
+            "condition": {
+                "description": "Unknown",
+                "confidence": 0.0,
+                "status": "ABSENT",
+                "reason_if_missing": "Analysis failed - re-run required",
+                "suggestions_for_curation": "Re-run analysis with corrected prompt",
+            },
+            "sequencing_type": {
+                "method": "Unknown",
+                "confidence": 0.0,
+                "status": "ABSENT",
+                "reason_if_missing": "Analysis failed - re-run required",
+                "suggestions_for_curation": "Re-run analysis with corrected prompt",
+            },
+            "taxa_level": {
+                "level": "Unknown",
+                "confidence": 0.0,
+                "status": "ABSENT",
+                "reason_if_missing": "Analysis failed - re-run required",
+                "suggestions_for_curation": "Re-run analysis with corrected prompt",
+            },
+            "sample_size": {
+                "size": "Unknown",
+                "confidence": 0.0,
+                "status": "ABSENT",
+                "reason_if_missing": "Analysis failed - re-run required",
+                "suggestions_for_curation": "Re-run analysis with corrected prompt",
+            },
+            "missing_fields": [
+                "host_species",
+                "body_site",
+                "condition",
+                "sequencing_type",
+                "taxa_level",
+                "sample_size",
+            ],
+            "curation_preparation_summary": "Analysis failed - re-run required",
         }
 
     def _calculate_enhanced_confidence(self, validated_json: Dict) -> float:
@@ -698,7 +852,7 @@ CRITICAL: If the paper contains ANY specific microbial taxa identification, abun
                     confidence_scores.append(field_confidence)
                 else:
                     confidence_scores.append(0.0)
-            
+
             if not confidence_scores:
                 return 0.0
             weighted_scores = [score * 1.2 if score >= 0.8 else score for score in confidence_scores]
@@ -715,7 +869,7 @@ CRITICAL: If the paper contains ANY specific microbial taxa identification, abun
             "condition": "description",
             "sequencing_type": "method",
             "taxa_level": "level",
-            "sample_size": "size"
+            "sample_size": "size",
         }
         return content_keys.get(field_name, "value")
 
@@ -740,40 +894,31 @@ CRITICAL: If the paper contains ANY specific microbial taxa identification, abun
                 model.generate_content_async(
                     f"{chat_prompt}\nUser: {prompt}",
                     generation_config=genai.types.GenerationConfig(
-                        temperature=0.3,
-                        max_output_tokens=300,
-                        top_p=0.9,
-                        top_k=40
+                        temperature=0.3, max_output_tokens=300, top_p=0.9, top_k=40
                     ),
                     safety_settings=[
                         {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_ONLY_HIGH"},
                         {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_ONLY_HIGH"},
                         {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_ONLY_HIGH"},
-                        {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_ONLY_HIGH"}
-                    ]
+                        {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_ONLY_HIGH"},
+                    ],
                 ),
-                timeout=GEMINI_TIMEOUT
+                timeout=GEMINI_TIMEOUT,
             )
             # Handle safety filter responses
             if response.candidates and response.candidates[0].finish_reason == 2:
                 logger.warning("Response blocked by safety filters, using fallback")
                 return {
                     "text": "I apologize, but I cannot process this request due to safety filters. Please try rephrasing your question.",
-                    "confidence": 0.0
+                    "confidence": 0.0,
                 }
-            
+
             reply = response.text.strip() if response.text else "No response generated"
             confidence = 1.0 if reply else 0.0
-            return {
-                "text": reply,
-                "confidence": confidence
-            }
+            return {"text": reply, "confidence": confidence}
         except asyncio.TimeoutError:
             logger.error(f"Chat request timed out after {GEMINI_TIMEOUT} seconds")
             return {"text": f"[Error: Request timed out after {GEMINI_TIMEOUT} seconds]", "confidence": 0.0}
         except Exception as e:
             logger.error(f"Model API error in chat: {str(e)}")
-            return {
-                "text": f"[Error: {str(e)}]",
-                "confidence": 0.0
-            }
+            return {"text": f"[Error: {str(e)}]", "confidence": 0.0}
