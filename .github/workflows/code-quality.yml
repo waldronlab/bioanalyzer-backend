@@ -51,7 +51,7 @@ jobs:
     
     - name: Type check with mypy
       run: |
-        mypy app/ --config-file mypy.ini
+        mypy app/ --config-file mypy.ini --explicit-package-bases
     
     - name: Run pylint (informational)
       run: |
