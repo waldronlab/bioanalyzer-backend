@@ -190,39 +190,40 @@ jobs:
     - name: Run Bandit security scan
       run: |
         echo "Running Bandit security scan..."
-        # Use config file and only fail on high severity issues
+        # Generate JSON report
         bandit -r app/ -f json -o bandit-report.json -c .bandit -ll || true
         echo ""
         echo "=== Bandit Security Scan Results ==="
-        bandit -r app/ -c .bandit -ll || {
-          EXIT_CODE=$?
-          echo ""
-          echo "⚠️ Bandit found security issues. Review the report above."
-          # Only fail if there are high/critical severity issues
-          HIGH_SEVERITY=$(bandit -r app/ -c .bandit -f json 2>/dev/null | python3 -c "
-            import json, sys
-            try:
-                data = json.load(sys.stdin)
-                high_issues = [r for r in data.get('results', []) if r.get('issue_severity') in ['HIGH', 'CRITICAL']]
-                if high_issues:
-                    print('HIGH_SEVERITY_FOUND')
-                    sys.exit(1)
-                else:
-                    print('NO_HIGH_SEVERITY')
-                    sys.exit(0)
-            except:
-                print('NO_HIGH_SEVERITY')
-                sys.exit(0)
-          " || echo "NO_HIGH_SEVERITY")
-          
-          if [ "$HIGH_SEVERITY" = "HIGH_SEVERITY_FOUND" ]; then
-            echo "❌ High or critical severity issues found. Please fix them."
-            exit 1
-          else
-            echo "✅ No high/critical severity issues. Medium/low issues are acceptable."
-            exit 0
-          fi
-        }
+        bandit -r app/ -c .bandit -ll || true
+        
+        # Check for high/critical severity issues
+        if [ -f bandit-report.json ]; then
+          python3 << 'EOF'
+import json
+import sys
+
+try:
+    with open('bandit-report.json', 'r') as f:
+        data = json.load(f)
+    
+    high_issues = [
+        r for r in data.get('results', [])
+        if r.get('issue_severity') in ['HIGH', 'CRITICAL']
+    ]
+    
+    if high_issues:
+        print(f"❌ Found {len(high_issues)} high/critical severity issues:")
+        for issue in high_issues[:5]:
+            print(f"  - {issue.get('test_id')}: {issue.get('issue_text', '')[:80]}")
+        sys.exit(1)
+    else:
+        print("✅ No high/critical severity issues found.")
+        sys.exit(0)
+except Exception as e:
+    print(f"⚠️ Could not parse bandit report: {e}")
+    sys.exit(0)
+EOF
+        fi
       continue-on-error: false  # High/critical security issues must be addressed
     
     - name: Check dependencies with Safety
