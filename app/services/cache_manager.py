@@ -23,7 +23,7 @@ class CacheManager:
 
         self._init_database()
 
-        self._connection_pool = []
+        self._connection_pool: List[Any] = []
         self._max_connections = 5
 
     def _get_connection(self):

@@ -5,10 +5,10 @@ import os
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
 import google.generativeai as genai
-import pytz
+import pytz  # type: ignore[import-untyped]
 
 from app.utils.config import GEMINI_TIMEOUT
 from app.utils.credential_masking import mask_string
@@ -160,10 +160,10 @@ class GeminiQA:
             found[cat] = [kw for kw in keywords if kw in text]
         return found
 
-    def parse_enhanced_analysis(self, analysis_text: str) -> Dict[str, Union[str, float, List[str]]]:
+    def parse_enhanced_analysis(self, analysis_text: str) -> Dict[str, Any]:
         try:
             lines = analysis_text.split("\n")
-            curation_analysis = {
+            curation_analysis: Dict[str, Any] = {
                 "readiness": "UNKNOWN",
                 "explanation": "",
                 "microbial_signatures": "Unknown",
@@ -331,7 +331,7 @@ class GeminiQA:
                 "factor_based_score": 0.0,
             }
 
-    async def analyze_paper(self, paper_content: Dict[str, str]) -> Dict[str, Union[str, float, Dict[str, float]]]:
+    async def analyze_paper(self, paper_content: Dict[str, str]) -> Dict[str, Any]:
         try:
             content = f"Title: {paper_content.get('title', '')}\n"
             content += f"Abstract: {paper_content.get('abstract', '')}\n"
@@ -513,7 +513,7 @@ CRITICAL: If the paper contains ANY specific microbial taxa identification, abun
                 },
             }
 
-    async def analyze_paper_enhanced(self, prompt: str) -> Dict[str, Union[str, float, List[str]]]:
+    async def analyze_paper_enhanced(self, prompt: str) -> Dict[str, Any]:
         try:
             if not self.api_key:
                 logger.error("No Gemini API key provided")

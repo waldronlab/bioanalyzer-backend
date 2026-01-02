@@ -4,7 +4,7 @@ import pandas as pd
 import torch
 from torch.utils.data import DataLoader, Dataset
 
-from .text_processing import AdvancedTextProcessor, clean_scientific_text
+from .text_processing import AdvancedTextProcessor
 
 
 class BugSigConversationDataset(Dataset):
@@ -23,9 +23,9 @@ class BugSigConversationDataset(Dataset):
         # Create knowledge index
         self.knowledge_index = self._create_knowledge_index()
 
-    def _create_knowledge_index(self) -> Dict[str, int]:
+    def _create_knowledge_index(self) -> Dict[str, List[int]]:
         """Create an index mapping keywords to knowledge base entries"""
-        index = {}
+        index: Dict[str, List[int]] = {}
         for idx, row in self.knowledge_base.iterrows():
             # Index by keywords, paper titles, and other relevant fields
             keywords = set(row.get("keywords", "").lower().split())
@@ -39,7 +39,7 @@ class BugSigConversationDataset(Dataset):
     def _find_relevant_knowledge(self, query: str) -> List[int]:
         """Find relevant knowledge base entries for a query"""
         query_words = set(query.lower().split())
-        relevant_indices = set()
+        relevant_indices: set[int] = set()
 
         for word in query_words:
             if word in self.knowledge_index:

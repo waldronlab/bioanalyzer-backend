@@ -5,10 +5,10 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 try:
-    from dotenv import load_dotenv  # type: ignore
+    from dotenv import load_dotenv
 except ImportError:  # pragma: no cover - safety net for bare installs
 
-    def load_dotenv(*args, **kwargs):  # type: ignore[no-redef]
+    def load_dotenv(*args: Any, **kwargs: Any) -> None:  # noqa: F811
         logger = logging.getLogger(__name__)
         logger.warning("python-dotenv not installed. Install with 'pip install python-dotenv' for local development.")
 

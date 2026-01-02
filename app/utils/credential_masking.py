@@ -6,7 +6,7 @@ in logs and error messages to prevent security vulnerabilities.
 """
 
 import re
-from typing import Optional
+from typing import Any, Dict, Optional
 
 # Common API key patterns to detect and mask
 API_KEY_PATTERNS = [
@@ -162,7 +162,7 @@ def mask_dict(data: dict, keys_to_mask: Optional[list] = None) -> dict:
             "NCBI_API_KEY",
         ]
 
-    masked_data = {}
+    masked_data: Dict[str, Any] = {}
     for key, value in data.items():
         # Check if this key should be masked
         key_lower = str(key).lower()

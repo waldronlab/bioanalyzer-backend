@@ -7,11 +7,16 @@ from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from app.models.llm_provider import LLMProviderManager
+
 try:
     from app.models.llm_provider import LITELLM_AVAILABLE, LLMProviderManager
 except ImportError:
     LITELLM_AVAILABLE = False
-    LLMProviderManager = None
+    LLMProviderManager = None  # type: ignore[assignment,misc]
 
 from paperqa.types import Text
 

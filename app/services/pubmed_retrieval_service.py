@@ -18,13 +18,18 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 # Import with fallback configuration
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from app.services.data_retrieval import PubMedRetriever
+
 try:
     from app.services.data_retrieval import PubMedRetriever
     from app.utils.config import NCBI_API_KEY
 except ImportError:
     # Fallback if config is not available
     NCBI_API_KEY = None
-    PubMedRetriever = None
+    PubMedRetriever = None  # type: ignore[assignment,misc]
 
 logger = logging.getLogger(__name__)
 
@@ -167,7 +172,8 @@ class PubMedRetrievalService:
                         }
                     )
                 else:
-                    paper_data_list.append(result)
+                    if isinstance(result, dict):
+                        paper_data_list.append(result)  # type: ignore[arg-type]
 
             logger.info(f"Completed retrieval of {len(pmids)} papers")
             return paper_data_list

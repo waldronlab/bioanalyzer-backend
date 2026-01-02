@@ -5,11 +5,16 @@ import os
 from typing import Dict, List, Optional, Union
 
 # Try to import LiteLLM provider manager first
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .llm_provider import LLMProviderManager
+
 try:
     from .llm_provider import LITELLM_AVAILABLE, LLMProviderManager
 except ImportError:
     LITELLM_AVAILABLE = False
-    LLMProviderManager = None
+    LLMProviderManager = None  # type: ignore[assignment,misc]
 
 # Try to import Paper-QA first, fallback to GeminiQA if not available
 try:
@@ -52,6 +57,7 @@ class UnifiedQA:
 
         self.provider = provider
         self.model = model
+        self.use_gemini = provider == "gemini"  # For backward compatibility
         self.use_paperqa = bool(use_paperqa) and PAPERQA_AVAILABLE
 
         self.llm_manager = None

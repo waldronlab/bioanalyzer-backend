@@ -412,7 +412,7 @@ class BioAnalyzerSettings(BaseModel):
         preset_data = presets[preset_name]
 
         # Create update dict with preset values
-        update_dict = {"preset": preset_name}
+        update_dict: Dict[str, Any] = {"preset": preset_name}
         update_dict.update(preset_data)
 
         # Use Pydantic's model_validate to properly convert enum values

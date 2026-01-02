@@ -1,14 +1,15 @@
 import logging
 import os
 from pathlib import Path
+from typing import Any
 
 from .credential_masking import mask_exception_message
 
 try:
-    from dotenv import load_dotenv  # type: ignore
+    from dotenv import load_dotenv
 except ImportError:
 
-    def load_dotenv(*args, **kwargs):  # type: ignore[no-redef]
+    def load_dotenv(*args: Any, **kwargs: Any) -> None:  # noqa: F811
         """Fallback when python-dotenv is not installed."""
         logger = logging.getLogger(__name__)
         logger.warning(

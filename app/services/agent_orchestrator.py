@@ -152,7 +152,7 @@ class AgentOrchestrator:
     def _parse_experiments_from_response(self, answer: str, contexts: list) -> List[ExtractedExperiment]:
         """Parse experiments from agent response."""
         # Simple parsing - in production, use more sophisticated NLP
-        experiments = []
+        experiments: List[ExtractedExperiment] = []
 
         # Split by experiment markers
         lines = answer.split("\n")

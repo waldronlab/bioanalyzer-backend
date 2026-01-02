@@ -136,7 +136,7 @@ async def analyze_paper(
         if not result:
             raise HTTPException(status_code=404, detail=f"Analysis failed for PMID {pmid}")
 
-        return result
+        return result  # type: ignore[return-value]
 
     except HTTPException:
         raise
@@ -176,7 +176,7 @@ async def analyze_paper_post(request: AnalysisRequestV2) -> PaperAnalysisResultV
         if not result:
             raise HTTPException(status_code=404, detail=f"Analysis failed for PMID {request.pmid}")
 
-        return result
+        return result  # type: ignore[return-value]
 
     except HTTPException:
         raise
@@ -227,7 +227,7 @@ async def analyze_papers_batch(request: BatchAnalysisRequestV2) -> List[PaperAna
         # Filter out None and exceptions
         valid_results = [r for r in results if r is not None and not isinstance(r, Exception)]
 
-        return valid_results
+        return valid_results  # type: ignore[return-value]
 
     except Exception as e:
         safe_error = mask_exception_message(e)

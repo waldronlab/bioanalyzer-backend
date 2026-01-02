@@ -3,7 +3,7 @@
 import logging
 import re
 from dataclasses import dataclass
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -122,7 +122,7 @@ class EnhancedFieldValidator:
             logger.error(f"Error validating field {field_name}: {str(e)}")
             return {"score": 0.0, "notes": f"Validation error: {str(e)}"}
 
-    def _check_pattern_match(self, field_name: str, content_value: str, text: str) -> Dict[str, float]:
+    def _check_pattern_match(self, field_name: str, content_value: str, text: str) -> Dict[str, Any]:
         """Check how well the content matches expected patterns."""
         if field_name not in self.field_patterns:
             return {"confidence": 0.0, "matches": []}
@@ -180,7 +180,7 @@ class FieldExtractionEnhancer:
         # Call the validator's validate_field, passing empty text since it's optional
         return self.validator.validate_field(field_name, field_data)
 
-    def enhance_extraction(self, extracted_data: Dict, full_text: str) -> Dict:
+    def enhance_extraction(self, extracted_data: Dict[str, Any], full_text: str) -> Dict[str, Any]:
         """
         Enhance extracted data with validation and post-processing.
 
@@ -191,7 +191,7 @@ class FieldExtractionEnhancer:
         Returns:
             Enhanced extraction data
         """
-        enhanced_data = {}
+        enhanced_data: Dict[str, Any] = {}
 
         for field_name in ["host_species", "body_site", "condition", "sequencing_type", "taxa_level", "sample_size"]:
             if field_name in extracted_data:

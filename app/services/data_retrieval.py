@@ -50,7 +50,7 @@ class PubMedRetriever:
     def _verify_connectivity(self, retries: int = 3) -> None:
         """Test NCBI E-utilities reachability on startup with retries."""
         test_url = f"{self.BASE_URL}/esearch.fcgi"
-        params = {"db": "pubmed", "term": "cancer", "retmax": 1}
+        params: Dict[str, Any] = {"db": "pubmed", "term": "cancer", "retmax": 1}
         for attempt in range(retries):
             try:
                 timeout_val = API_TIMEOUT if API_TIMEOUT else 10
@@ -198,7 +198,7 @@ class PubMedRetriever:
             doc = root.find(".//DocSum")
             if doc is None:
                 return {"error": "No summary record found."}
-            fields = {"pmid": pmid}
+            fields: Dict[str, Any] = {"pmid": pmid}
             for item in doc.findall("Item"):
                 name = item.get("Name") or ""
                 if name == "Title":

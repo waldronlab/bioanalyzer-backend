@@ -5,7 +5,7 @@ import re
 from datetime import datetime
 from typing import Dict, List, Optional
 
-import pytz
+import pytz  # type: ignore[import-untyped]
 
 logger = logging.getLogger(__name__)
 

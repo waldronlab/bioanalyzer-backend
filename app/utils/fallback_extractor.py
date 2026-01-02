@@ -1,6 +1,6 @@
 import logging
 import re
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -87,7 +87,7 @@ class BasicFieldExtractor:
 
         return fields
 
-    def _mk_field(self, value: Optional[str]) -> Dict[str, Optional[str]]:
+    def _mk_field(self, value: Optional[str]) -> Dict[str, Any]:
         """Format extracted field into standard response format."""
         if value is None:
             return {
