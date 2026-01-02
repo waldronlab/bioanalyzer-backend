@@ -118,10 +118,83 @@ git commit --no-verify -m "Your message"
 
 ### Python Code
 
-- **Formatting**: Use `black` with 120 character line length
-- **Imports**: Use `isort` with black-compatible profile
-- **Linting**: Follow `flake8` rules (with configured exceptions)
-- **Type Hints**: Use type hints where appropriate; `mypy` will check them
+- **Formatting**: Use `black` with 120 character line length (configured in `pyproject.toml`)
+- **Imports**: Use `isort` with black-compatible profile (configured in `pyproject.toml`)
+- **Linting**: Follow `flake8` rules (configured in `.flake8`)
+- **Type Hints**: Use type hints where appropriate; `mypy` will check them (configured in `mypy.ini`)
+
+### Configuration Files
+
+All code quality tools are configured with project-specific settings:
+
+- **`.flake8`**: Flake8 linting configuration
+  - Max line length: 120
+  - Ignores: E203, W503, E501 (compatible with black)
+  - Excludes: build, dist, migrations, etc.
+
+- **`pyproject.toml`**: Contains configurations for:
+  - **Black** (`[tool.black]`): Code formatting
+    - Line length: 120
+    - Target Python versions: 3.8-3.11
+  - **isort** (`[tool.isort]`): Import sorting
+    - Profile: black-compatible
+    - Line length: 120
+    - Known first-party: `app`
+    - Known third-party: torch, transformers, fastapi, etc.
+
+- **`mypy.ini`**: Type checking configuration
+  - Python version: 3.11
+  - Ignore missing imports: True (for third-party packages)
+  - Check only: `app/` directory
+  - Excludes: tests, scripts, migrations
+
+### Running Code Quality Tools
+
+**Using Docker (Recommended):**
+
+```bash
+# Format code with black
+docker run --rm \
+  -v "$(pwd):/workspace" -w /workspace \
+  python:3.11-slim \
+  bash -c "pip install --quiet black && black app/ tests/ cli.py main.py"
+
+# Sort imports with isort
+docker run --rm \
+  -v "$(pwd):/workspace" -w /workspace \
+  python:3.11-slim \
+  bash -c "pip install --quiet isort && isort app/ tests/ cli.py main.py"
+
+# Lint with flake8
+docker run --rm \
+  -v "$(pwd):/workspace" -w /workspace \
+  python:3.11-slim \
+  bash -c "pip install --quiet flake8 && flake8 app/ tests/ cli.py main.py"
+
+# Type check with mypy
+docker run --rm \
+  -v "$(pwd):/workspace" -w /workspace \
+  python:3.11-slim \
+  bash -c "pip install --quiet mypy types-requests types-PyYAML && mypy app/"
+```
+
+**Using Local Installation:**
+
+```bash
+# Format code
+black app/ tests/ cli.py main.py
+
+# Sort imports
+isort app/ tests/ cli.py main.py
+
+# Lint code
+flake8 app/ tests/ cli.py main.py
+
+# Type check
+mypy app/
+```
+
+All tools will automatically use their respective configuration files.
 
 ### Example
 
