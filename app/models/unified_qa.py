@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 if TYPE_CHECKING:
     from .llm_provider import LLMProviderManager
 
-_LLMProviderManagerClass: type[LLMProviderManager] | None  # type: ignore[name-defined]
+_LLMProviderManagerClass: type[LLMProviderManager] | None
 
 try:
     from .llm_provider import LITELLM_AVAILABLE, LLMProviderManager
