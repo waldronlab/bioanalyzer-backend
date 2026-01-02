@@ -34,6 +34,7 @@ repos:
     hooks:
       - id: isort
         args: [--profile=black, --line-length=120]
+        additional_dependencies: [tomli]
 
   # Linting with flake8
   - repo: https://github.com/PyCQA/flake8
