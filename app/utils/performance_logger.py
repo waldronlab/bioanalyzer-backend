@@ -1,12 +1,10 @@
-import asyncio
 import json
 import logging
 import time
 import traceback
 from datetime import datetime
 from functools import wraps
-from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 
 class PerformanceLogger:

@@ -400,11 +400,11 @@ async def analyze_single_field(
 
         prompt = f"""
         Context: {context_text}
-        
+
         Question: {question}
-        
+
         Please provide a specific answer based on the context. If the information is not available, clearly state that.
-        
+
         Respond in this JSON format:
         {{
             "value": "specific answer or null if not found",

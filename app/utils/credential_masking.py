@@ -6,7 +6,7 @@ in logs and error messages to prevent security vulnerabilities.
 """
 
 import re
-from typing import Optional, Union
+from typing import Optional
 
 # Common API key patterns to detect and mask
 API_KEY_PATTERNS = [

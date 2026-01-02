@@ -10,7 +10,7 @@ project_root = Path(__file__).parent
 sys.path.insert(0, str(project_root))
 
 try:
-    from app.api.app import app
+    from app.api.app import app  # noqa: F401
 except Exception as e:
     print(f"❌ Error importing FastAPI application: {e}")
     print("\nThis might be due to:")
@@ -56,8 +56,6 @@ def main():
         workers = int(os.getenv("UVICORN_WORKERS", "1"))
 
         if workers > 1 and not reload_flag:
-            import multiprocessing
-
             uvicorn.run("app.api.app:app", host=args.host, port=args.port, log_level=args.log_level, workers=workers)
         else:
             uvicorn.run("app.api.app:app", host=args.host, port=args.port, log_level=args.log_level, reload=reload_flag)

@@ -3,7 +3,7 @@
 import logging
 from typing import Optional
 
-from paperqa.readers import chunk_pdf, chunk_text
+from paperqa.readers import chunk_text
 from paperqa.types import Doc, ParsedText, Text
 
 logger = logging.getLogger(__name__)

@@ -3,9 +3,8 @@ Methods scoring utility for BugSigDB Analyzer.
 Provides quantitative assessment of experimental and analytical methods quality.
 """
 
-import re
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Tuple
 
 
 @dataclass

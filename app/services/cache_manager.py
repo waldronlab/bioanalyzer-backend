@@ -103,7 +103,7 @@ class CacheManager:
 
             cursor.execute(
                 """
-                INSERT OR REPLACE INTO analysis_cache 
+                INSERT OR REPLACE INTO analysis_cache
                 (pmid, analysis_data, metadata, timestamp, source, confidence)
                 VALUES (?, ?, ?, ?, ?, ?)
             """,
@@ -142,7 +142,7 @@ class CacheManager:
             cursor.execute(
                 """
                 SELECT analysis_data, metadata, timestamp, source, confidence
-                FROM analysis_cache 
+                FROM analysis_cache
                 WHERE pmid = ?
             """,
                 (pmid,),
@@ -202,7 +202,7 @@ class CacheManager:
 
             cursor.execute(
                 """
-                INSERT OR REPLACE INTO metadata_cache 
+                INSERT OR REPLACE INTO metadata_cache
                 (pmid, metadata, timestamp, source)
                 VALUES (?, ?, ?, ?)
             """,
@@ -227,7 +227,7 @@ class CacheManager:
             cursor.execute(
                 """
                 SELECT metadata, timestamp, source
-                FROM metadata_cache 
+                FROM metadata_cache
                 WHERE pmid = ?
             """,
                 (pmid,),
@@ -254,7 +254,7 @@ class CacheManager:
 
             cursor.execute(
                 """
-                INSERT OR REPLACE INTO fulltext_cache 
+                INSERT OR REPLACE INTO fulltext_cache
                 (pmid, fulltext, timestamp, source)
                 VALUES (?, ?, ?, ?)
             """,
@@ -279,7 +279,7 @@ class CacheManager:
             cursor.execute(
                 """
                 SELECT fulltext, timestamp, source
-                FROM fulltext_cache 
+                FROM fulltext_cache
                 WHERE pmid = ?
             """,
                 (pmid,),
@@ -330,7 +330,7 @@ class CacheManager:
             # Get recent activity
             cursor.execute(
                 """
-                SELECT COUNT(*) FROM analysis_cache 
+                SELECT COUNT(*) FROM analysis_cache
                 WHERE timestamp > datetime('now', '-24 hours')
             """
             )
@@ -410,7 +410,7 @@ class CacheManager:
                 cursor.execute(
                     """
                     SELECT pmid, analysis_data, metadata, timestamp, confidence
-                    FROM analysis_cache 
+                    FROM analysis_cache
                     WHERE analysis_data LIKE ? OR metadata LIKE ?
                     ORDER BY timestamp DESC
                 """,
@@ -420,7 +420,7 @@ class CacheManager:
                 cursor.execute(
                     """
                     SELECT pmid, metadata, timestamp
-                    FROM metadata_cache 
+                    FROM metadata_cache
                     WHERE metadata LIKE ?
                     ORDER BY timestamp DESC
                 """,

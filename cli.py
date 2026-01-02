@@ -1479,7 +1479,7 @@ class BioAnalyzerCLI:
    <question>                 Ask any question
    help                       Show this help
    quit                       Exit interactive mode
-   
+
 💡 Examples:
    "What is the microbiome?"
    "Explain 16S rRNA sequencing"

@@ -212,7 +212,7 @@ def setup_logging():
         main_file_handler.setFormatter(file_formatter)
         root_logger.addHandler(main_file_handler)
         file_handlers_created.append("main")
-    except (PermissionError, OSError) as e:
+    except (PermissionError, OSError):
         # Fall back to console-only logging if file handlers fail
         pass
 
@@ -225,7 +225,7 @@ def setup_logging():
         perf_file_handler.setFormatter(file_formatter)
         root_logger.addHandler(perf_file_handler)
         file_handlers_created.append("performance")
-    except (PermissionError, OSError) as e:
+    except (PermissionError, OSError):
         pass
 
     try:
@@ -237,7 +237,7 @@ def setup_logging():
         error_file_handler.setFormatter(file_formatter)
         root_logger.addHandler(error_file_handler)
         file_handlers_created.append("error")
-    except (PermissionError, OSError) as e:
+    except (PermissionError, OSError):
         pass
 
     try:
@@ -249,7 +249,7 @@ def setup_logging():
         api_file_handler.setFormatter(file_formatter)
         root_logger.addHandler(api_file_handler)
         file_handlers_created.append("api")
-    except (PermissionError, OSError) as e:
+    except (PermissionError, OSError):
         pass
 
     # Always add console handler (it should always work)

@@ -1,12 +1,10 @@
 """Vector store service using Paper-QA's implementations."""
 
 import logging
-from pathlib import Path
 from typing import Optional
 
-from paperqa import Docs
 from paperqa.llms import NumpyVectorStore, QdrantVectorStore, embedding_model_factory
-from paperqa.types import Doc, Text
+from paperqa.types import Text
 
 logger = logging.getLogger(__name__)
 

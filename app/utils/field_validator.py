@@ -3,7 +3,7 @@
 import logging
 import re
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 

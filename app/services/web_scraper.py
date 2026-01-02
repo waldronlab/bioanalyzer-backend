@@ -1,6 +1,5 @@
 """Web scraper service using html2text for converting web pages to markdown."""
 
-import asyncio
 import logging
 import re
 from pathlib import Path
@@ -8,7 +7,6 @@ from typing import Optional
 from urllib.parse import urljoin, urlparse
 
 import aiohttp
-import requests
 from bs4 import BeautifulSoup
 from html2text import html2text
 
