@@ -1,7 +1,6 @@
 """Advanced RAG service with contextual summarization and re-ranking."""
 
 import logging
-from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from paperqa.types import Text

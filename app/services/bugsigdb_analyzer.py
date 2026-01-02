@@ -178,7 +178,6 @@ async def analyze_paper_simple(pmid: str) -> Optional[Dict]:
 async def analyze_paper_with_rag(pmid: str, rag_config: Optional[Dict] = None, use_rag: bool = True) -> Optional[Dict]:
     """Analyze paper with RAG features enabled."""
     import time
-    from datetime import datetime
 
     start_time = time.time()
 
@@ -278,7 +277,7 @@ async def analyze_paper_with_rag(pmid: str, rag_config: Optional[Dict] = None, u
                         use_10_scale=rag_config_dict.get("use_10_scale", True) if rag_config_dict else True,
                     )
                     rag_metrics = temp_service.get_rerank_metrics()
-                except:
+                except Exception:
                     pass
 
                 result["rag_stats"] = {

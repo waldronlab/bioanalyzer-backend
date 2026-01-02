@@ -1,6 +1,5 @@
 """Study Analysis API Router for URL-based analysis."""
 
-import asyncio
 import logging
 import uuid
 from typing import Optional

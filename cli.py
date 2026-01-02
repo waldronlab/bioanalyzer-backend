@@ -570,7 +570,7 @@ class BioAnalyzerCLI:
                     backend_running = True
                     backend_status = result.stdout.strip()
                     break
-            except:
+            except Exception:
                 continue
 
         if backend_running:
@@ -591,7 +591,7 @@ class BioAnalyzerCLI:
                 print(f"Frontend Container: ✅ {result.stdout.strip()}")
             else:
                 print("Frontend Container: ❌ Not Running")
-        except:
+        except Exception:
             print("Frontend Container: ❌ Not Running")
 
         # Check API health
@@ -692,7 +692,7 @@ class BioAnalyzerCLI:
             print("❌ Error: Unknown settings command")
             print("   Available commands: view, save, load, preset, migrate")
 
-    def _format_settings_table(self, settings: "BioAnalyzerSettings") -> str:
+    def _format_settings_table(self, settings) -> str:
         """Format settings as a readable table."""
         lines = []
         lines.append("=" * 60)
@@ -1452,7 +1452,7 @@ class BioAnalyzerCLI:
             response = requests.get("http://localhost:8000/health", timeout=2)
             if response.status_code == 200:
                 api_available = True
-        except:
+        except Exception:
             pass
 
         if not api_available:
@@ -1551,7 +1551,7 @@ class BioAnalyzerCLI:
             response = requests.get("http://localhost:8000/health", timeout=2)
             if response.status_code == 200:
                 api_available = True
-        except:
+        except Exception:
             pass
 
         if not api_available:

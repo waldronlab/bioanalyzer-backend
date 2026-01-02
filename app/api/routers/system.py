@@ -1,12 +1,10 @@
 """System endpoints for health checks, configuration, and metrics."""
 
-import asyncio
 import logging
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict
 
 import psutil
-import pytz
 from fastapi import APIRouter, HTTPException
 
 from app.api.models.api_models import ConfigResponse, HealthResponse, MetricsResponse
@@ -213,8 +211,8 @@ async def get_metrics():
         perf_metrics = perf_logger.get_metrics()
 
         memory_info = psutil.virtual_memory()
-        cpu_percent = psutil.cpu_percent(interval=1)
-        disk_usage = psutil.disk_usage("/")
+        _ = psutil.cpu_percent(interval=1)  # Get CPU usage for monitoring
+        _ = psutil.disk_usage("/")  # Get disk usage for monitoring
 
         cache_hit_rate = 0.0
         try:

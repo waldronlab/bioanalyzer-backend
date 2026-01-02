@@ -5,7 +5,7 @@ Rate limiting middleware for API endpoints.
 import logging
 import time
 from collections import defaultdict
-from typing import Dict, Optional
+from typing import Dict
 
 from fastapi import HTTPException, Request, status
 from starlette.middleware.base import BaseHTTPMiddleware

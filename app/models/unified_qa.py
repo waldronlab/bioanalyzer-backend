@@ -20,10 +20,9 @@ except ImportError:
     PAPERQA_AVAILABLE = False
     logger = logging.getLogger(__name__)
     logger.warning("Paper-QA not available, falling back to GeminiQA")
-    from .gemini_qa import GeminiQA
 
 from app.utils.config import GEMINI_API_KEY, GEMINI_TIMEOUT, LLM_MODEL, LLM_PROVIDER
-from app.utils.credential_masking import mask_exception_message, mask_string
+from app.utils.credential_masking import mask_exception_message
 
 logger = logging.getLogger(__name__)
 

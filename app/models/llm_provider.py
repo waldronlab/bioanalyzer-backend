@@ -5,7 +5,7 @@ import os
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
-from app.utils.credential_masking import mask_exception_message, mask_string
+from app.utils.credential_masking import mask_exception_message
 
 logger = logging.getLogger(__name__)
 

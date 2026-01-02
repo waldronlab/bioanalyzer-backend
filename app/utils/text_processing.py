@@ -40,7 +40,7 @@ class AdvancedTextProcessor:
                 if isinstance(tokens, torch.Tensor):
                     tokens = tokens.tolist()
                 return "".join([chr(int(t)) for t in tokens if 32 <= int(t) <= 126])
-            except:
+            except Exception:
                 return "Error decoding response (fallback mode)"
 
         try:

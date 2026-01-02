@@ -1,13 +1,12 @@
 """Agent orchestrator using Paper-QA's agent_query system."""
 
-import asyncio
 import logging
 from datetime import datetime
-from typing import List, Optional
+from typing import List
 
 from paperqa import Docs, Settings
 from paperqa.agents import agent_query
-from paperqa.types import Doc, Text
+from paperqa.types import Text
 
 from app.models.extraction_schemas import (
     ExperimentMetadata,
@@ -193,7 +192,7 @@ class AgentOrchestrator:
                     try:
                         size_str = line.split(":")[-1].strip()
                         current_exp.metadata.sample_size = int("".join(filter(str.isdigit, size_str)))
-                    except:
+                    except Exception:
                         pass
 
         if current_exp:

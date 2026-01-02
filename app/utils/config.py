@@ -2,7 +2,7 @@ import logging
 import os
 from pathlib import Path
 
-from .credential_masking import mask_exception_message, mask_string
+from .credential_masking import mask_exception_message
 
 try:
     from dotenv import load_dotenv  # type: ignore

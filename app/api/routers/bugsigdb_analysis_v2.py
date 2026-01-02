@@ -1,7 +1,6 @@
 """BugSigDB Analysis API Router v2 with RAG support."""
 
 import logging
-from datetime import datetime
 from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException, Query
@@ -12,9 +11,8 @@ from app.api.models.api_models import (
     PaperAnalysisResultV2,
     RAGConfig,
     RAGConfigResponse,
-    RAGStats,
 )
-from app.services.bugsigdb_analyzer import analyze_paper_simple, analyze_paper_with_rag
+from app.services.bugsigdb_analyzer import analyze_paper_with_rag
 from app.utils.config import (
     RAG_RERANK_METHOD,
     RAG_SUMMARY_LENGTH,

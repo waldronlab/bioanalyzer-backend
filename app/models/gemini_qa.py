@@ -11,7 +11,7 @@ import google.generativeai as genai
 import pytz
 
 from app.utils.config import GEMINI_TIMEOUT
-from app.utils.credential_masking import mask_exception_message, mask_string
+from app.utils.credential_masking import mask_string
 
 logger = logging.getLogger(__name__)
 
