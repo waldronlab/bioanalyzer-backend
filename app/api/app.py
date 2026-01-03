@@ -1,25 +1,27 @@
 """FastAPI application for BioAnalyzer backend API."""
-from fastapi import FastAPI, Request
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
-from fastapi.exceptions import RequestValidationError
+
 import logging
 import os
 import sys
 import traceback
 
+from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-from app.api.routers import bugsigdb_analysis, bugsigdb_analysis_v2, system, study_analysis
 from app.api.middleware.rate_limit import RateLimitMiddleware
 from app.api.middleware.request_id import RequestIDMiddleware
+from app.api.routers import bugsigdb_analysis, bugsigdb_analysis_v2, study_analysis, system
 from app.utils.config import (
     CORS_ORIGINS,
     ENABLE_RATE_LIMITING,
-    RATE_LIMIT_PER_MINUTE,
     ENABLE_REQUEST_ID,
     ENVIRONMENT,
-    setup_logging
+    RATE_LIMIT_PER_MINUTE,
+    setup_logging,
 )
 
 setup_logging()
@@ -39,13 +41,10 @@ app = FastAPI(
     tags_metadata=[
         {
             "name": "BugSigDB Analysis",
-            "description": "Core endpoints for analyzing papers for the 6 essential BugSigDB fields."
+            "description": "Core endpoints for analyzing papers for the 6 essential BugSigDB fields.",
         },
-        {
-            "name": "System",
-            "description": "System endpoints for health checks, configuration, and metrics."
-        }
-    ]
+        {"name": "System", "description": "System endpoints for health checks, configuration, and metrics."},
+    ],
 )
 
 app.add_middleware(
@@ -61,17 +60,14 @@ if ENABLE_REQUEST_ID:
     app.add_middleware(RequestIDMiddleware)
 
 if ENABLE_RATE_LIMITING:
-    app.add_middleware(
-        RateLimitMiddleware,
-        requests_per_minute=RATE_LIMIT_PER_MINUTE,
-        enabled=ENABLE_RATE_LIMITING
-    )
+    app.add_middleware(RateLimitMiddleware, requests_per_minute=RATE_LIMIT_PER_MINUTE, enabled=ENABLE_RATE_LIMITING)
     logger.info(f"Rate limiting enabled: {RATE_LIMIT_PER_MINUTE} requests/minute")
 
 app.include_router(bugsigdb_analysis.router)
 app.include_router(bugsigdb_analysis_v2.router)
 app.include_router(study_analysis.router)
 app.include_router(system.router)
+
 
 @app.get("/")
 async def root():
@@ -82,7 +78,7 @@ async def root():
         "description": "AI-powered Curatable Signature analysis API",
         "documentation": "/docs",
         "health_check": "/health",
-        "metrics": "/metrics"
+        "metrics": "/metrics",
     }
 
 
@@ -90,6 +86,7 @@ async def root():
 async def health_check():
     """Health check endpoint."""
     from app.api.routers.system import health_check as system_health_check
+
     return await system_health_check()
 
 
@@ -102,8 +99,8 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         content={
             "error": "Validation Error",
             "detail": exc.errors(),
-            "request_id": getattr(request.state, "request_id", None)
-        }
+            "request_id": getattr(request.state, "request_id", None),
+        },
     )
 
 
@@ -111,32 +108,33 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 async def global_exception_handler(request: Request, exc: Exception):
     """Handle unexpected exceptions."""
     from app.utils.credential_masking import mask_exception_message, mask_string
-    
+
     # Mask any credentials in exception message and traceback
     safe_exc_msg = mask_exception_message(exc)
     safe_traceback = mask_string(traceback.format_exc())
-    
+
     logger.error(
         f"Unhandled exception: {safe_exc_msg}\n"
         f"Traceback: {safe_traceback}\n"
         f"Request ID: {getattr(request.state, 'request_id', None)}"
     )
-    
+
     if ENVIRONMENT == "production":
         detail = "An internal error occurred. Please try again later."
     else:
         detail = safe_exc_msg
-    
+
     return JSONResponse(
         status_code=500,
         content={
             "error": "Internal Server Error",
             "detail": detail,
-            "request_id": getattr(request.state, "request_id", None)
-        }
+            "request_id": getattr(request.state, "request_id", None),
+        },
     )
 
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(app, host="0.0.0.0", port=8000)

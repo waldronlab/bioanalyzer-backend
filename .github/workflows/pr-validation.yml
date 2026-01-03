@@ -1,0 +1,159 @@
+name: PR Validation
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+  pull-requests: write
+  checks: write
+
+jobs:
+  validate-pr:
+    name: Validate Pull Request
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    
+    - name: Validate PR title
+      run: |
+        PR_TITLE="${{ github.event.pull_request.title }}"
+        echo "PR Title: $PR_TITLE"
+        
+        # Check for conventional commit format (optional but recommended)
+        if [[ ! "$PR_TITLE" =~ ^(feat|fix|docs|style|refactor|test|chore|perf|ci|build|revert)(\(.+\))?: ]]; then
+          echo "⚠️ PR title doesn't follow conventional commit format (optional)"
+          echo "Recommended format: type(scope): description"
+          echo "Types: feat, fix, docs, style, refactor, test, chore, perf, ci, build, revert"
+        fi
+        
+        # Check minimum length
+        if [ ${#PR_TITLE} -lt 10 ]; then
+          echo "❌ PR title is too short (minimum 10 characters)"
+          exit 1
+        fi
+        
+        # Check for placeholder text
+        if [[ "$PR_TITLE" =~ (WIP|TODO|FIXME|TBD|placeholder) ]]; then
+          echo "❌ PR title contains placeholder text"
+          exit 1
+        fi
+        
+        echo "✅ PR title is valid"
+    
+    - name: Check for large files
+      run: |
+        echo "Checking for large files..."
+        MAX_SIZE=10485760  # 10MB
+        LARGE_FILES=$(find . -type f -size +${MAX_SIZE}c ! -path "./.git/*" ! -path "./node_modules/*" ! -path "./.venv/*" ! -path "./venv/*" ! -path "./dist/*" ! -path "./build/*" ! -path "./*.egg-info/*" || true)
+        
+        if [ -n "$LARGE_FILES" ]; then
+          echo "❌ Large files detected (>10MB):"
+          echo "$LARGE_FILES"
+          echo ""
+          echo "Please use Git LFS for large files or remove them from the repository."
+          exit 1
+        fi
+        
+        echo "✅ No large files detected"
+    
+    - name: Check for sensitive data
+      run: |
+        echo "Checking for potential sensitive data..."
+        
+        # Check for API keys, secrets, passwords
+        SENSITIVE_PATTERNS=(
+          "api[_-]?key\s*[:=]\s*['\"][^'\"]{20,}"
+          "secret[_-]?key\s*[:=]\s*['\"][^'\"]{20,}"
+          "password\s*[:=]\s*['\"][^'\"]{8,}"
+          "token\s*[:=]\s*['\"][^'\"]{20,}"
+          "-----BEGIN.*PRIVATE KEY-----"
+        )
+        
+        FOUND_SENSITIVE=false
+        
+        for pattern in "${SENSITIVE_PATTERNS[@]}"; do
+          if git diff origin/${{ github.base_ref }}...HEAD | grep -iE "$pattern" | grep -v "test" | grep -v "example" | grep -v "dummy" | grep -v "placeholder"; then
+            echo "⚠️ Potential sensitive data detected matching pattern: $pattern"
+            echo "Please ensure this is test data or use environment variables."
+            FOUND_SENSITIVE=true
+          fi
+        done
+        
+        if [ "$FOUND_SENSITIVE" = true ]; then
+          echo "⚠️ Review the changes above for sensitive data"
+          echo "If these are test/example values, this is acceptable."
+        else
+          echo "✅ No obvious sensitive data detected"
+        fi
+    
+    - name: Validate commit messages
+      run: |
+        echo "Validating commit messages..."
+        
+        # Get commits in PR
+        COMMITS=$(git log origin/${{ github.base_ref }}..HEAD --pretty=format:"%H %s")
+        
+        if [ -z "$COMMITS" ]; then
+          echo "⚠️ No commits found in PR"
+          exit 0
+        fi
+        
+        INVALID_COMMITS=0
+        
+        while IFS= read -r line; do
+          COMMIT_HASH=$(echo "$line" | cut -d' ' -f1)
+          COMMIT_MSG=$(echo "$line" | cut -d' ' -f2-)
+          
+          # Check minimum length
+          if [ ${#COMMIT_MSG} -lt 10 ]; then
+            echo "❌ Commit $COMMIT_HASH: Message too short: '$COMMIT_MSG'"
+            INVALID_COMMITS=$((INVALID_COMMITS + 1))
+          fi
+          
+          # Check for placeholder text
+          if [[ "$COMMIT_MSG" =~ (WIP|TODO|FIXME|TBD|placeholder|test) ]]; then
+            echo "⚠️ Commit $COMMIT_HASH: Contains placeholder text: '$COMMIT_MSG'"
+          fi
+        done <<< "$COMMITS"
+        
+        if [ $INVALID_COMMITS -gt 0 ]; then
+          echo "❌ Found $INVALID_COMMITS invalid commit message(s)"
+          exit 1
+        fi
+        
+        echo "✅ All commit messages are valid"
+    
+    - name: Check for merge conflicts
+      run: |
+        echo "Checking for merge conflicts..."
+        
+        git fetch origin ${{ github.base_ref }}:${{ github.base_ref }}
+        
+        if git merge-tree $(git merge-base HEAD ${{ github.base_ref }}) HEAD ${{ github.base_ref }} | grep -q "<<<<<<<"; then
+          echo "❌ Merge conflicts detected"
+          exit 1
+        fi
+        
+        echo "✅ No merge conflicts"
+    
+    - name: Validate file extensions
+      run: |
+        echo "Validating file extensions..."
+        
+        # Check for files with unusual extensions
+        INVALID_FILES=$(git diff --name-only origin/${{ github.base_ref }}...HEAD | grep -E '\.(exe|dll|so|dylib|bin|pyc|pyo|pyd)$' || true)
+        
+        if [ -n "$INVALID_FILES" ]; then
+          echo "⚠️ Binary or compiled files detected:"
+          echo "$INVALID_FILES"
+          echo "Please ensure these files are necessary and properly handled."
+        else
+          echo "✅ No problematic file extensions detected"
+        fi
+

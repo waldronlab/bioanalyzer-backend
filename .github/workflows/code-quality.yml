@@ -1,0 +1,88 @@
+name: Code Quality Checks
+
+on:
+  pull_request:
+    branches: [ main, develop ]
+  push:
+    branches: [ main, develop ]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  code-quality:
+    name: Code Quality Analysis
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+        cache: 'pip'
+    
+    - name: Install code quality tools
+      run: |
+        python -m pip install --upgrade pip
+        pip install --quiet \
+          black>=23.0.0 \
+          isort>=5.13.0 \
+          flake8>=6.0.0 \
+          pylint>=3.0.0 \
+          mypy>=1.5.0 \
+          types-requests \
+          types-PyYAML
+    
+    - name: Check code formatting with Black
+      run: |
+        black --check --diff app/ tests/ cli.py main.py
+    
+    - name: Check import sorting with isort
+      run: |
+        isort --check-only --diff app/ tests/ cli.py main.py
+    
+    - name: Lint with flake8
+      run: |
+        flake8 app/ tests/ cli.py main.py
+    
+    - name: Type check with mypy
+      run: |
+        mypy app/ --config-file mypy.ini --explicit-package-bases
+    
+    - name: Run pylint (informational)
+      run: |
+        pylint app/ --disable=all --enable=E,F --max-line-length=120 || true
+      continue-on-error: true
+    
+    - name: Check code complexity
+      run: |
+        echo "Checking code complexity..."
+        # Count functions/methods with high complexity
+        COMPLEX_FUNCTIONS=$(find app/ -name "*.py" -exec grep -l "def " {} \; | xargs -I {} python3 -c "
+          import ast
+          import sys
+          try:
+              with open('{}', 'r') as f:
+                  tree = ast.parse(f.read())
+                  for node in ast.walk(tree):
+                      if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                          complexity = len([n for n in ast.walk(node) if isinstance(n, (ast.If, ast.While, ast.For, ast.AsyncFor, ast.Try, ast.With, ast.AsyncWith))])
+                          if complexity > 15:
+                              print(f'{}: {node.name} has complexity {complexity}')
+          except:
+              pass
+        " || true)
+        
+        if [ -n "$COMPLEX_FUNCTIONS" ]; then
+          echo "⚠️ Functions with high complexity detected:"
+          echo "$COMPLEX_FUNCTIONS"
+          echo "Consider refactoring to reduce complexity."
+        else
+          echo "✅ No overly complex functions detected"
+        fi
+      continue-on-error: true
+

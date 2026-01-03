@@ -760,8 +760,16 @@ source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 # The package uses pyproject.toml (PEP 518/621) for modern Python packaging
 pip install -e .[dev]  # Installs package with development dependencies
 
-# Set up pre-commit hooks
-pre-commit install
+# Set up pre-commit hooks (see CONTRIBUTING.md for details)
+# Using Docker (recommended):
+./scripts/pre-commit-docker.sh
+
+# Or manually with Docker:
+docker run --rm \
+  -v "$(pwd):/workspace" -w /workspace \
+  -v ~/.cache/pre-commit:/root/.cache/pre-commit \
+  python:3.11-slim \
+  bash -c "pip install --quiet pre-commit && pre-commit run --all-files"
 ```
 
 ### Code Quality
@@ -856,6 +864,13 @@ python main.py
 - API Documentation: http://localhost:8000/docs (when running)
 
 ## Contributing
+
+Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on contributing to this project, including:
+- Development setup
+- Pre-commit hooks installation and usage
+- Code style guidelines
+- Testing requirements
+- Pull request process
 
 1. Fork the repository
 2. Create a feature branch (`git checkout -b feature/amazing-feature`)
