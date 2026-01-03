@@ -298,7 +298,7 @@ class BioAnalyzerCLI:
             capture_output=True,
             text=True,
             check=False
-        )
+            )
         
         if not check_result.stdout.strip():
             # Network doesn't exist, create it
@@ -307,6 +307,31 @@ class BioAnalyzerCLI:
                 capture_output=True,
                 check=False
             )
+    
+    def _run_with_fallback_sudo(self, cmd, cwd=None, check=False):
+        """Run a command, and if permission denied, try with sudo."""
+        result = subprocess.run(
+            cmd,
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            check=False
+        )
+        
+        # If permission denied, try with sudo
+        if result.returncode != 0 and "permission denied" in result.stderr.lower():
+            result = subprocess.run(
+                ["sudo"] + cmd,
+                cwd=cwd,
+                capture_output=True,
+                text=True,
+                check=False
+            )
+        
+        if check and result.returncode != 0:
+            raise subprocess.CalledProcessError(result.returncode, cmd, result.stdout, result.stderr)
+        
+        return result
     
     def start_application(self):
         """Start the BioAnalyzer application."""
@@ -330,7 +355,7 @@ class BioAnalyzerCLI:
                 print("❌ docker-compose.yml not found. Cannot start containers.")
                 return False
             
-            # Check if containers are already running
+            # Check if containers are already running and healthy
             if self.check_backend_health():
                 print(f"✅ Backend API is already available at http://localhost:8000")
                 return True
@@ -346,42 +371,49 @@ class BioAnalyzerCLI:
             if not check_compose.stdout.strip():
                 compose_cmd = ["docker", "compose"]
             
-            # Clean up any existing containers that might cause conflicts
-            print("🧹 Cleaning up any existing containers...")
-            cleanup_result = subprocess.run(
-                compose_cmd + ["down", "--remove-orphans"],
+            # Check if containers exist and are running
+            ps_result = subprocess.run(
+                compose_cmd + ["ps", "-q"],
                 cwd=str(project_root),
                 capture_output=True,
                 text=True,
                 check=False
             )
-            # Don't fail if cleanup has issues - containers might not exist
+            containers_running = bool(ps_result.stdout.strip())
+            
+            # Only clean up if containers exist but aren't healthy
+            if containers_running and not self.check_backend_health():
+                print("🧹 Cleaning up existing containers...")
+                # Use helper method that handles permissions automatically
+                cleanup_result = self._run_with_fallback_sudo(
+                    compose_cmd + ["down", "--remove-orphans"],
+                    cwd=str(project_root)
+                )
+                # Also try direct docker commands if compose fails
+                if cleanup_result.returncode != 0:
+                    self._run_with_fallback_sudo(
+                        ["docker", "rm", "-f", "bioanalyzer-redis", "bioanalyzer-backend"]
+                    )
             
             # Use docker-compose to start containers (handles network automatically)
-            print("🔧 Starting backend API with docker-compose...")
+            print("🔧 Starting backend API...")
             
-            # Start containers with docker-compose
-            result = subprocess.run(
-                compose_cmd + ["up", "-d", "--force-recreate"],
-                cwd=str(project_root),
-                capture_output=True,
-                text=True,
-                check=False
+            # Start containers - only force recreate if we had to clean up
+            up_cmd = compose_cmd + ["up", "-d"]
+            if containers_running and not self.check_backend_health():
+                # If containers exist but aren't healthy, force recreate
+                up_cmd.append("--force-recreate")
+            
+            # Use helper method that handles permissions automatically
+            result = self._run_with_fallback_sudo(
+                up_cmd,
+                cwd=str(project_root)
             )
             
             if result.returncode != 0:
                 print(f"❌ Error starting containers: {result.stderr}")
                 if result.stdout:
                     print(f"\n📋 Output: {result.stdout}")
-                
-                # If permission denied, suggest using sudo or fixing Docker permissions
-                if "permission denied" in result.stderr.lower():
-                    print("\n💡 Permission denied error detected.")
-                    print("   Try one of these solutions:")
-                    print("   1. Add your user to the docker group: sudo usermod -aG docker $USER")
-                    print("   2. Then log out and log back in, or run: newgrp docker")
-                    print("   3. Or manually remove the container: sudo docker rm -f bioanalyzer-redis")
-                
                 return False
             
             # Wait for backend to be ready with polling on /health
