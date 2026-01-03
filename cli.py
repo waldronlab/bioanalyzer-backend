@@ -499,32 +499,29 @@ class BioAnalyzerCLI:
                 if not check_compose.stdout.strip():
                     compose_cmd = ["docker", "compose"]
                 
-                result = subprocess.run(
-                    compose_cmd + ["down"],
-                    cwd=str(project_root),
-                    capture_output=True,
-                    text=True,
-                    check=False
+                # Use helper method that handles permissions automatically
+                result = self._run_with_fallback_sudo(
+                    compose_cmd + ["down", "--remove-orphans"],
+                    cwd=str(project_root)
                 )
                 
                 if result.returncode == 0:
                     print("✅ BioAnalyzer application stopped")
                     return True
-                else:
-                    print(f"⚠️  docker-compose down had issues: {result.stderr}")
+                # If compose fails, fall through to manual cleanup
             
-            # Fallback: Stop containers manually
-            containers = [self.container_name, "bioanalyzer-backend", "bioanalyzer-frontend"]
+            # Fallback: Stop containers manually with permission handling
+            containers = [self.container_name, "bioanalyzer-backend", "bioanalyzer-frontend", "bioanalyzer-redis"]
             
             for container in containers:
-                try:
-                    subprocess.run(["docker", "stop", container], 
-                                 capture_output=True, check=True)
-                    subprocess.run(["docker", "rm", container], 
-                                 capture_output=True, check=True)
+                # Try to stop and remove with automatic sudo fallback
+                stop_result = self._run_with_fallback_sudo(["docker", "stop", container])
+                if stop_result.returncode == 0:
+                    self._run_with_fallback_sudo(["docker", "rm", container])
                     print(f"✅ Stopped {container}")
-                except subprocess.CalledProcessError:
-                    pass  # Container might not exist
+                else:
+                    # Try to remove even if stop failed (container might already be stopped)
+                    self._run_with_fallback_sudo(["docker", "rm", "-f", container])
             
             print("✅ BioAnalyzer application stopped")
             return True
