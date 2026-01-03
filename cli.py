@@ -420,11 +420,9 @@ class BioAnalyzerCLI:
                 env["UID"] = str(os.getuid())
                 env["GID"] = str(os.getgid())
             
-            # Start containers - only force recreate if we had to clean up
-            up_cmd = compose_cmd + ["up", "-d"]
-            if containers_running and not self.check_backend_health():
-                # If containers exist but aren't healthy, force recreate
-                up_cmd.append("--force-recreate")
+            # Start containers - use force recreate to handle permission conflicts
+            # This will create new containers even if old ones exist with wrong permissions
+            up_cmd = compose_cmd + ["up", "-d", "--force-recreate", "--remove-orphans"]
             
             result = subprocess.run(
                 up_cmd,
