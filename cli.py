@@ -308,30 +308,29 @@ class BioAnalyzerCLI:
                 check=False
             )
     
-    def _run_with_fallback_sudo(self, cmd, cwd=None, check=False):
-        """Run a command, and if permission denied, try with sudo."""
-        result = subprocess.run(
-            cmd,
-            cwd=cwd,
+    def _check_docker_permissions(self):
+        """Check if user has proper Docker permissions and provide helpful guidance."""
+        # Test if user can run docker commands
+        test_result = subprocess.run(
+            ["docker", "ps"],
             capture_output=True,
             text=True,
             check=False
         )
         
-        # If permission denied, try with sudo
-        if result.returncode != 0 and "permission denied" in result.stderr.lower():
-            result = subprocess.run(
-                ["sudo"] + cmd,
-                cwd=cwd,
-                capture_output=True,
-                text=True,
-                check=False
-            )
+        if test_result.returncode == 0:
+            return True
         
-        if check and result.returncode != 0:
-            raise subprocess.CalledProcessError(result.returncode, cmd, result.stdout, result.stderr)
+        # Check if it's a permission issue
+        if "permission denied" in test_result.stderr.lower() or "Got permission denied" in test_result.stderr:
+            print("\n⚠️  Docker permission issue detected.")
+            print("   To fix this permanently, run:")
+            print("   sudo usermod -aG docker $USER")
+            print("   Then log out and log back in (or run: newgrp docker)")
+            print("\n   This will allow you to use Docker without sudo.")
+            return False
         
-        return result
+        return True
     
     def start_application(self):
         """Start the BioAnalyzer application."""
@@ -381,18 +380,26 @@ class BioAnalyzerCLI:
             )
             containers_running = bool(ps_result.stdout.strip())
             
+            # Check Docker permissions first
+            if not self._check_docker_permissions():
+                return False
+            
             # Only clean up if containers exist but aren't healthy
             if containers_running and not self.check_backend_health():
                 print("🧹 Cleaning up existing containers...")
-                # Use helper method that handles permissions automatically
-                cleanup_result = self._run_with_fallback_sudo(
+                cleanup_result = subprocess.run(
                     compose_cmd + ["down", "--remove-orphans"],
-                    cwd=str(project_root)
+                    cwd=str(project_root),
+                    capture_output=True,
+                    text=True,
+                    check=False
                 )
                 # Also try direct docker commands if compose fails
                 if cleanup_result.returncode != 0:
-                    self._run_with_fallback_sudo(
-                        ["docker", "rm", "-f", "bioanalyzer-redis", "bioanalyzer-backend"]
+                    subprocess.run(
+                        ["docker", "rm", "-f", "bioanalyzer-redis", "bioanalyzer-backend"],
+                        capture_output=True,
+                        check=False
                     )
             
             # Use docker-compose to start containers (handles network automatically)
@@ -404,13 +411,20 @@ class BioAnalyzerCLI:
                 # If containers exist but aren't healthy, force recreate
                 up_cmd.append("--force-recreate")
             
-            # Use helper method that handles permissions automatically
-            result = self._run_with_fallback_sudo(
+            result = subprocess.run(
                 up_cmd,
-                cwd=str(project_root)
+                cwd=str(project_root),
+                capture_output=True,
+                text=True,
+                check=False
             )
             
             if result.returncode != 0:
+                # Check if it's a permission issue
+                if "permission denied" in result.stderr.lower():
+                    if not self._check_docker_permissions():
+                        return False
+                
                 print(f"❌ Error starting containers: {result.stderr}")
                 if result.stdout:
                     print(f"\n📋 Output: {result.stdout}")
@@ -485,6 +499,10 @@ class BioAnalyzerCLI:
         print("🛑 Stopping BioAnalyzer application...")
         
         try:
+            # Check Docker permissions first
+            if not self._check_docker_permissions():
+                return False
+            
             # Check if docker-compose.yml exists
             compose_file = project_root / "docker-compose.yml"
             if compose_file.exists():
@@ -499,10 +517,12 @@ class BioAnalyzerCLI:
                 if not check_compose.stdout.strip():
                     compose_cmd = ["docker", "compose"]
                 
-                # Use helper method that handles permissions automatically
-                result = self._run_with_fallback_sudo(
+                result = subprocess.run(
                     compose_cmd + ["down", "--remove-orphans"],
-                    cwd=str(project_root)
+                    cwd=str(project_root),
+                    capture_output=True,
+                    text=True,
+                    check=False
                 )
                 
                 if result.returncode == 0:
@@ -510,20 +530,45 @@ class BioAnalyzerCLI:
                     return True
                 # If compose fails, fall through to manual cleanup
             
-            # Fallback: Stop containers manually with permission handling
+            # Fallback: Stop containers manually
             containers = [self.container_name, "bioanalyzer-backend", "bioanalyzer-frontend", "bioanalyzer-redis"]
+            stopped_any = False
             
             for container in containers:
-                # Try to stop and remove with automatic sudo fallback
-                stop_result = self._run_with_fallback_sudo(["docker", "stop", container])
-                if stop_result.returncode == 0:
-                    self._run_with_fallback_sudo(["docker", "rm", container])
-                    print(f"✅ Stopped {container}")
-                else:
-                    # Try to remove even if stop failed (container might already be stopped)
-                    self._run_with_fallback_sudo(["docker", "rm", "-f", container])
+                try:
+                    stop_result = subprocess.run(
+                        ["docker", "stop", container],
+                        capture_output=True,
+                        text=True,
+                        check=False
+                    )
+                    if stop_result.returncode == 0:
+                        subprocess.run(
+                            ["docker", "rm", container],
+                            capture_output=True,
+                            text=True,
+                            check=False
+                        )
+                        print(f"✅ Stopped {container}")
+                        stopped_any = True
+                    else:
+                        # Try to remove even if stop failed (container might already be stopped)
+                        rm_result = subprocess.run(
+                            ["docker", "rm", "-f", container],
+                            capture_output=True,
+                            text=True,
+                            check=False
+                        )
+                        if rm_result.returncode == 0:
+                            print(f"✅ Removed {container}")
+                            stopped_any = True
+                except Exception:
+                    pass  # Container might not exist
             
-            print("✅ BioAnalyzer application stopped")
+            if stopped_any:
+                print("✅ BioAnalyzer application stopped")
+            else:
+                print("✅ No containers were running")
             return True
             
         except Exception as e:
