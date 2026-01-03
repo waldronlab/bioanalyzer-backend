@@ -335,9 +335,6 @@ class BioAnalyzerCLI:
                 print(f"✅ Backend API is already available at http://localhost:8000")
                 return True
             
-            # Use docker-compose to start containers (handles network automatically)
-            print("🔧 Starting backend API with docker-compose...")
-            
             # Determine compose command (docker-compose or docker compose)
             compose_cmd = ["docker-compose"]
             check_compose = subprocess.run(
@@ -349,9 +346,23 @@ class BioAnalyzerCLI:
             if not check_compose.stdout.strip():
                 compose_cmd = ["docker", "compose"]
             
+            # Clean up any existing containers that might cause conflicts
+            print("🧹 Cleaning up any existing containers...")
+            cleanup_result = subprocess.run(
+                compose_cmd + ["down", "--remove-orphans"],
+                cwd=str(project_root),
+                capture_output=True,
+                text=True,
+                check=False
+            )
+            # Don't fail if cleanup has issues - containers might not exist
+            
+            # Use docker-compose to start containers (handles network automatically)
+            print("🔧 Starting backend API with docker-compose...")
+            
             # Start containers with docker-compose
             result = subprocess.run(
-                compose_cmd + ["up", "-d"],
+                compose_cmd + ["up", "-d", "--force-recreate"],
                 cwd=str(project_root),
                 capture_output=True,
                 text=True,
@@ -362,6 +373,15 @@ class BioAnalyzerCLI:
                 print(f"❌ Error starting containers: {result.stderr}")
                 if result.stdout:
                     print(f"\n📋 Output: {result.stdout}")
+                
+                # If permission denied, suggest using sudo or fixing Docker permissions
+                if "permission denied" in result.stderr.lower():
+                    print("\n💡 Permission denied error detected.")
+                    print("   Try one of these solutions:")
+                    print("   1. Add your user to the docker group: sudo usermod -aG docker $USER")
+                    print("   2. Then log out and log back in, or run: newgrp docker")
+                    print("   3. Or manually remove the container: sudo docker rm -f bioanalyzer-redis")
+                
                 return False
             
             # Wait for backend to be ready with polling on /health
