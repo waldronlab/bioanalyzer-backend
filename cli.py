@@ -51,18 +51,16 @@ class BioAnalyzerCLI:
     """User-friendly Command Line Interface for BioAnalyzer."""
     
     def __init__(self):
-        self.container_name = "bioanalyzer-api"
+        self.container_name = "bioanalyzer-backend"
         self.image_name = "bioanalyzer-backend"
         self.network_name = "bioanalyzer-network"
         self.verbose = False
         self.api_base_url = os.getenv("BIOANALYZER_API_URL", "http://localhost:8000/api/v1")
-        # Critical runtime environment variables the backend may rely on
         self.required_env_vars = [
             "GEMINI_API_KEY",
             "NCBI_API_KEY",
             "EMAIL",
         ]
-        # Optional tuning envs
         self.optional_env_vars = [
             "API_TIMEOUT",
             "NCBI_RATE_LIMIT_DELAY",
@@ -75,7 +73,7 @@ class BioAnalyzerCLI:
         """Get the absolute path to .env file if it exists."""
         env_path = project_root / ".env"
         if env_path.exists():
-            return str(env_path.resolve())  # Use absolute path for Docker
+            return str(env_path.resolve())
         return None
 
     def _get_env_file_values(self) -> Dict[str, str]:
@@ -85,36 +83,22 @@ class BioAnalyzerCLI:
             return {}
         try:
             if dotenv_values is None:
-                logger.warning(
-                    "python-dotenv not installed; .env file will be ignored. "
-                    "Install it via 'pip install python-dotenv' to load env files automatically."
-                )
                 return {}
             values = dotenv_values(env_file)
             return {k: v for k, v in (values or {}).items() if v}
-        except Exception as exc:
-            logger.warning(f"Unable to read env file {env_file}: {exc}")
+        except Exception:
             return {}
     
     def _collect_env_flags(self) -> list:
         """Collect docker -e flags for known env vars if present in the host environment."""
         flags = []
-        
-        # First, try to use --env-file if .env exists (preferred method)
-        # Docker's --env-file works even if python-dotenv is not installed on host
         env_file = self._get_env_file_path()
         if env_file:
             flags.extend(["--env-file", env_file])
-            logger.debug(f"Using --env-file: {env_file}")
-        
-        # Also pass through any env vars explicitly set in the host environment
-        # (these will override .env file values)
         for key in self.required_env_vars + self.optional_env_vars:
             val = os.environ.get(key)
             if val is not None and str(val) != "":
                 flags.extend(["-e", f"{key}={val}"])
-                logger.debug(f"Passing through env var: {key}")
-        
         return flags
 
     def _build_api_url(self, path: str) -> str:
@@ -273,8 +257,6 @@ class BioAnalyzerCLI:
             ], cwd=project_root, check=True)
             
             print("✅ Backend image built successfully!")
-            
-            # Check if frontend directory exists
             frontend_dir = project_root.parent / "BioAnalyzer-Frontend"
             if frontend_dir.exists():
                 print("📦 Building frontend image...")
@@ -292,21 +274,39 @@ class BioAnalyzerCLI:
     
     def _ensure_network(self):
         """Ensure Docker network exists for container communication."""
-        # Check if network exists
         check_result = subprocess.run(
             ["docker", "network", "ls", "--filter", f"name={self.network_name}", "--format", "{{.Name}}"],
             capture_output=True,
             text=True,
             check=False
-        )
-        
+            )
         if not check_result.stdout.strip():
-            # Network doesn't exist, create it
             subprocess.run(
                 ["docker", "network", "create", self.network_name],
                 capture_output=True,
                 check=False
             )
+    
+    def _check_docker_permissions(self):
+        """Check if user has proper Docker permissions and provide helpful guidance (non-blocking)."""
+        test_result = subprocess.run(
+            ["docker", "ps"],
+            capture_output=True,
+            text=True,
+            check=False
+        )
+        
+        if test_result.returncode == 0:
+            return True
+        if "permission denied" in test_result.stderr.lower() or "Got permission denied" in test_result.stderr:
+            print("\n⚠️  Docker permission issue detected (non-blocking warning).")
+            print("   To fix this permanently, run:")
+            print("   sudo usermod -aG docker $USER")
+            print("   Then log out and log back in (or run: newgrp docker)")
+            print("   Continuing anyway...")
+            return True
+        
+        return True
     
     def start_application(self):
         """Start the BioAnalyzer application."""
@@ -321,117 +321,92 @@ class BioAnalyzerCLI:
                 return False
         
         try:
-            # Preflight env validation
             self._validate_environment()
-            
-            # Ensure Docker network exists for container communication
-            self._ensure_network()
-            
-            # Check if port 8000 is already in use
-            port_check = subprocess.run(
-                ["docker", "ps", "--filter", "publish=8000", "--format", "{{.Names}}"],
+            compose_file = project_root / "docker-compose.yml"
+            if not compose_file.exists():
+                print("❌ docker-compose.yml not found. Cannot start containers.")
+                return False
+            if self.check_backend_health():
+                print(f"✅ Backend API is already available at http://localhost:8000")
+                return True
+            compose_cmd = ["docker-compose"]
+            check_compose = subprocess.run(
+                ["which", "docker-compose"],
                 capture_output=True,
                 text=True,
                 check=False
             )
-            
-            if port_check.stdout.strip():
-                container_using_port = port_check.stdout.strip().split('\n')[0]
-                print(f"⚠️  Port 8000 is already in use by container '{container_using_port}'")
-                if self.check_backend_health():
-                    print(f"✅ Backend API is already available at http://localhost:8000")
-                    return True
-                else:
-                    print(f"⚠️  Container exists but API is not responding. Consider stopping it first.")
-                    return False
-            
-            # Check if container already exists (by name)
-            for container_name in [self.container_name, "bioanalyzer-backend"]:
-                check_result = subprocess.run(
-                    ["docker", "ps", "-a", "--filter", f"name={container_name}", "--format", "{{.Names}}"],
+            if not check_compose.stdout.strip():
+                compose_cmd = ["docker", "compose"]
+            ps_result = subprocess.run(
+                compose_cmd + ["ps", "-q"],
+                cwd=str(project_root),
+                capture_output=True,
+                text=True,
+                check=False
+            )
+            containers_running = bool(ps_result.stdout.strip())
+            self._check_docker_permissions()
+            if containers_running and not self.check_backend_health():
+                print("🧹 Cleaning up existing containers...")
+                cleanup_result = subprocess.run(
+                    compose_cmd + ["down", "--remove-orphans"],
+                    cwd=str(project_root),
                     capture_output=True,
                     text=True,
                     check=False
                 )
-                
-                if check_result.stdout.strip():
-                    # Container exists - check if it's running
-                    ps_result = subprocess.run(
-                        ["docker", "ps", "--filter", f"name={container_name}", "--format", "{{.Names}}"],
+                if cleanup_result.returncode != 0:
+                    subprocess.run(
+                        ["docker", "rm", "-f", "bioanalyzer-redis", "bioanalyzer-backend"],
                         capture_output=True,
-                        text=True,
                         check=False
                     )
-                    
-                    if ps_result.stdout.strip():
-                        # Container is already running
-                        print(f"⚠️  Container '{container_name}' is already running!")
-                        print(f"✅ Backend API is available at http://localhost:8000")
-                        return True
-                    else:
-                        # Container exists but is stopped - remove it first
-                        print(f"🧹 Removing existing stopped container '{container_name}'...")
-                        subprocess.run(
-                            ["docker", "rm", container_name],
-                            capture_output=True,
-                            check=False
-                        )
-            
-            # Start backend container (pass through env vars when available)
             print("🔧 Starting backend API...")
-            env_flags = self._collect_env_flags()
-            run_cmd = [
-                "docker", "run", "-d", "--name", self.container_name,
-                "--network", self.network_name,
-                "-p", "8000:8000",
-            ] + env_flags + [self.image_name]
+            import os
+            import pwd
+            import grp
+            env = os.environ.copy()
+            try:
+                current_user = pwd.getpwuid(os.getuid())
+                current_group = grp.getgrgid(os.getgid())
+                env["UID"] = str(current_user.pw_uid)
+                env["GID"] = str(current_group.gr_gid)
+            except (KeyError, AttributeError):
+                env["UID"] = str(os.getuid())
+                env["GID"] = str(os.getgid())
+            up_cmd = compose_cmd + ["up", "-d", "--force-recreate", "--remove-orphans"]
             
-            # Run the command and capture output for debugging
             result = subprocess.run(
-                run_cmd,
+                up_cmd,
+                cwd=str(project_root),
+                env=env,
                 capture_output=True,
                 text=True,
                 check=False
             )
             
             if result.returncode != 0:
-                print(f"❌ Error starting container: {result.stderr}")
-                # Show logs if container was created but failed to start
-                logs_result = subprocess.run(
-                    ["docker", "logs", self.container_name],
-                    capture_output=True,
-                    text=True,
-                    check=False
-                )
-                if logs_result.stdout:
-                    print("\n📋 Container logs:")
-                    print(logs_result.stdout[-1000:])  # Last 1000 chars
+                if "permission denied" in result.stderr.lower():
+                    self._check_docker_permissions()
+                print(f"❌ Error starting containers: {result.stderr}")
+                if result.stdout:
+                    print(f"\n📋 Output: {result.stdout}")
                 return False
-            
-            container_id = result.stdout.strip()
-            if container_id:
-                print(f"✅ Container started: {container_id[:12]}")
-            
-            # Wait for backend to be ready with polling on /health
             if self._wait_for_backend_health(timeout=60, interval=2):
                 print("✅ Backend API is running at http://localhost:8000")
             else:
                 print("⚠️  Backend container started but /health did not report healthy within 60s")
-            
-            # Start frontend if available
             frontend_dir = project_root.parent / "BioAnalyzer-Frontend"
             if frontend_dir.exists():
                 frontend_name = "bioanalyzer-frontend"
-                # Check if frontend container already exists
                 frontend_check = subprocess.run(
                     ["docker", "ps", "-a", "--filter", f"name={frontend_name}", "--format", "{{.Names}}"],
                     capture_output=True,
                     text=True,
                     check=False
                 )
-                
                 if frontend_check.stdout.strip():
-                    # Container exists - check if it's running
                     frontend_ps = subprocess.run(
                         ["docker", "ps", "--filter", f"name={frontend_name}", "--format", "{{.Names}}"],
                         capture_output=True,
@@ -442,7 +417,6 @@ class BioAnalyzerCLI:
                     if frontend_ps.stdout.strip():
                         print(f"⚠️  Frontend container '{frontend_name}' is already running!")
                     else:
-                        # Container exists but is stopped - remove it first
                         print(f"🧹 Removing existing stopped frontend container...")
                         subprocess.run(
                             ["docker", "rm", frontend_name],
@@ -450,17 +424,19 @@ class BioAnalyzerCLI:
                             check=False
                         )
                         print("🌐 Starting frontend...")
+                        compose_network = "bioanalyzer-backend_bioanalyzer-net"
                         subprocess.run([
                             "docker", "run", "-d", "--name", frontend_name,
-                            "--network", self.network_name,
+                            "--network", compose_network,
                             "-p", "3000:80", "bioanalyzer-frontend"
                         ], check=True)
                         print("✅ Frontend is running at http://localhost:3000")
                 else:
                     print("🌐 Starting frontend...")
+                    compose_network = "bioanalyzer-backend_bioanalyzer-net"
                     subprocess.run([
                         "docker", "run", "-d", "--name", frontend_name,
-                        "--network", self.network_name,
+                        "--network", compose_network,
                         "-p", "3000:80", "bioanalyzer-frontend"
                     ], check=True)
                     print("✅ Frontend is running at http://localhost:3000")
@@ -481,20 +457,67 @@ class BioAnalyzerCLI:
         print("🛑 Stopping BioAnalyzer application...")
         
         try:
-            # Stop and remove containers (check both possible backend names)
-            containers = [self.container_name, "bioanalyzer-backend", "bioanalyzer-frontend"]
+            self._check_docker_permissions()
+            compose_file = project_root / "docker-compose.yml"
+            if compose_file.exists():
+                compose_cmd = ["docker-compose"]
+                check_compose = subprocess.run(
+                    ["which", "docker-compose"],
+                    capture_output=True,
+                    text=True,
+                    check=False
+                )
+                if not check_compose.stdout.strip():
+                    compose_cmd = ["docker", "compose"]
+                
+                result = subprocess.run(
+                    compose_cmd + ["down", "--remove-orphans"],
+                    cwd=str(project_root),
+                    capture_output=True,
+                    text=True,
+                    check=False
+                )
+                
+                if result.returncode == 0:
+                    print("✅ BioAnalyzer application stopped")
+                    return True
+            containers = [self.container_name, "bioanalyzer-backend", "bioanalyzer-frontend", "bioanalyzer-redis"]
+            stopped_any = False
             
             for container in containers:
                 try:
-                    subprocess.run(["docker", "stop", container], 
-                                 capture_output=True, check=True)
-                    subprocess.run(["docker", "rm", container], 
-                                 capture_output=True, check=True)
-                    print(f"✅ Stopped {container}")
-                except subprocess.CalledProcessError:
-                    pass  # Container might not exist
+                    stop_result = subprocess.run(
+                        ["docker", "stop", container],
+                        capture_output=True,
+                        text=True,
+                        check=False
+                    )
+                    if stop_result.returncode == 0:
+                        subprocess.run(
+                            ["docker", "rm", container],
+                            capture_output=True,
+                            text=True,
+                            check=False
+                        )
+                        print(f"✅ Stopped {container}")
+                        stopped_any = True
+                    else:
+                        rm_result = subprocess.run(
+                            ["docker", "rm", "-f", container],
+                            capture_output=True,
+                            text=True,
+                            check=False
+                        )
+                        if rm_result.returncode == 0:
+                            print(f"✅ Removed {container}")
+                            stopped_any = True
+                except Exception:
+                    pass
             
-            print("✅ BioAnalyzer application stopped")
+            if stopped_any:
+                print("✅ BioAnalyzer application stopped")
+            else:
+                print("✅ No containers were running")
             return True
             
         except Exception as e:
@@ -512,19 +535,13 @@ class BioAnalyzerCLI:
         """Check if the backend is healthy."""
         try:
             import requests
-            # Use the lightweight root /health endpoint so we avoid any heavy dependencies.
             response = requests.get("http://localhost:8000/health", timeout=5)
             return response.status_code == 200
-        except Exception as exc:
-            logger.debug(f"Backend health check failed: {exc}")
+        except Exception:
             return False
 
     def _wait_for_backend_health(self, timeout: int = 60, interval: float = 2) -> bool:
-        """
-        Poll the backend /health endpoint until it reports healthy or we time out.
-
-        This improves resilience over a single fixed sleep, especially on slower machines.
-        """
+        """Poll the backend /health endpoint until it reports healthy or we time out."""
         deadline = time.time() + timeout
         print(f"⏳ Waiting for backend health (timeout: {timeout}s)...")
         while time.time() < deadline:
@@ -537,19 +554,13 @@ class BioAnalyzerCLI:
         """Get system status information."""
         print("📊 BioAnalyzer System Status")
         print("=" * 40)
-        
-        # Check Docker
         docker_available = self.check_docker()
         print(f"Docker: {'✅ Available' if docker_available else '❌ Not Available'}")
         
         if not docker_available:
             return
-        
-        # Check image
         image_exists = self.check_image()
         print(f"Backend Image: {'✅ Built' if image_exists else '❌ Not Built'}")
-        
-        # Check containers (check both possible backend names)
         backend_running = False
         backend_status = ""
         for container_name in [self.container_name, "bioanalyzer-backend"]:
@@ -569,8 +580,6 @@ class BioAnalyzerCLI:
             print(f"Backend Container: ✅ {backend_status}")
         else:
             print("Backend Container: ❌ Not Running")
-        
-        # Check frontend
         try:
             result = subprocess.run([
                 "docker", "ps", "--filter", "name=bioanalyzer-frontend", "--format", "{{.Status}}"
@@ -582,8 +591,6 @@ class BioAnalyzerCLI:
                 print("Frontend Container: ❌ Not Running")
         except:
             print("Frontend Container: ❌ Not Running")
-        
-        # Check API health
         if self.check_backend_health():
             print("API Health: ✅ Healthy")
             print("🌐 Web Interface: http://localhost:3000")
@@ -959,90 +966,14 @@ class BioAnalyzerCLI:
         if not results:
             print("No results to display.")
             return
-        
-        import io
-        output = io.StringIO()
-        writer = csv.writer(output)
-        
-        # Header
-        headers = ['PMID', 'Title', 'Journal', 'Host Species', 'Host Species Status', 
-                  'Body Site', 'Body Site Status', 'Condition', 'Condition Status',
-                  'Sequencing Type', 'Sequencing Type Status', 'Taxa Level', 'Taxa Level Status',
-                  'Sample Size', 'Sample Size Status', 'Summary', 'Processing Time']
-        writer.writerow(headers)
-        
-        # Data rows
-        for result in results:
-            fields = result.get('fields', {})
-            row = [
-                result.get('pmid', ''),
-                result.get('title', ''),
-                result.get('journal', ''),
-                fields.get('host_species', {}).get('value', ''),
-                fields.get('host_species', {}).get('status', ''),
-                fields.get('body_site', {}).get('value', ''),
-                fields.get('body_site', {}).get('status', ''),
-                fields.get('condition', {}).get('value', ''),
-                fields.get('condition', {}).get('status', ''),
-                fields.get('sequencing_type', {}).get('value', ''),
-                fields.get('sequencing_type', {}).get('status', ''),
-                fields.get('taxa_level', {}).get('value', ''),
-                fields.get('taxa_level', {}).get('status', ''),
-                fields.get('sample_size', {}).get('value', ''),
-                fields.get('sample_size', {}).get('status', ''),
-                result.get('curation_summary', ''),
-                result.get('processing_time', 0)
-            ]
-            writer.writerow(row)
-        
-        print(output.getvalue())
+        print(self.get_csv_content(results))
     
     def display_xml_results(self, results: List[Dict[str, Any]]):
         """Display results in XML format."""
         if not results:
             print("No results to display.")
             return
-        
-        print('<?xml version="1.0" encoding="UTF-8"?>')
-        print('<BioAnalyzerResults>')
-        
-        for result in results:
-            print(f'  <Analysis>')
-            print(f'    <PMID>{result.get("pmid", "")}</PMID>')
-            print(f'    <Title>{result.get("title", "")}</Title>')
-            print(f'    <Journal>{result.get("journal", "")}</Journal>')
-            print(f'    <ProcessingTime>{result.get("processing_time", 0)}</ProcessingTime>')
-            
-            fields = result.get('fields', {})
-            print(f'    <Fields>')
-            
-            field_names = {
-                'host_species': 'HostSpecies',
-                'body_site': 'BodySite', 
-                'condition': 'Condition',
-                'sequencing_type': 'SequencingType',
-                'taxa_level': 'TaxaLevel',
-                'sample_size': 'SampleSize'
-            }
-            
-            for field_key, field_name in field_names.items():
-                field_data = fields.get(field_key, {})
-                status = field_data.get('status', 'UNKNOWN')
-                value = field_data.get('value', 'N/A')
-                confidence = field_data.get('confidence', 0.0)
-                
-                print(f'      <{field_name}>')
-                print(f'        <Status>{status}</Status>')
-                print(f'        <Value><![CDATA[{value}]]></Value>')
-                print(f'        <Confidence>{confidence:.2f}</Confidence>')
-                print(f'      </{field_name}>')
-            
-            print(f'    </Fields>')
-            print(f'    <Summary><![CDATA[{result.get("curation_summary", "")}]]></Summary>')
-            print(f'  </Analysis>')
-        
-        print('</BioAnalyzerResults>')
-    
+        print(self.get_xml_content(results))
     def _collect_urls(self, inline_urls: List[str], file_path: Optional[str]) -> List[str]:
         """Collect URLs from CLI arguments and optional file."""
         urls = []
@@ -1376,7 +1307,6 @@ class BioAnalyzerCLI:
     
     def get_table_content(self, results: List[Dict[str, Any]]) -> str:
         """Get table content for results."""
-        # Implementation similar to display_table_results but return string
         return "Table content implementation"
     
     def show_fields_info(self):
@@ -1426,7 +1356,6 @@ class BioAnalyzerCLI:
         print("Type 'help' for commands, 'quit' to exit")
         print()
         
-        # Check if Docker API is available (preferred method)
         import requests
         api_available = False
         try:
@@ -1526,7 +1455,6 @@ class BioAnalyzerCLI:
         """
         import requests
         
-        # Check if Docker API is available
         api_available = False
         try:
             response = requests.get("http://localhost:8000/health", timeout=2)
@@ -1632,13 +1560,14 @@ class BioAnalyzerCLI:
             print(f"❌ Retrieval failed for PMID {pmid}: {paper_data['error']}")
         else:
             print(f"✅ Successfully retrieved PMID {pmid}")
-            if paper_data.get('has_full_text'):
-                print(f"   📖 Full text available")
+            if paper_data.get("has_full_text"):
+                print("   📖 Full text available")
             else:
-                print(f"   📄 Abstract only")
-    
-    def _process_retrieval_results(self, results: List[Dict[str, Any]], output_format: str, 
-                                 output_file: Optional[str], save_to_file: bool):
+                print("   📄 Abstract only")
+
+    def _process_retrieval_results(
+        self, results: List[Dict[str, Any]], output_format: str, output_file: Optional[str], save_to_file: bool
+    ):
         """Process and output the retrieval results."""
         if not results:
             print("❌ No results obtained.")
@@ -1665,8 +1594,6 @@ class BioAnalyzerCLI:
     
     def _create_standalone_retriever(self):
         """Create a fallback standalone PubMed retriever."""
-        # This is a minimal fallback implementation
-        # The main implementation is in standalone_pubmed_retriever.py
         import requests
         from xml.etree import ElementTree
         
@@ -1679,8 +1606,7 @@ class BioAnalyzerCLI:
             
             def get_full_paper_data(self, pmid: str) -> Dict[str, Any]:
                 try:
-                    # Simple metadata retrieval as fallback
-                    url = f"https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi"
+                    url = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi"
                     params = {
                         "db": "pubmed",
                         "id": pmid,
@@ -1792,32 +1718,7 @@ class BioAnalyzerCLI:
         if not results:
             print("No results to display.")
             return
-        
-        import io
-        output = io.StringIO()
-        writer = csv.writer(output)
-        
-        # Header
-        headers = ['PMID', 'Title', 'Journal', 'Authors', 'Publication Date', 
-                  'Has Full Text', 'Abstract Length', 'Full Text Length', 'Error']
-        writer.writerow(headers)
-        
-        # Data rows
-        for result in results:
-            row = [
-                result.get('pmid', ''),
-                result.get('title', ''),
-                result.get('journal', ''),
-                '; '.join(result.get('authors', [])),
-                result.get('publication_date', ''),
-                'Yes' if result.get('has_full_text') else 'No',
-                len(result.get('abstract', '')),
-                len(result.get('full_text', '')),
-                result.get('error', '')
-            ]
-            writer.writerow(row)
-        
-        print(output.getvalue())
+        print(self.get_csv_retrieval_content(results))
 
     def save_retrieval_results(self, results: List[Dict[str, Any]], filename: str, output_format: str):
         """Save retrieval results to a file."""

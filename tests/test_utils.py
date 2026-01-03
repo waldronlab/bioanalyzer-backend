@@ -5,11 +5,13 @@ Tests for utility functions in app/utils/utils.py
 import sys
 sys.path.insert(0, '/app')
 
-import pytest
-import json
-import tempfile
-from pathlib import Path
-from app.utils.utils import (
+import json  # noqa: E402
+import tempfile  # noqa: E402
+from pathlib import Path  # noqa: E402
+
+import pytest  # noqa: E402
+
+from app.utils.utils import (  # noqa: E402
     create_cache_key,
     save_json,
     load_json,

@@ -81,4 +81,3 @@ volumes:
 networks:
   bioanalyzer-net:
     driver: bridge
-

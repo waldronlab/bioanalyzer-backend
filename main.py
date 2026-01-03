@@ -47,7 +47,7 @@ def main():
     
     try:
         import uvicorn
-        import os
+        # os is already imported at the top of the file
         
         workers = int(os.getenv("UVICORN_WORKERS", "1"))
         

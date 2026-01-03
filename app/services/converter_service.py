@@ -20,8 +20,8 @@ class ConverterService:
     async def create_enhanced_markdown(self, base_markdown: str, image_descriptions: list[dict], downloaded_files: list[dict], source_url: str) -> str:
         """Create enhanced markdown by merging base content with images and files."""
         logger.info("Creating enhanced markdown document")
-        
-        enhanced = f"# Study Analysis\n\n"
+
+        enhanced = "# Study Analysis\n\n"
         enhanced += f"**Source:** {source_url}\n\n"
         enhanced += "---\n\n"
         

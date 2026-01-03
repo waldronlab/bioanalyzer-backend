@@ -4,6 +4,9 @@ import os
 import asyncio
 from typing import Dict, List, Optional, Union
 
+from app.utils.config import GEMINI_API_KEY, GEMINI_TIMEOUT, LLM_MODEL, LLM_PROVIDER
+from app.utils.credential_masking import mask_exception_message
+
 # Try to import LiteLLM provider manager first
 try:
     from .llm_provider import LLMProviderManager, LITELLM_AVAILABLE
@@ -17,14 +20,10 @@ try:
     PAPERQA_AVAILABLE = True
 except ImportError:
     PAPERQA_AVAILABLE = False
-    logger = logging.getLogger(__name__)
-    logger.warning("Paper-QA not available, falling back to GeminiQA")
-    from .gemini_qa import GeminiQA
-
-from app.utils.config import GEMINI_TIMEOUT, GEMINI_API_KEY, LLM_PROVIDER, LLM_MODEL
-from app.utils.credential_masking import mask_exception_message, mask_string
 
 logger = logging.getLogger(__name__)
+if not PAPERQA_AVAILABLE:
+    logger.warning("Paper-QA not available, falling back to GeminiQA")
 
 
 class UnifiedQA:
