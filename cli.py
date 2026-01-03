@@ -324,93 +324,45 @@ class BioAnalyzerCLI:
             # Preflight env validation
             self._validate_environment()
             
-            # Ensure Docker network exists for container communication
-            self._ensure_network()
+            # Check if docker-compose.yml exists
+            compose_file = project_root / "docker-compose.yml"
+            if not compose_file.exists():
+                print("❌ docker-compose.yml not found. Cannot start containers.")
+                return False
             
-            # Check if port 8000 is already in use
-            port_check = subprocess.run(
-                ["docker", "ps", "--filter", "publish=8000", "--format", "{{.Names}}"],
+            # Check if containers are already running
+            if self.check_backend_health():
+                print(f"✅ Backend API is already available at http://localhost:8000")
+                return True
+            
+            # Use docker-compose to start containers (handles network automatically)
+            print("🔧 Starting backend API with docker-compose...")
+            
+            # Determine compose command (docker-compose or docker compose)
+            compose_cmd = ["docker-compose"]
+            check_compose = subprocess.run(
+                ["which", "docker-compose"],
                 capture_output=True,
                 text=True,
                 check=False
             )
+            if not check_compose.stdout.strip():
+                compose_cmd = ["docker", "compose"]
             
-            if port_check.stdout.strip():
-                container_using_port = port_check.stdout.strip().split('\n')[0]
-                print(f"⚠️  Port 8000 is already in use by container '{container_using_port}'")
-                if self.check_backend_health():
-                    print(f"✅ Backend API is already available at http://localhost:8000")
-                    return True
-                else:
-                    print(f"⚠️  Container exists but API is not responding. Consider stopping it first.")
-                    return False
-            
-            # Check if container already exists (by name)
-            for container_name in [self.container_name, "bioanalyzer-backend"]:
-                check_result = subprocess.run(
-                    ["docker", "ps", "-a", "--filter", f"name={container_name}", "--format", "{{.Names}}"],
-                    capture_output=True,
-                    text=True,
-                    check=False
-                )
-                
-                if check_result.stdout.strip():
-                    # Container exists - check if it's running
-                    ps_result = subprocess.run(
-                        ["docker", "ps", "--filter", f"name={container_name}", "--format", "{{.Names}}"],
-                        capture_output=True,
-                        text=True,
-                        check=False
-                    )
-                    
-                    if ps_result.stdout.strip():
-                        # Container is already running
-                        print(f"⚠️  Container '{container_name}' is already running!")
-                        print(f"✅ Backend API is available at http://localhost:8000")
-                        return True
-                    else:
-                        # Container exists but is stopped - remove it first
-                        print(f"🧹 Removing existing stopped container '{container_name}'...")
-                        subprocess.run(
-                            ["docker", "rm", container_name],
-                            capture_output=True,
-                            check=False
-                        )
-            
-            # Start backend container (pass through env vars when available)
-            print("🔧 Starting backend API...")
-            env_flags = self._collect_env_flags()
-            run_cmd = [
-                "docker", "run", "-d", "--name", self.container_name,
-                "--network", self.network_name,
-                "-p", "8000:8000",
-            ] + env_flags + [self.image_name]
-            
-            # Run the command and capture output for debugging
+            # Start containers with docker-compose
             result = subprocess.run(
-                run_cmd,
+                compose_cmd + ["up", "-d"],
+                cwd=str(project_root),
                 capture_output=True,
                 text=True,
                 check=False
             )
             
             if result.returncode != 0:
-                print(f"❌ Error starting container: {result.stderr}")
-                # Show logs if container was created but failed to start
-                logs_result = subprocess.run(
-                    ["docker", "logs", self.container_name],
-                    capture_output=True,
-                    text=True,
-                    check=False
-                )
-                if logs_result.stdout:
-                    print("\n📋 Container logs:")
-                    print(logs_result.stdout[-1000:])  # Last 1000 chars
+                print(f"❌ Error starting containers: {result.stderr}")
+                if result.stdout:
+                    print(f"\n📋 Output: {result.stdout}")
                 return False
-            
-            container_id = result.stdout.strip()
-            if container_id:
-                print(f"✅ Container started: {container_id[:12]}")
             
             # Wait for backend to be ready with polling on /health
             if self._wait_for_backend_health(timeout=60, interval=2):
@@ -481,7 +433,35 @@ class BioAnalyzerCLI:
         print("🛑 Stopping BioAnalyzer application...")
         
         try:
-            # Stop and remove containers (check both possible backend names)
+            # Check if docker-compose.yml exists
+            compose_file = project_root / "docker-compose.yml"
+            if compose_file.exists():
+                # Use docker-compose to stop containers
+                compose_cmd = ["docker-compose"]
+                check_compose = subprocess.run(
+                    ["which", "docker-compose"],
+                    capture_output=True,
+                    text=True,
+                    check=False
+                )
+                if not check_compose.stdout.strip():
+                    compose_cmd = ["docker", "compose"]
+                
+                result = subprocess.run(
+                    compose_cmd + ["down"],
+                    cwd=str(project_root),
+                    capture_output=True,
+                    text=True,
+                    check=False
+                )
+                
+                if result.returncode == 0:
+                    print("✅ BioAnalyzer application stopped")
+                    return True
+                else:
+                    print(f"⚠️  docker-compose down had issues: {result.stderr}")
+            
+            # Fallback: Stop containers manually
             containers = [self.container_name, "bioanalyzer-backend", "bioanalyzer-frontend"]
             
             for container in containers:
