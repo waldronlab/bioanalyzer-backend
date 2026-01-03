@@ -13,7 +13,6 @@ __description__ = "A comprehensive tool for identifying curatable microbiome sig
 # Lazy import to avoid requiring FastAPI when only using models
 try:
     from .api.app import app
-
     _has_fastapi = True
 except ImportError:
     app = None
@@ -21,4 +20,4 @@ except ImportError:
 
 from .utils.config import *
 
-__all__ = ["app"] + [name for name in dir() if not name.startswith("_")]
+__all__ = ["app"] + [name for name in dir() if not name.startswith('_')] 

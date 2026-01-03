@@ -12,7 +12,6 @@ class DummyResponse:
 
 def test_check_backend_health_success(monkeypatch):
     """check_backend_health should return True when /health returns 200."""
-
     def _fake_get(url, timeout=5):
         assert url.endswith("/health")
         return DummyResponse(200)
@@ -27,7 +26,6 @@ def test_check_backend_health_success(monkeypatch):
 
 def test_check_backend_health_failure(monkeypatch):
     """check_backend_health should return False on network errors."""
-
     def _fake_get(url, timeout=5):
         raise RuntimeError("boom")
 
@@ -53,3 +51,5 @@ def test_wait_for_backend_health_respects_timeout(monkeypatch):
     # Use a very small timeout/interval so the test runs quickly.
     healthy = cli._wait_for_backend_health(timeout=1, interval=0.1)
     assert healthy is False
+
+

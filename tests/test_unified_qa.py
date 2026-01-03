@@ -37,3 +37,5 @@ async def test_analyze_image_without_gemini_key(monkeypatch):
 
     assert isinstance(result, str)
     assert "Image analysis is unavailable because GEMINI_API_KEY is not configured" in result
+
+

@@ -1,34 +1,28 @@
 """
 Pydantic models for API requests and responses.
 """
-
-from typing import Any, Dict, List, Optional
-
 from pydantic import BaseModel
+from typing import Dict, List, Optional, Any
 
 
 class Message(BaseModel):
     """WebSocket message model."""
-
     content: str
     role: str = "user"
 
 
 class Question(BaseModel):
     """Question model for paper analysis."""
-
     question: str
 
 
 class AnalysisRequest(BaseModel):
     """Request model for paper analysis."""
-
     pmid: str
 
 
 class BatchAnalysisRequest(BaseModel):
     """Request model for batch analysis."""
-
     pmids: List[str]
     page: int = 1
     page_size: int = 20
@@ -36,21 +30,18 @@ class BatchAnalysisRequest(BaseModel):
 
 class EnhancedBatchAnalysisRequest(BaseModel):
     """Request model for enhanced batch analysis."""
-
     pmids: List[str]
     max_concurrent: int = 5
 
 
 class CacheSearchRequest(BaseModel):
     """Request model for cache search."""
-
     query: str
     search_type: str = "all"
 
 
 class HealthResponse(BaseModel):
     """Health check response model."""
-
     status: str
     timestamp: str
     version: str
@@ -58,7 +49,6 @@ class HealthResponse(BaseModel):
 
 class ConfigResponse(BaseModel):
     """Configuration response model."""
-
     available_models: List[str]
     default_model: str
     frontend_timeout: int
@@ -69,7 +59,6 @@ class ConfigResponse(BaseModel):
 
 class MetricsResponse(BaseModel):
     """Metrics response model."""
-
     total_requests: int
     successful_requests: int
     failed_requests: int
@@ -80,7 +69,6 @@ class MetricsResponse(BaseModel):
 
 class CacheStatsResponse(BaseModel):
     """Cache statistics response model."""
-
     total_entries: int
     analysis_cache_entries: int
     metadata_cache_entries: int
@@ -92,7 +80,6 @@ class CacheStatsResponse(BaseModel):
 
 class FieldAnalysis(BaseModel):
     """Individual field analysis result."""
-
     status: str  # PRESENT, PARTIALLY_PRESENT, ABSENT
     value: Optional[str]
     confidence: float
@@ -102,7 +89,6 @@ class FieldAnalysis(BaseModel):
 
 class PaperAnalysisResult(BaseModel):
     """Complete paper analysis result."""
-
     pmid: str
     title: Optional[str]
     authors: Optional[List[str]]
@@ -118,7 +104,6 @@ class PaperAnalysisResult(BaseModel):
 # RAG-specific models for v2 API
 class RAGConfig(BaseModel):
     """RAG configuration for analysis."""
-
     enabled: bool = True
     top_k_chunks: Optional[int] = None  # Number of top chunks to use
     evidence_k: Optional[int] = None  # Number of evidence chunks to retrieve before re-ranking
@@ -134,7 +119,6 @@ class RAGConfig(BaseModel):
 
 class AnalysisRequestV2(BaseModel):
     """Enhanced request model for v2 API with RAG support."""
-
     pmid: str
     rag_config: Optional[RAGConfig] = None
     use_rag: bool = True  # Feature flag to enable/disable RAG
@@ -142,7 +126,6 @@ class AnalysisRequestV2(BaseModel):
 
 class BatchAnalysisRequestV2(BaseModel):
     """Enhanced batch analysis request with RAG support."""
-
     pmids: List[str]
     rag_config: Optional[RAGConfig] = None
     use_rag: bool = True
@@ -151,7 +134,6 @@ class BatchAnalysisRequestV2(BaseModel):
 
 class RAGStats(BaseModel):
     """RAG processing statistics."""
-
     chunks_processed: int
     chunks_ranked: int
     chunks_summarized: int
@@ -164,7 +146,6 @@ class RAGStats(BaseModel):
 
 class PaperAnalysisResultV2(PaperAnalysisResult):
     """Enhanced paper analysis result with RAG metadata."""
-
     rag_enabled: bool = False
     rag_stats: Optional[RAGStats] = None
     rag_config_used: Optional[RAGConfig] = None
@@ -172,7 +153,6 @@ class PaperAnalysisResultV2(PaperAnalysisResult):
 
 class RAGConfigResponse(BaseModel):
     """RAG configuration information."""
-
     default_config: RAGConfig
     available_rerank_methods: List[str]
     available_summary_lengths: List[str]

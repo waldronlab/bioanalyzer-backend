@@ -6,7 +6,6 @@ manual PYTHONPATH configuration. The conftest.py module handles path setup autom
 """
 
 import pytest
-
 from app.utils.field_validator import EnhancedFieldValidator, FieldExtractionEnhancer
 
 
@@ -47,11 +46,7 @@ class TestEnhancedFieldValidator:
             ("sequencing_type", {"method": "16S rRNA"}, "We performed 16S rRNA sequencing using V4 region."),
             ("sequencing_type", {"method": "Shotgun metagenomics"}, "Whole genome shotgun metagenomics was performed."),
             ("condition", {"description": "IBD"}, "Patients with inflammatory bowel disease (IBD) were recruited."),
-            (
-                "taxa_level",
-                {"level": "Genus"},
-                "Analysis was performed at the genus level, including Bacteroides and Prevotella.",
-            ),
+            ("taxa_level", {"level": "Genus"}, "Analysis was performed at the genus level, including Bacteroides and Prevotella."),
             ("sample_size", {"size": "50"}, "A total of n=50 participants were included in this study."),
         ]
 
@@ -78,7 +73,9 @@ class TestEnhancedFieldValidator:
         )
         assert "confidence" in result and result["confidence"] > 0.0
 
-        result = validator._check_pattern_match("body_site", "Gut", "Fecal samples from the gut were analyzed.")
+        result = validator._check_pattern_match(
+            "body_site", "Gut", "Fecal samples from the gut were analyzed."
+        )
         assert "confidence" in result
 
     def test_get_validation_notes(self):
@@ -128,9 +125,7 @@ class TestFieldExtractionEnhancer:
             enhancer._generate_curation_summary([]),
             enhancer._generate_curation_summary(["host_species"]),
             enhancer._generate_curation_summary(["host_species", "body_site", "condition"]),
-            enhancer._generate_curation_summary(
-                ["host_species", "body_site", "condition", "sequencing_type", "taxa_level"]
-            ),
+            enhancer._generate_curation_summary(["host_species", "body_site", "condition", "sequencing_type", "taxa_level"]),
         ]
         for summary in summaries:
             assert isinstance(summary, str) and len(summary) > 0
