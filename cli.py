@@ -405,6 +405,21 @@ class BioAnalyzerCLI:
             # Use docker-compose to start containers (handles network automatically)
             print("🔧 Starting backend API...")
             
+            # Set UID and GID environment variables so containers run as current user
+            import os
+            import pwd
+            import grp
+            env = os.environ.copy()
+            try:
+                current_user = pwd.getpwuid(os.getuid())
+                current_group = grp.getgrgid(os.getgid())
+                env["UID"] = str(current_user.pw_uid)
+                env["GID"] = str(current_group.gr_gid)
+            except (KeyError, AttributeError):
+                # Fallback if user/group lookup fails
+                env["UID"] = str(os.getuid())
+                env["GID"] = str(os.getgid())
+            
             # Start containers - only force recreate if we had to clean up
             up_cmd = compose_cmd + ["up", "-d"]
             if containers_running and not self.check_backend_health():
@@ -414,6 +429,7 @@ class BioAnalyzerCLI:
             result = subprocess.run(
                 up_cmd,
                 cwd=str(project_root),
+                env=env,
                 capture_output=True,
                 text=True,
                 check=False
