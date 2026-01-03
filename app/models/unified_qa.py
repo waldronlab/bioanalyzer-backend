@@ -4,6 +4,9 @@ import logging
 import os
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 
+from app.utils.config import GEMINI_API_KEY, GEMINI_TIMEOUT, LLM_MODEL, LLM_PROVIDER
+from app.utils.credential_masking import mask_exception_message
+
 # Try to import LiteLLM provider manager first
 if TYPE_CHECKING:
     from .llm_provider import LLMProviderManager
@@ -25,13 +28,10 @@ try:
     PAPERQA_AVAILABLE = True
 except ImportError:
     PAPERQA_AVAILABLE = False
-    logger = logging.getLogger(__name__)
-    logger.warning("Paper-QA not available, falling back to GeminiQA")
-
-from app.utils.config import GEMINI_API_KEY, GEMINI_TIMEOUT, LLM_MODEL, LLM_PROVIDER
-from app.utils.credential_masking import mask_exception_message
 
 logger = logging.getLogger(__name__)
+if not PAPERQA_AVAILABLE:
+    logger.warning("Paper-QA not available, falling back to GeminiQA")
 
 
 class UnifiedQA:

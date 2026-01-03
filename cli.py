@@ -988,14 +988,14 @@ class BioAnalyzerCLI:
         print("<BioAnalyzerResults>")
 
         for result in results:
-            print(f"  <Analysis>")
+            print("  <Analysis>")
             print(f'    <PMID>{result.get("pmid", "")}</PMID>')
             print(f'    <Title>{result.get("title", "")}</Title>')
             print(f'    <Journal>{result.get("journal", "")}</Journal>')
             print(f'    <ProcessingTime>{result.get("processing_time", 0)}</ProcessingTime>')
 
             fields = result.get("fields", {})
-            print(f"    <Fields>")
+            print("    <Fields>")
 
             field_names = {
                 "host_species": "HostSpecies",
@@ -1018,9 +1018,9 @@ class BioAnalyzerCLI:
                 print(f"        <Confidence>{confidence:.2f}</Confidence>")
                 print(f"      </{field_name}>")
 
-            print(f"    </Fields>")
+            print("    </Fields>")
             print(f'    <Summary><![CDATA[{result.get("curation_summary", "")}]]></Summary>')
-            print(f"  </Analysis>")
+            print("  </Analysis>")
 
         print("</BioAnalyzerResults>")
 
@@ -1609,9 +1609,9 @@ class BioAnalyzerCLI:
         else:
             print(f"✅ Successfully retrieved PMID {pmid}")
             if paper_data.get("has_full_text"):
-                print(f"   📖 Full text available")
+                print("   📖 Full text available")
             else:
-                print(f"   📄 Abstract only")
+                print("   📄 Abstract only")
 
     def _process_retrieval_results(
         self, results: List[Dict[str, Any]], output_format: str, output_file: Optional[str], save_to_file: bool
@@ -1656,7 +1656,7 @@ class BioAnalyzerCLI:
             def get_full_paper_data(self, pmid: str) -> Dict[str, Any]:
                 try:
                     # Simple metadata retrieval as fallback
-                    url = f"https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi"
+                    url = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi"
                     params = {
                         "db": "pubmed",
                         "id": pmid,

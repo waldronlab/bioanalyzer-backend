@@ -24,7 +24,7 @@ class ConverterService:
         """Create enhanced markdown by merging base content with images and files."""
         logger.info("Creating enhanced markdown document")
 
-        enhanced = f"# Study Analysis\n\n"
+        enhanced = "# Study Analysis\n\n"
         enhanced += f"**Source:** {source_url}\n\n"
         enhanced += "---\n\n"
 

@@ -7,13 +7,13 @@ import sys
 
 sys.path.insert(0, "/app")
 
-import json
-import tempfile
-from pathlib import Path
+import json  # noqa: E402
+import tempfile  # noqa: E402
+from pathlib import Path  # noqa: E402
 
-import pytest
+import pytest  # noqa: E402
 
-from app.utils.utils import (
+from app.utils.utils import (  # noqa: E402
     create_cache_key,
     format_prediction_output,
     get_body_sites,
