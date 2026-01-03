@@ -20,11 +20,6 @@ COPY pyproject.toml README.md ./
 # Upgrade pip and setuptools first
 RUN pip install --upgrade pip setuptools wheel build
 
-# Configure pip for better network resilience
-RUN pip config set global.timeout 600 && \
-    pip config set global.retries 10 && \
-    pip config set global.default-timeout 600
-
 # ------------------------------------------------------------
 # Step 1: Install PyTorch CPU versions (fixed +cpu issue)
 # Note: PyTorch CPU versions require special index URL, so we install them separately
@@ -46,16 +41,13 @@ COPY . .
 # This installs the package and all its dependencies from pyproject.toml
 # PyTorch is already installed above, so pip will skip it
 # Installing in editable mode (-e) ensures entry points are properly installed
-# Increased timeout and retries for network resilience
 # ------------------------------------------------------------
-RUN pip install --no-cache-dir --default-timeout=600 --retries=10 -e . || \
-    (echo "First attempt failed, retrying with increased timeout..." && \
-     pip install --no-cache-dir --default-timeout=900 --retries=15 -e .)
+RUN pip install --no-cache-dir --default-timeout=300 --retries=5 -e .
 
 # ------------------------------------------------------------
 # Step 4: Install testing dependencies (optional, for development)
 # ------------------------------------------------------------
-RUN pip install --no-cache-dir --default-timeout=600 --retries=10 pytest>=7.4.0 pytest-cov>=4.1.0
+RUN pip install --no-cache-dir pytest>=7.4.0 pytest-cov>=4.1.0
 
 # Create necessary directories
 RUN mkdir -p cache logs results
