@@ -2,17 +2,15 @@
 from fastapi import APIRouter, HTTPException, Query
 from typing import Optional, List
 import logging
-from datetime import datetime
 from app.utils.credential_masking import mask_exception_message
-
-from app.services.bugsigdb_analyzer import analyze_paper_simple, analyze_paper_with_rag
+from app.api.utils.constants import ESSENTIAL_FIELDS_INFO, STATUS_VALUES
+from app.services.bugsigdb_analyzer import analyze_paper_with_rag
 from app.api.models.api_models import (
     AnalysisRequestV2,
     BatchAnalysisRequestV2,
     PaperAnalysisResultV2,
     RAGConfig,
-    RAGConfigResponse,
-    RAGStats
+    RAGConfigResponse
 )
 from app.utils.config import (
     RAG_SUMMARY_PROVIDER,
@@ -26,45 +24,6 @@ from app.utils.config import (
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v2", tags=["BugSigDB Analysis v2"])
-
-ESSENTIAL_FIELDS_INFO = {
-    "host_species": {
-        "name": "Host Species",
-        "description": "The host organism being studied (e.g., Human, Mouse, Rat)",
-        "required": True
-    },
-    "body_site": {
-        "name": "Body Site", 
-        "description": "Where the microbiome sample was collected (e.g., Gut, Oral, Skin)",
-        "required": True
-    },
-    "condition": {
-        "name": "Condition",
-        "description": "What disease, treatment, or exposure is being studied",
-        "required": True
-    },
-    "sequencing_type": {
-        "name": "Sequencing Type",
-        "description": "What molecular method was used (e.g., 16S, metagenomics)",
-        "required": True
-    },
-    "taxa_level": {
-        "name": "Taxa Level",
-        "description": "What taxonomic level was analyzed (e.g., phylum, genus, species)",
-        "required": True
-    },
-    "sample_size": {
-        "name": "Sample Size",
-        "description": "Number of samples or participants analyzed",
-        "required": True
-    }
-}
-
-STATUS_VALUES = {
-    "PRESENT": "Information is complete and clear",
-    "PARTIALLY_PRESENT": "Some information available but incomplete", 
-    "ABSENT": "Information is missing"
-}
 
 
 def _get_default_rag_config() -> RAGConfig:
@@ -135,9 +94,7 @@ async def analyze_paper(
         result = await analyze_paper_with_rag(pmid, rag_config=rag_config, use_rag=use_rag)
         if not result:
             raise HTTPException(status_code=404, detail=f"Analysis failed for PMID {pmid}")
-        
         return result
-        
     except HTTPException:
         raise
     except Exception as e:
@@ -179,9 +136,7 @@ async def analyze_paper_post(request: AnalysisRequestV2) -> PaperAnalysisResultV
         )
         if not result:
             raise HTTPException(status_code=404, detail=f"Analysis failed for PMID {request.pmid}")
-        
         return result
-        
     except HTTPException:
         raise
     except Exception as e:
@@ -274,38 +229,14 @@ async def get_rag_config() -> RAGConfigResponse:
 
 @router.get("/fields")
 async def get_essential_fields():
-    """
-    Get information about the 6 essential BugSigDB fields.
-    
-    Same as v1 endpoint, maintained for backward compatibility.
-    """
-    return {
-        "essential_fields": ESSENTIAL_FIELDS_INFO,
-        "status_values": STATUS_VALUES,
-        "api_version": "v2"
-    }
+    """Get information about the 6 essential BugSigDB fields."""
+    from app.api.utils.field_helpers import get_fields_response
+    return get_fields_response("v2")
 
 
 @router.get("/fields/{field_name}")
 async def get_field_details(field_name: str):
-    """
-    Get information about a single BugSigDB field.
-    
-    Same as v1 endpoint, maintained for backward compatibility.
-    """
-    normalized_name = field_name.strip().lower()
-    if normalized_name not in ESSENTIAL_FIELDS_INFO:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Field '{field_name}' is not one of the 6 essential BugSigDB fields"
-        )
-    
-    field_details = ESSENTIAL_FIELDS_INFO[normalized_name].copy()
-    field_details["field_key"] = normalized_name
-    
-    return {
-        "field": field_details,
-        "status_values": STATUS_VALUES,
-        "api_version": "v2"
-    }
+    """Get information about a single BugSigDB field."""
+    from app.api.utils.field_helpers import get_field_details_response
+    return get_field_details_response(field_name, "v2")
 

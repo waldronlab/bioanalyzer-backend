@@ -966,88 +966,14 @@ class BioAnalyzerCLI:
         if not results:
             print("No results to display.")
             return
-        
-        import io
-        output = io.StringIO()
-        writer = csv.writer(output)
-        
-        # Header
-        headers = ['PMID', 'Title', 'Journal', 'Host Species', 'Host Species Status', 
-                  'Body Site', 'Body Site Status', 'Condition', 'Condition Status',
-                  'Sequencing Type', 'Sequencing Type Status', 'Taxa Level', 'Taxa Level Status',
-                  'Sample Size', 'Sample Size Status', 'Summary', 'Processing Time']
-        writer.writerow(headers)
-        
-        # Data rows
-        for result in results:
-            fields = result.get('fields', {})
-            row = [
-                result.get('pmid', ''),
-                result.get('title', ''),
-                result.get('journal', ''),
-                fields.get('host_species', {}).get('value', ''),
-                fields.get('host_species', {}).get('status', ''),
-                fields.get('body_site', {}).get('value', ''),
-                fields.get('body_site', {}).get('status', ''),
-                fields.get('condition', {}).get('value', ''),
-                fields.get('condition', {}).get('status', ''),
-                fields.get('sequencing_type', {}).get('value', ''),
-                fields.get('sequencing_type', {}).get('status', ''),
-                fields.get('taxa_level', {}).get('value', ''),
-                fields.get('taxa_level', {}).get('status', ''),
-                fields.get('sample_size', {}).get('value', ''),
-                fields.get('sample_size', {}).get('status', ''),
-                result.get('curation_summary', ''),
-                result.get('processing_time', 0)
-            ]
-            writer.writerow(row)
-        
-        print(output.getvalue())
+        print(self.get_csv_content(results))
     
     def display_xml_results(self, results: List[Dict[str, Any]]):
         """Display results in XML format."""
         if not results:
             print("No results to display.")
             return
-        
-        print('<?xml version="1.0" encoding="UTF-8"?>')
-        print('<BioAnalyzerResults>')
-        
-        for result in results:
-            print("  <Analysis>")
-            print(f'    <PMID>{result.get("pmid", "")}</PMID>')
-            print(f'    <Title>{result.get("title", "")}</Title>')
-            print(f'    <Journal>{result.get("journal", "")}</Journal>')
-            print(f'    <ProcessingTime>{result.get("processing_time", 0)}</ProcessingTime>')
-
-            fields = result.get("fields", {})
-            print("    <Fields>")
-            field_names = {
-                'host_species': 'HostSpecies',
-                'body_site': 'BodySite', 
-                'condition': 'Condition',
-                'sequencing_type': 'SequencingType',
-                'taxa_level': 'TaxaLevel',
-                'sample_size': 'SampleSize'
-            }
-            
-            for field_key, field_name in field_names.items():
-                field_data = fields.get(field_key, {})
-                status = field_data.get("status", "UNKNOWN")
-                value = field_data.get("value", "N/A")
-                confidence = field_data.get("confidence", 0.0)
-
-                print(f"      <{field_name}>")
-                print(f"        <Status>{status}</Status>")
-                print(f"        <Value><![CDATA[{value}]]></Value>")
-                print(f"        <Confidence>{confidence:.2f}</Confidence>")
-                print(f"      </{field_name}>")
-
-            print("    </Fields>")
-            print(f'    <Summary><![CDATA[{result.get("curation_summary", "")}]]></Summary>')
-            print("  </Analysis>")
-
-        print("</BioAnalyzerResults>")
+        print(self.get_xml_content(results))
     def _collect_urls(self, inline_urls: List[str], file_path: Optional[str]) -> List[str]:
         """Collect URLs from CLI arguments and optional file."""
         urls = []
@@ -1792,32 +1718,7 @@ class BioAnalyzerCLI:
         if not results:
             print("No results to display.")
             return
-        
-        import io
-        output = io.StringIO()
-        writer = csv.writer(output)
-        
-        # Header
-        headers = ['PMID', 'Title', 'Journal', 'Authors', 'Publication Date', 
-                  'Has Full Text', 'Abstract Length', 'Full Text Length', 'Error']
-        writer.writerow(headers)
-        
-        # Data rows
-        for result in results:
-            row = [
-                result.get('pmid', ''),
-                result.get('title', ''),
-                result.get('journal', ''),
-                '; '.join(result.get('authors', [])),
-                result.get('publication_date', ''),
-                'Yes' if result.get('has_full_text') else 'No',
-                len(result.get('abstract', '')),
-                len(result.get('full_text', '')),
-                result.get('error', '')
-            ]
-            writer.writerow(row)
-        
-        print(output.getvalue())
+        print(self.get_csv_retrieval_content(results))
 
     def save_retrieval_results(self, results: List[Dict[str, Any]], filename: str, output_format: str):
         """Save retrieval results to a file."""
