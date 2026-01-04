@@ -15,26 +15,39 @@ from paperqa.types import Text
 @pytest.fixture
 def sample_chunks():
     """Create sample text chunks for testing."""
+    from paperqa.types import Doc
+    
+    test_doc = Doc(
+        docname="test_paper",
+        dockey="test_key",
+        citation="Test Paper Citation"
+    )
+    
     return [
         Text(
             text="This study examined the gut microbiome in human participants with inflammatory bowel disease.",
             name="chunk_1",
+            doc=test_doc,
         ),
         Text(
             text="The host species was clearly identified as Homo sapiens. All participants were adults.",
             name="chunk_2",
+            doc=test_doc,
         ),
         Text(
             text="Samples were collected from the gastrointestinal tract, specifically the colon.",
             name="chunk_3",
+            doc=test_doc,
         ),
         Text(
             text="The analysis used 16S rRNA sequencing at the genus level for taxonomic classification.",
             name="chunk_4",
+            doc=test_doc,
         ),
         Text(
             text="A total of 100 participants were included in this study, with 50 controls and 50 patients.",
             name="chunk_5",
+            doc=test_doc,
         ),
     ]
 
@@ -56,7 +69,9 @@ class TestRankedChunk:
 
     def test_ranked_chunk_creation(self):
         """Test creating a RankedChunk."""
-        chunk = Text(text="Test chunk", name="chunk_1")
+        from paperqa.types import Doc
+        test_doc = Doc(docname="test", dockey="test_key", citation="Test")
+        chunk = Text(text="Test chunk", name="chunk_1", doc=test_doc)
         ranked = RankedChunk(
             chunk=chunk, relevance_score=0.85, rank=1, reasoning="Highly relevant"
         )
@@ -68,7 +83,9 @@ class TestRankedChunk:
 
     def test_ranked_chunk_without_reasoning(self):
         """Test RankedChunk without reasoning."""
-        chunk = Text(text="Test chunk", name="chunk_1")
+        from paperqa.types import Doc
+        test_doc = Doc(docname="test", dockey="test_key", citation="Test")
+        chunk = Text(text="Test chunk", name="chunk_1", doc=test_doc)
         ranked = RankedChunk(chunk=chunk, relevance_score=0.5, rank=2)
 
         assert ranked.reasoning is None

@@ -25,6 +25,12 @@ from app.utils.performance_logger import perf_logger
 from app.api.models.api_models import HealthResponse, ConfigResponse, MetricsResponse
 from app.api.utils.api_utils import get_current_timestamp
 
+# Export CacheManager for testing/mocking
+try:
+    from app.services.cache_manager import CacheManager
+except ImportError:
+    CacheManager = None
+
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1", tags=["System"])
 
@@ -295,8 +301,8 @@ async def get_system_status():
             "overall_status": overall_status,
             "uptime_hours": round(uptime_hours, 2),
             "health": health_dict,
-            "config": config.dict() if hasattr(config, "dict") else config.model_dump(),
-            "metrics": metrics.dict() if hasattr(metrics, "dict") else metrics.model_dump(),
+            "config": config.dict() if hasattr(config, "dict") else (config.model_dump() if hasattr(config, "model_dump") else config),
+            "metrics": metrics.dict() if hasattr(metrics, "dict") else (metrics.model_dump() if hasattr(metrics, "model_dump") else metrics),
             "gemini_api": gemini_health,
             "timestamp": get_current_timestamp(),
         }
@@ -383,15 +389,14 @@ async def ask_question(request: Dict[str, Any]):
 
         logger.info(f"Q&A request: {question[:100]}...")
 
-        # Use module-level unified_qa if available, otherwise get it
-        if unified_qa is None:
-            unified_qa = get_unified_qa()
-        if unified_qa is None:
+        # Get unified_qa instance - use local variable to avoid scope issues
+        qa_instance = get_unified_qa()
+        if qa_instance is None:
             raise HTTPException(
                 status_code=503,
                 detail="QA service not available. Check GEMINI_API_KEY configuration.",
             )
-        response = await unified_qa.chat(question)
+        response = await qa_instance.chat(question)
 
         answer = response.get("text", "")
         confidence = response.get("confidence", 0.8)

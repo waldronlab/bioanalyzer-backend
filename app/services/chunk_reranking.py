@@ -60,6 +60,11 @@ class ChunkReRanker:
                     if self.rerank_method == "llm":
                         logger.warning("Falling back to keyword-based re-ranking")
                         self.rerank_method = "keyword"
+            else:
+                # LLM not available, fallback to keyword if method was llm
+                if self.rerank_method == "llm":
+                    logger.warning("LLM not available, falling back to keyword-based re-ranking")
+                    self.rerank_method = "keyword"
 
     async def rerank_chunks(
         self,
