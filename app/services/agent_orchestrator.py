@@ -112,7 +112,7 @@ class AgentOrchestrator:
         5. Sequencing method used
         6. Taxonomic level analyzed
         7. Sample size
-        
+
         List each experiment separately.
         """
 
@@ -138,14 +138,14 @@ class AgentOrchestrator:
         logger.info(f"Extracting signatures for: {experiment.title}")
 
         query = f"""
-        For the experiment "{experiment.title}", identify all microbial taxa 
+        For the experiment "{experiment.title}", identify all microbial taxa
         that showed significant changes. For each taxon, extract:
         1. Taxon name
         2. Direction of change (increased/decreased)
         3. Statistical significance (p-value)
         4. Comparison groups
         5. Supporting evidence text
-        
+
         Focus on statistically significant findings.
         """
 

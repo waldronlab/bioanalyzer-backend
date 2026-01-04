@@ -16,6 +16,8 @@ Usage:
     BioAnalyzer stop                    # Stop the application
 """
 
+from __future__ import annotations
+
 import asyncio
 import json
 import sys
@@ -25,8 +27,11 @@ import subprocess
 import time
 import csv
 from pathlib import Path
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, TYPE_CHECKING
 import logging
+
+if TYPE_CHECKING:
+    from app.core.settings import BioAnalyzerSettings
 
 import requests
 
@@ -1552,7 +1557,7 @@ class BioAnalyzerCLI:
    <question>                 Ask any question
    help                       Show this help
    quit                       Exit interactive mode
-   
+
 💡 Examples:
    "What is the microbiome?"
    "Explain 16S rRNA sequencing"

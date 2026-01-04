@@ -141,8 +141,8 @@ class PaperQAAgent:
             )
 
             # Query the agent about the paper
-            query = """You are an expert scientific curator specializing in microbial signature analysis. 
-            Analyze this paper and provide a comprehensive assessment of its curation readiness based on 
+            query = """You are an expert scientific curator specializing in microbial signature analysis.
+            Analyze this paper and provide a comprehensive assessment of its curation readiness based on
             the methods and experimental design. Focus on identifying the 6 essential BugSigDB fields:
             1. Host Species
             2. Body Site
@@ -150,7 +150,7 @@ class PaperQAAgent:
             4. Sequencing Type
             5. Taxa Level
             6. Sample Size
-            
+
             Provide a detailed analysis of what information is present or missing for each field."""
 
             response: AnswerResponse = await asyncio.wait_for(
@@ -224,7 +224,7 @@ class PaperQAAgent:
 
             # Enhanced query for BugSigDB field extraction
             query = """Analyze this scientific paper and extract information for BugSigDB curation.
-            
+
             Extract the following 6 essential fields:
             1. Host Species - What host organism is being studied?
             2. Body Site - What body site or anatomical location was sampled?
@@ -232,13 +232,13 @@ class PaperQAAgent:
             4. Sequencing Type - What sequencing method was used?
             5. Taxa Level - What taxonomic level was analyzed?
             6. Sample Size - How many samples or participants were included?
-            
+
             For each field, provide:
             - Value: The extracted information or null if not found
             - Status: PRESENT, PARTIALLY_PRESENT, or ABSENT
             - Confidence: A score from 0.0 to 1.0
             - Reason if missing: Explanation if the field is absent
-            
+
             Respond in JSON format with the following structure:
             {
                 "host_species": {
