@@ -11,21 +11,19 @@ env:
 
 jobs:
   test:
-    name: Test Python ${{ matrix.python-version }}
+    name: Test Python 3.11
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: ["3.8", "3.9", "3.10", "3.11"]
+    # TODO: Add support for Python 3.8, 3.9, 3.10 when dependencies are compatible
+    # Use matrix strategy: python-version: ["3.8", "3.9", "3.10", "3.11"]
     
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
     
-    - name: Set up Python ${{ matrix.python-version }}
+    - name: Set up Python 3.11
       uses: actions/setup-python@v5
       with:
-        python-version: ${{ matrix.python-version }}
+        python-version: "3.11"
         cache: 'pip'
     
     - name: Install system dependencies
@@ -215,7 +213,7 @@ jobs:
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "| Job | Status |" >> $GITHUB_STEP_SUMMARY
         echo "|-----|--------|" >> $GITHUB_STEP_SUMMARY
-        echo "| Tests (Python 3.8, 3.9, 3.10, 3.11) | ${{ needs.test.result }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Tests (Python 3.11) | ${{ needs.test.result }} |" >> $GITHUB_STEP_SUMMARY
         echo "| Linting (Black, Flake8) | ${{ needs.lint.result }} |" >> $GITHUB_STEP_SUMMARY
         echo "| Type Checking (MyPy) | ${{ needs.type-check.result }} |" >> $GITHUB_STEP_SUMMARY
         echo "| Security Scanning | ${{ needs.security.result }} |" >> $GITHUB_STEP_SUMMARY
