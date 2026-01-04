@@ -50,6 +50,7 @@ jobs:
     - name: Install test dependencies
       run: |
         pip install --no-cache-dir -e ".[dev]"
+        pip install pytest-asyncio
     
     - name: Verify installation
       env:
