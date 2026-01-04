@@ -31,7 +31,6 @@ router = APIRouter(prefix="/api/v1", tags=["System"])
 _unified_qa = None
 _pubmed_retriever = None
 
-
 def get_unified_qa():
     """Get or initialize UnifiedQA instance."""
     global _unified_qa
@@ -43,6 +42,11 @@ def get_unified_qa():
             logger.warning(f"Failed to initialize UnifiedQA: {safe_error}")
             _unified_qa = None
     return _unified_qa
+
+
+# Export unified_qa for testing/mocking - allows @patch("app.api.routers.system.unified_qa")
+# This is a simple module-level variable that can be mocked
+unified_qa = None  # Will be initialized on first use via get_unified_qa()
 
 
 def get_pubmed_retriever():
@@ -123,7 +127,9 @@ async def gemini_health_check():
     Returns Gemini API health status and response time.
     """
     try:
-        unified_qa = get_unified_qa()
+        # Use module-level unified_qa if available, otherwise get it
+        if unified_qa is None:
+            unified_qa = get_unified_qa()
         if unified_qa is None:
             return {
                 "status": "unhealthy",
@@ -277,12 +283,20 @@ async def get_system_status():
         uptime_seconds = time.time() - psutil.boot_time()
         uptime_hours = uptime_seconds / 3600
 
+        # Handle both Pydantic model and dict cases
+        if isinstance(health_status, dict):
+            overall_status = health_status.get("status", "unknown")
+            health_dict = health_status
+        else:
+            overall_status = health_status.status
+            health_dict = health_status.dict() if hasattr(health_status, "dict") else health_status.model_dump()
+
         return {
-            "overall_status": health_status.status,
+            "overall_status": overall_status,
             "uptime_hours": round(uptime_hours, 2),
-            "health": health_status.dict(),
-            "config": config.dict(),
-            "metrics": metrics.dict(),
+            "health": health_dict,
+            "config": config.dict() if hasattr(config, "dict") else config.model_dump(),
+            "metrics": metrics.dict() if hasattr(metrics, "dict") else metrics.model_dump(),
             "gemini_api": gemini_health,
             "timestamp": get_current_timestamp(),
         }
@@ -369,7 +383,9 @@ async def ask_question(request: Dict[str, Any]):
 
         logger.info(f"Q&A request: {question[:100]}...")
 
-        unified_qa = get_unified_qa()
+        # Use module-level unified_qa if available, otherwise get it
+        if unified_qa is None:
+            unified_qa = get_unified_qa()
         if unified_qa is None:
             raise HTTPException(
                 status_code=503,

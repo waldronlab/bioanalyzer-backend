@@ -27,26 +27,39 @@ def temp_cache_dir():
 @pytest.fixture
 def sample_chunks():
     """Create sample text chunks for testing."""
+    from paperqa.types import Doc
+    
+    test_doc = Doc(
+        docname="test_paper",
+        dockey="test_key",
+        citation="Test Paper Citation"
+    )
+    
     return [
         Text(
             text="This study examined the gut microbiome in 100 human participants with inflammatory bowel disease. The analysis used 16S rRNA sequencing at the genus level.",
             name="chunk_1",
+            doc=test_doc,
         ),
         Text(
             text="The host species was clearly identified as Homo sapiens. All participants were adults between 18-65 years old.",
             name="chunk_2",
+            doc=test_doc,
         ),
         Text(
             text="Samples were collected from the gastrointestinal tract, specifically the colon. The study included both healthy controls and patients with Crohn's disease.",
             name="chunk_3",
+            doc=test_doc,
         ),
         Text(
             text="The sequencing analysis focused on taxonomic classification at the genus level. Over 200 different genera were identified.",
             name="chunk_4",
+            doc=test_doc,
         ),
         Text(
             text="A total of 100 participants were included in this study, with 50 controls and 50 patients with IBD.",
             name="chunk_5",
+            doc=test_doc,
         ),
     ]
 
