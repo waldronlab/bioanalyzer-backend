@@ -246,7 +246,8 @@ class TestChunkReRanker:
         """Test hybrid re-ranking method."""
         with patch("app.services.chunk_reranking.LLMProviderManager") as mock_manager:
             mock_manager.return_value = mock_llm_provider
-            reranker = ChunkReRanker(rerank_method="hybrid", llm_provider="gemini")
+            # Use 0-1 scale for easier testing
+            reranker = ChunkReRanker(rerank_method="hybrid", llm_provider="gemini", use_10_scale=False)
             reranker.llm_manager = mock_llm_provider
 
             query = "What is the host species?"
@@ -254,7 +255,7 @@ class TestChunkReRanker:
 
             assert len(ranked) == len(sample_chunks)
             assert all(isinstance(r, RankedChunk) for r in ranked)
-            # Hybrid should combine keyword and LLM scores
+            # Hybrid should combine keyword and LLM scores (0-1 scale)
             assert all(0.0 <= r.relevance_score <= 1.0 for r in ranked)
 
     @pytest.mark.asyncio

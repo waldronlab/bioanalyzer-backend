@@ -401,7 +401,8 @@ async def ask_question(request: Dict[str, Any]):
         answer = response.get("text", "")
         confidence = response.get("confidence", 0.8)
 
-        if not answer:
+        # Check if answer is an error message
+        if not answer or answer.strip().startswith("Error:"):
             raise HTTPException(
                 status_code=500,
                 detail="No answer generated. Please check GEMINI_API_KEY and try again.",

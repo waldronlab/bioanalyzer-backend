@@ -229,12 +229,14 @@ class TestBugSigDBAnalysisEndpoints:
 class TestQAEndpoint:
     """Tests for Q&A endpoint."""
 
-    @patch("app.api.routers.system.unified_qa")
-    def test_ask_question_success(self, mock_qa, client):
+    @patch("app.api.routers.system.get_unified_qa")
+    def test_ask_question_success(self, mock_get_qa, client):
         """Test Q&A endpoint with successful response."""
+        mock_qa = AsyncMock()
         mock_qa.chat = AsyncMock(
             return_value={"text": "This is a test answer", "confidence": 0.9}
         )
+        mock_get_qa.return_value = mock_qa
 
         response = client.post(
             "/api/v1/qa", json={"question": "What is the microbiome?"}
@@ -257,19 +259,23 @@ class TestQAEndpoint:
         response = client.post("/api/v1/qa", json={"question": "   "})
         assert response.status_code == 400
 
-    @patch("app.api.routers.system.unified_qa")
-    def test_ask_question_no_answer(self, mock_qa, client):
+    @patch("app.api.routers.system.get_unified_qa")
+    def test_ask_question_no_answer(self, mock_get_qa, client):
         """Test Q&A endpoint when no answer is generated."""
+        mock_qa = AsyncMock()
         mock_qa.chat = AsyncMock(return_value={"text": "", "confidence": 0.0})
+        mock_get_qa.return_value = mock_qa
 
         response = client.post("/api/v1/qa", json={"question": "Test question"})
         assert response.status_code == 500
         assert "no answer" in response.json()["detail"].lower()
 
-    @patch("app.api.routers.system.unified_qa")
-    def test_ask_question_error(self, mock_qa, client):
+    @patch("app.api.routers.system.get_unified_qa")
+    def test_ask_question_error(self, mock_get_qa, client):
         """Test Q&A endpoint with error."""
+        mock_qa = AsyncMock()
         mock_qa.chat = AsyncMock(side_effect=Exception("Test error"))
+        mock_get_qa.return_value = mock_qa
 
         response = client.post("/api/v1/qa", json={"question": "Test question"})
         assert response.status_code == 500
