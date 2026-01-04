@@ -1,4 +1,5 @@
 """API router for BugSigDB field analysis."""
+
 from fastapi import APIRouter, HTTPException
 import logging
 from app.utils.credential_masking import mask_exception_message
@@ -12,6 +13,7 @@ router = APIRouter(prefix="/api/v1", tags=["BugSigDB Analysis"])
 async def _run_analysis(pmid: str):
     """Run analysis with validated PMID."""
     from app.api.utils.api_utils import validate_pmid
+
     pmid = validate_pmid(pmid)
     logger.info(f"Starting analysis for PMID: {pmid}")
     result = await analyze_paper_simple(pmid)
@@ -53,6 +55,7 @@ async def analyze_paper_post(pmid: str):
 async def get_essential_fields():
     """Get information about BugSigDB fields."""
     from app.api.utils.field_helpers import get_fields_response
+
     return get_fields_response("v1")
 
 
@@ -60,4 +63,5 @@ async def get_essential_fields():
 async def get_field_details(field_name: str):
     """Get details for a specific BugSigDB field."""
     from app.api.utils.field_helpers import get_field_details_response
+
     return get_field_details_response(field_name, "v1")

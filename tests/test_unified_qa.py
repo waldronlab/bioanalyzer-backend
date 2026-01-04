@@ -36,6 +36,7 @@ async def test_analyze_image_without_gemini_key(monkeypatch):
     result = await qa.analyze_image("http://example.com/image.png", "Describe")
 
     assert isinstance(result, str)
-    assert "Image analysis is unavailable because GEMINI_API_KEY is not configured" in result
-
-
+    assert (
+        "Image analysis is unavailable because GEMINI_API_KEY is not configured"
+        in result
+    )

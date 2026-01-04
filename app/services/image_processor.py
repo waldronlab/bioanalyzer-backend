@@ -1,4 +1,5 @@
 """Image processor service for downloading and converting images for visual LLM processing."""
+
 import base64
 import logging
 from dataclasses import dataclass, field
@@ -36,7 +37,9 @@ class ImageProcessorService:
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.max_image_size = max_image_size_mb * 1024 * 1024
 
-    async def process_image_url(self, image_url: str, index: int = 0) -> Optional[ProcessedImage]:
+    async def process_image_url(
+        self, image_url: str, index: int = 0
+    ) -> Optional[ProcessedImage]:
         """Download image URL and prepare for processing."""
         try:
             logger.info("Processing image: %s", image_url)
@@ -49,7 +52,7 @@ class ImageProcessorService:
                 path=image_path,
                 index=index,
                 source_url=image_url,
-                mime_type=mime_type or "image/png"
+                mime_type=mime_type or "image/png",
             )
             processed.info["source_url"] = image_url
             return processed
@@ -70,7 +73,7 @@ class ImageProcessorService:
                         logger.warning(
                             "Skipping %s: image too large (%.2f MB)",
                             image_url,
-                            int(content_length) / 1024 / 1024
+                            int(content_length) / 1024 / 1024,
                         )
                         return None
 
@@ -136,10 +139,7 @@ class ImageProcessorService:
         return parsed_media.to_image_url()
 
     async def describe_image_with_llm(
-        self,
-        parsed_media: ProcessedImage,
-        llm_service,
-        prompt: Optional[str] = None
+        self, parsed_media: ProcessedImage, llm_service, prompt: Optional[str] = None
     ) -> str:
         """
         Generate description of image using a visual LLM.
@@ -163,7 +163,7 @@ class ImageProcessorService:
             logger.info(
                 "Generated description for image %s (%d chars)",
                 parsed_media.index,
-                len(description)
+                len(description),
             )
             return description
 
