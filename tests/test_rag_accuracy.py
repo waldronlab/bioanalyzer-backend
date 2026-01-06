@@ -17,37 +17,43 @@ from app.services.contextual_summarization import (
     SummarizationConfig,
 )
 from app.services.chunk_reranking import ChunkReRanker
-from paperqa.types import Text
+from paperqa.types import Text, Doc
 
 
 @pytest.fixture
 def accuracy_test_chunks():
     """Create chunks with known relevance for accuracy testing."""
+    # Create a minimal Doc object to avoid None metadata issues
+    test_doc = Doc(
+        docname="test_paper",
+        dockey="test_key",
+        citation="Test Paper Citation"
+    )
     return [
         Text(
             text="The host species in this study was clearly identified as Homo sapiens. All 100 participants were human adults.",
             name="highly_relevant",
-            doc=None,
+            doc=test_doc,
         ),
         Text(
             text="This study examined the gut microbiome using 16S rRNA sequencing at the genus level.",
             name="moderately_relevant",
-            doc=None,
+            doc=test_doc,
         ),
         Text(
             text="The weather was sunny during the study period. Participants enjoyed the research facilities.",
             name="low_relevance",
-            doc=None,
+            doc=test_doc,
         ),
         Text(
             text="Samples were collected from the gastrointestinal tract, specifically the colon region of the digestive system.",
             name="highly_relevant_2",
-            doc=None,
+            doc=test_doc,
         ),
         Text(
             text="The analysis focused on taxonomic classification and diversity metrics of microbial communities.",
             name="moderately_relevant_2",
-            doc=None,
+            doc=test_doc,
         ),
     ]
 
