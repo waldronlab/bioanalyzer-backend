@@ -504,9 +504,12 @@ async def analyze_single_field(
             )
             return create_empty_field_result(field_name)
 
-        response = await asyncio.wait_for(
-            unified_qa.chat(prompt), timeout=ANALYSIS_TIMEOUT
-        )
+        chat_call = unified_qa.chat(prompt)
+        # Support both async and mocked sync calls (for tests)
+        if asyncio.iscoroutine(chat_call):
+            response = await asyncio.wait_for(chat_call, timeout=ANALYSIS_TIMEOUT)
+        else:
+            response = chat_call
 
         if response.get("text", "").startswith("Error:"):
             logger.warning(

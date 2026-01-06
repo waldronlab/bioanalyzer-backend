@@ -61,12 +61,7 @@ def mask_credential(value: Optional[str], show_last: int = 4) -> str:
     
     value = str(value).strip()
     
-    # For very short values (likely not real API keys), mask everything
-    # Real API keys are typically 20+ characters
-    if len(value) <= 8:
-        return "****"
-    
-    # For values <= show_last, also mask everything
+    # If value is too short to safely show characters, mask everything
     if len(value) <= show_last:
         return "****"
 
@@ -126,6 +121,9 @@ def mask_string(text: str, show_last: int = 4) -> str:
             return key_value
         # Skip if it contains spaces (not a single token)
         if ' ' in key_value:
+            return key_value
+        # Avoid re-masking already masked values
+        if key_value.startswith("****"):
             return key_value
         # Mask potential API keys
         masked_value = mask_credential(key_value, show_last)
