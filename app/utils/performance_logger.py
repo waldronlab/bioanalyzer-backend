@@ -34,6 +34,11 @@ class PerformanceLogger:
         )
         perf_handler.setFormatter(formatter)
         self.logger.addHandler(perf_handler)
+        
+        # Initialize basic metrics tracking
+        self.total_requests = 0
+        self.successful_requests = 0
+        self.failed_requests = 0
 
     def log_pmid_query_start(
         self, pmid: str, user_agent: str = None, ip_address: str = None
@@ -66,6 +71,13 @@ class PerformanceLogger:
             f"Error: {error or 'None'} | "
             f"Timestamp: {datetime.now().isoformat()}"
         )
+        
+        # Update metrics
+        self.total_requests += 1
+        if success:
+            self.successful_requests += 1
+        else:
+            self.failed_requests += 1
 
     def log_api_call(
         self,
@@ -140,6 +152,26 @@ class PerformanceLogger:
             f"Error: {json.dumps(error_details, default=str)} | "
             f"Timestamp: {datetime.now().isoformat()}"
         )
+        self.failed_requests += 1
+        self.total_requests += 1
+
+    def get_metrics(self) -> Dict[str, Any]:
+        """
+        Get performance metrics summary.
+        
+        Returns:
+            Dictionary containing performance metrics
+        """
+        return {
+            "total_requests": self.total_requests,
+            "successful_requests": self.successful_requests,
+            "failed_requests": self.failed_requests,
+            "success_rate": (
+                self.successful_requests / self.total_requests
+                if self.total_requests > 0
+                else 0.0
+            ),
+        }
 
 
 def log_performance(func):

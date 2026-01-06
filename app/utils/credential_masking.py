@@ -11,6 +11,8 @@ from typing import Optional, Union
 
 # Common API key patterns to detect and mask
 API_KEY_PATTERNS = [
+    r'AIza[0-9A-Za-z\-_]{20,}',  # Google API keys (AIza...)
+    r'sk-[0-9A-Za-z]{20,}',  # OpenAI API keys (sk-...)
     r'api[_-]?key["\']?\s*[:=]\s*["\']?([a-zA-Z0-9_\-]{20,})["\']?',  # api_key: "value"
     r'apikey["\']?\s*[:=]\s*["\']?([a-zA-Z0-9_\-]{20,})["\']?',  # apikey: "value"
     r'["\']?([a-zA-Z0-9_\-]{32,})["\']?',  # Long alphanumeric strings (potential keys)
@@ -54,18 +56,22 @@ def mask_credential(value: Optional[str], show_last: int = 4) -> str:
         >>> mask_credential("short")
         '****'
     """
-    if not value or not isinstance(value, str):
+    if not value:
         return "****"
-
-    value = value.strip()
-
-    # For very short values, just mask everything
+    
+    value = str(value).strip()
+    
+    # For very short values (likely not real API keys), mask everything
+    # Real API keys are typically 20+ characters
+    if len(value) <= 8:
+        return "****"
+    
+    # For values <= show_last, also mask everything
     if len(value) <= show_last:
         return "****"
 
     # Show only the last N characters
-    masked = "*" * max(4, len(value) - show_last) + value[-show_last:]
-    return masked
+    return "****" + value[-show_last:]
 
 
 def mask_string(text: str, show_last: int = 4) -> str:
@@ -92,20 +98,40 @@ def mask_string(text: str, show_last: int = 4) -> str:
 
     masked_text = text
 
-    # Mask known API key patterns
+    # Mask known API key patterns first (specific patterns like AIza..., sk-...)
     for pattern in API_KEY_PATTERNS:
 
         def replace_match(match):
-            full_match = match.group(0)
-            # Try to extract the key value
+            # For patterns without groups (like AIza...), mask the entire match
             if match.lastindex and match.group(1):
                 key_value = match.group(1)
                 masked_value = mask_credential(key_value, show_last)
                 # Replace the key value in the original match
-                return full_match.replace(key_value, masked_value)
-            return "****"
+                return match.group(0).replace(key_value, masked_value)
+            else:
+                # For patterns that match the whole key (like AIza...), mask it directly
+                key_value = match.group(0)
+                return mask_credential(key_value, show_last)
 
         masked_text = re.sub(pattern, replace_match, masked_text, flags=re.IGNORECASE)
+    
+    # Also mask any standalone long alphanumeric strings that might be API keys
+    # This catches keys in free text like "Error: API key AIzaSyD1234567890abcdef is invalid"
+    standalone_key_pattern = r'\b([A-Za-z0-9_\-]{20,})\b'
+    
+    def replace_standalone(match):
+        key_value = match.group(1)
+        # Skip if it's all digits (likely a number, not an API key)
+        if key_value.isdigit():
+            return key_value
+        # Skip if it contains spaces (not a single token)
+        if ' ' in key_value:
+            return key_value
+        # Mask potential API keys
+        masked_value = mask_credential(key_value, show_last)
+        return masked_value
+    
+    masked_text = re.sub(standalone_key_pattern, replace_standalone, masked_text)
 
     # Also mask any environment variable values that might be in the text
     for env_var in API_KEY_ENV_VARS:

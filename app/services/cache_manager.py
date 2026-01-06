@@ -25,26 +25,20 @@ class CacheManager:
 
         self._init_database()
 
-        self._connection_pool = []
-        self._max_connections = 5
-
     def _get_connection(self):
-        """Get a database connection from the pool."""
-        if self._connection_pool:
-            return self._connection_pool.pop()
-        return sqlite3.connect(self.db_path)
+        """Get a database connection. Always create a new one for thread safety."""
+        # Use check_same_thread=False to allow cross-thread usage
+        # This is safe when each operation uses its own connection
+        return sqlite3.connect(self.db_path, check_same_thread=False)
 
     def _return_connection(self, conn):
-        """Return a connection to the pool."""
-        if len(self._connection_pool) < self._max_connections:
-            self._connection_pool.append(conn)
-        else:
-            conn.close()
+        """Close the connection. No pooling for thread safety."""
+        conn.close()
 
     def _init_database(self):
         """Initialize SQLite database for caching."""
         try:
-            conn = sqlite3.connect(self.db_path)
+            conn = sqlite3.connect(self.db_path, check_same_thread=False)
             cursor = conn.cursor()
 
             cursor.execute(
