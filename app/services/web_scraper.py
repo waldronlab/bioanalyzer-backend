@@ -103,13 +103,15 @@ class WebScraperService:
     async def scrape_url_to_markdown(self, url: str) -> dict:
         """Scrape URL and convert to markdown."""
         try:
-            logger.info(f"Scraping URL: {url}")
+            # Remove URL fragment (everything after #) as it's not needed for scraping
+            clean_url = url.split('#')[0]
+            logger.info(f"Scraping URL: {clean_url}")
 
-            html_content = await self._fetch_html(url)
+            html_content = await self._fetch_html(clean_url)
             soup = BeautifulSoup(html_content, "html.parser")
 
             # Extract links before conversion
-            links = self._extract_links(soup, url)
+            links = self._extract_links(soup, clean_url)
 
             # Convert to markdown using html2text (Paper-QA pattern)
             markdown = html2text(html_content)
@@ -119,7 +121,7 @@ class WebScraperService:
             file_urls = [link for link in links if self._is_downloadable_file(link)]
 
             # Download files
-            downloaded_files = await self._download_files(file_urls, url)
+            downloaded_files = await self._download_files(file_urls, clean_url)
 
             logger.info(
                 f"Scraping complete: {len(markdown)} chars, "
@@ -131,7 +133,7 @@ class WebScraperService:
                 "images": image_urls,
                 "files": downloaded_files,
                 "links": links,
-                "source_url": url,
+                "source_url": clean_url,
             }
 
         except Exception as e:
@@ -139,9 +141,19 @@ class WebScraperService:
             raise
 
     async def _fetch_html(self, url: str) -> str:
-        """Fetch HTML content from URL."""
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, timeout=self.timeout) as response:
+        """Fetch HTML content from URL with proper headers."""
+        # Set headers to mimic a real browser request
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.5",
+            "Accept-Encoding": "gzip, deflate, br",
+            "Connection": "keep-alive",
+            "Upgrade-Insecure-Requests": "1",
+        }
+        
+        async with aiohttp.ClientSession(headers=headers) as session:
+            async with session.get(url, timeout=aiohttp.ClientTimeout(total=self.timeout)) as response:
                 response.raise_for_status()
                 return await response.text()
 
@@ -194,7 +206,15 @@ class WebScraperService:
         """
         downloaded = []
 
-        async with aiohttp.ClientSession() as session:
+        # Use same headers as HTML fetching
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "*/*",
+            "Accept-Language": "en-US,en;q=0.5",
+            "Connection": "keep-alive",
+        }
+
+        async with aiohttp.ClientSession(headers=headers) as session:
             for url in file_urls:
                 try:
                     downloaded_file = await self._download_single_file(
@@ -213,7 +233,7 @@ class WebScraperService:
     ) -> Optional[dict]:
         """Download a single file."""
         try:
-            async with session.get(url, timeout=self.timeout) as response:
+            async with session.get(url, timeout=aiohttp.ClientTimeout(total=self.timeout)) as response:
                 response.raise_for_status()
 
                 # Check file size
