@@ -2,6 +2,9 @@
 
 import asyncio
 import logging
+import os
+import tempfile
+from pathlib import Path
 from typing import List, Optional
 from datetime import datetime
 
@@ -32,6 +35,16 @@ class AgentOrchestrator:
         self.llm_model = llm_model
         self.embedding_model = embedding_model
 
+        # Create a writable paper directory (Paper-QA needs this for caching)
+        # Use a temp directory or a directory in the current working directory
+        paper_dir = Path(tempfile.gettempdir()) / "bioanalyzer_paperqa"
+        try:
+            paper_dir.mkdir(parents=True, exist_ok=True)
+        except (OSError, PermissionError):
+            # Fall back to a directory in the current working directory
+            paper_dir = Path("cache") / "paperqa"
+            paper_dir.mkdir(parents=True, exist_ok=True)
+
         self.settings = Settings(
             llm=llm_model,
             summary_llm=llm_model,
@@ -40,6 +53,7 @@ class AgentOrchestrator:
                 agent_llm=llm_model,
                 agent_type="simple",
             ),
+            paper_directory=str(paper_dir),
         )
 
         logger.info(f"Initialized agent orchestrator with {llm_model}")
