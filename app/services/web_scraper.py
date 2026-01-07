@@ -137,7 +137,8 @@ class WebScraperService:
             }
 
         except Exception as e:
-            logger.error(f"Error scraping URL {url}: {e}")
+            error_msg = str(e) if str(e) else f"{type(e).__name__}: {repr(e)}"
+            logger.error(f"Error scraping URL {url}: {error_msg}", exc_info=True)
             raise
 
     async def _fetch_html(self, url: str) -> str:
@@ -152,10 +153,17 @@ class WebScraperService:
             "Upgrade-Insecure-Requests": "1",
         }
         
-        async with aiohttp.ClientSession(headers=headers) as session:
-            async with session.get(url, timeout=aiohttp.ClientTimeout(total=self.timeout)) as response:
-                response.raise_for_status()
-                return await response.text()
+        try:
+            async with aiohttp.ClientSession(headers=headers) as session:
+                async with session.get(url, timeout=aiohttp.ClientTimeout(total=self.timeout)) as response:
+                    response.raise_for_status()
+                    return await response.text()
+        except asyncio.TimeoutError:
+            raise TimeoutError(f"Request to {url} timed out after {self.timeout} seconds")
+        except aiohttp.ClientError as e:
+            raise ConnectionError(f"Failed to fetch {url}: {str(e)}")
+        except Exception as e:
+            raise RuntimeError(f"Error fetching {url}: {str(e) if str(e) else type(e).__name__}")
 
     def _extract_links(self, soup: BeautifulSoup, base_url: str) -> list[str]:
         """Extract all links from HTML."""
