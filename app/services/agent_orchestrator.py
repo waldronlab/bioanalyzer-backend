@@ -8,18 +8,40 @@ from pathlib import Path
 from typing import List, Optional
 from datetime import datetime
 
+# Patch pqa_directory BEFORE importing AgentSettings
+# This is critical because AgentSettings uses a lambda default_factory
+# that captures pqa_directory at class definition time
+# We use a closure with a mutable variable that can be updated later
+_pqa_base_directory = [None]  # Use list to allow mutation
+
+try:
+    import paperqa.utils
+    _original_pqa_directory = paperqa.utils.pqa_directory
+    
+    def _patched_pqa_directory(subdir: str = ""):
+        """Patched version that uses our configured directory."""
+        if _pqa_base_directory[0] is not None:
+            # Use our configured directory
+            base_dir = Path(_pqa_base_directory[0])
+            if subdir:
+                result_dir = base_dir / subdir
+            else:
+                result_dir = base_dir
+            result_dir.mkdir(parents=True, exist_ok=True)
+            return result_dir
+        else:
+            # Fallback to original (shouldn't happen, but safety)
+            return _original_pqa_directory(subdir)
+    
+    # Patch it immediately
+    paperqa.utils.pqa_directory = _patched_pqa_directory
+except (ImportError, AttributeError):
+    _pqa_base_directory = [None]
+
 from paperqa import Docs, Settings
 from paperqa.settings import AgentSettings
 from paperqa.agents import agent_query
 from paperqa.types import Text, Doc
-
-# Try to import pqa_directory to patch it if needed
-try:
-    from paperqa.utils import pqa_directory as original_pqa_directory
-    PQA_DIRECTORY_AVAILABLE = True
-except ImportError:
-    PQA_DIRECTORY_AVAILABLE = False
-    original_pqa_directory = None
 
 from app.models.extraction_schemas import (
     ExtractedExperiment,
@@ -76,21 +98,29 @@ class AgentOrchestrator:
         indexes_dir.mkdir(parents=True, exist_ok=True)
         logger.info(f"Created indexes directory: {indexes_dir}")
 
-        # Patch pqa_directory function to use our directory
-        # This is necessary because AgentSettings uses pqa_directory("indexes") 
-        # which defaults to /.pqa/indexes
-        if PQA_DIRECTORY_AVAILABLE:
-            import paperqa.utils
-            def patched_pqa_directory(subdir: str = ""):
-                """Patched version that uses our paper directory."""
-                base_dir = Path(paper_dir_str)
-                if subdir:
-                    return base_dir / subdir
-                return base_dir
-            
-            # Monkey-patch the function
-            paperqa.utils.pqa_directory = patched_pqa_directory
-            logger.info("Patched pqa_directory function to use our directory")
+        # Update the patched pqa_directory function with our directory
+        # The function was patched at module import time, now we set the actual directory
+        try:
+            _pqa_base_directory[0] = paper_dir_str
+            logger.info("Updated pqa_directory patch with our directory")
+        except (NameError, AttributeError) as e:
+            logger.warning(f"Could not update pqa_directory patch: {e}")
+            # Fallback: try to patch directly
+            try:
+                import paperqa.utils
+                def patched_pqa_directory(subdir: str = ""):
+                    """Patched version that uses our paper directory."""
+                    base_dir = Path(paper_dir_str)
+                    if subdir:
+                        result_dir = base_dir / subdir
+                    else:
+                        result_dir = base_dir
+                    result_dir.mkdir(parents=True, exist_ok=True)
+                    return result_dir
+                paperqa.utils.pqa_directory = patched_pqa_directory
+                logger.info("Patched pqa_directory function (late patch fallback)")
+            except Exception as e2:
+                logger.error(f"Failed to patch pqa_directory: {e2}")
 
         self.settings = Settings(
             llm=llm_model,
