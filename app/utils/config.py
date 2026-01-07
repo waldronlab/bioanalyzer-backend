@@ -64,10 +64,14 @@ def validate_gemini_key():
     try:
         genai.configure(api_key=GEMINI_API_KEY)
         return True
-    except Exception as e:
-        # Mask any potential credentials in error message
+    except (ValueError, AttributeError) as e:
         safe_error = mask_exception_message(e)
         print(f"Gemini API key validation failed: {safe_error}")
+        return False
+    except Exception as e:
+        # Catch-all for unexpected errors during configuration
+        safe_error = mask_exception_message(e)
+        print(f"Unexpected error validating Gemini key: {safe_error}")
         return False
 
 
@@ -82,20 +86,20 @@ def validate_env_vars():
     if not GEMINI_API_KEY:
         missing_vars.append("GEMINI_API_KEY")
 
-    # Check if at least one AI model is available
+    # At least one LLM provider must be available
     if not AVAILABLE_MODELS:
         missing_vars.append("GEMINI_API_KEY")
 
     if missing_vars:
         print(
-            f"Warning: The following environment variables are missing: {', '.join(missing_vars)}"
+            f"Warning: Missing environment variables: {', '.join(missing_vars)}"
         )
-        print("Please set them in your .env file or environment.")
+        print("Set them in your .env file or environment.")
 
     return len(missing_vars) == 0
 
 
-# Call validation when module is imported
+# Validate on import
 validate_env_vars()
 
 
@@ -209,10 +213,9 @@ MAX_LOG_FILES = 5  # Keep 5 rotated log files
 
 
 def setup_logging():
-    """Setup comprehensive logging configuration with file rotation.
+    """Configure logging with file rotation.
 
-    Handles permission errors gracefully, falling back to console-only logging
-    if file handlers cannot be created (e.g., during testing).
+    Falls back to console-only logging if file handlers can't be created.
     """
     import logging.handlers
 
