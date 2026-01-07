@@ -37,13 +37,29 @@ class AgentOrchestrator:
 
         # Create a writable paper directory (Paper-QA needs this for caching)
         # Use a temp directory or a directory in the current working directory
+        # Make sure to use absolute path to avoid issues
         paper_dir = Path(tempfile.gettempdir()) / "bioanalyzer_paperqa"
         try:
+            paper_dir = paper_dir.resolve()  # Get absolute path
             paper_dir.mkdir(parents=True, exist_ok=True)
-        except (OSError, PermissionError):
+            # Test write access
+            test_file = paper_dir / ".write_test"
+            test_file.write_text("test")
+            test_file.unlink()
+        except (OSError, PermissionError) as e:
+            logger.warning(f"Could not use temp directory {paper_dir}: {e}")
             # Fall back to a directory in the current working directory
             paper_dir = Path("cache") / "paperqa"
-            paper_dir.mkdir(parents=True, exist_ok=True)
+            try:
+                paper_dir = paper_dir.resolve()  # Get absolute path
+                paper_dir.mkdir(parents=True, exist_ok=True)
+            except (OSError, PermissionError) as e2:
+                logger.error(f"Could not create paper directory {paper_dir}: {e2}")
+                # Last resort: use /tmp which should always be writable
+                paper_dir = Path("/tmp") / "bioanalyzer_paperqa"
+                paper_dir.mkdir(parents=True, exist_ok=True)
+
+        logger.info(f"Using Paper-QA directory: {paper_dir.absolute()}")
 
         self.settings = Settings(
             llm=llm_model,
@@ -53,7 +69,7 @@ class AgentOrchestrator:
                 agent_llm=llm_model,
                 agent_type="simple",
             ),
-            paper_directory=str(paper_dir),
+            paper_directory=str(paper_dir.absolute()),
         )
 
         logger.info(f"Initialized agent orchestrator with {llm_model}")
@@ -64,7 +80,7 @@ class AgentOrchestrator:
         """Analyze study using agent workflow."""
         logger.info(f"Starting study analysis: {study_id}")
 
-        docs = Docs()
+        docs = Docs(settings=self.settings)
         for chunk in chunks:
             docs.texts.append(chunk)
             if chunk.doc.dockey not in docs.docs:
