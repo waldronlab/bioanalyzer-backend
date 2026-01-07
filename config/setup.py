@@ -3,7 +3,9 @@ from setuptools import setup, find_packages
 setup(
     name="BioAnalyzer",
     version="0.1.0",
-    packages=find_packages(include=['retrieve', 'retrieve.*', 'models', 'models.*', 'utils', 'utils.*']),
+    packages=find_packages(
+        include=["retrieve", "retrieve.*", "models", "models.*", "utils", "utils.*"]
+    ),
     install_requires=[
         "torch>=2.0.0",
         "transformers>=4.35.0",
@@ -27,4 +29,4 @@ setup(
         ],
     },
     python_requires=">=3.8",
-) 
+)

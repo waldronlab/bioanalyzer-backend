@@ -19,8 +19,10 @@ from app.utils.credential_masking import mask_exception_message
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
+
 class PubMedRetrieverError(Exception):
     """Custom exception for PubMed retrieval errors."""
+
     pass
 
 
@@ -31,19 +33,21 @@ class PubMedRetriever:
     DEFAULT_TIMEOUT = 10
     MAX_RETRIES = 3
 
-    def __init__(self, api_key: Optional[str] = None, email: str = "bioanalyzer@example.com"):
+    def __init__(
+        self, api_key: Optional[str] = None, email: str = "bioanalyzer@example.com"
+    ):
         """Initialize PubMed retriever with API key and email."""
         self.api_key = api_key
         self.email = email
         self.session = self._create_session()
         self._verify_connectivity()
-    
+
     def _create_session(self) -> requests.Session:
         """Create a configured requests session."""
         session = requests.Session()
-        session.headers.update({
-            "User-Agent": f"BioAnalyzer/1.0 (contact: {self.email})"
-        })
+        session.headers.update(
+            {"User-Agent": f"BioAnalyzer/1.0 (contact: {self.email})"}
+        )
         return session
 
     def _verify_connectivity(self, retries: int = 3) -> None:
@@ -59,26 +63,32 @@ class PubMedRetriever:
                 return
             except requests.exceptions.RequestException as e:
                 safe_error = mask_exception_message(e)
-                logger.warning(f"NCBI connectivity check failed (attempt {attempt+1}/{retries}): {safe_error}")
+                logger.warning(
+                    f"NCBI connectivity check failed (attempt {attempt+1}/{retries}): {safe_error}"
+                )
                 if attempt < retries - 1:
-                    time.sleep(2 ** attempt)
+                    time.sleep(2**attempt)
                 else:
                     safe_error = mask_exception_message(e)
-                    logger.warning(f"Unable to reach NCBI E-utilities after retries: {safe_error}. App will continue with limited functionality.")
+                    logger.warning(
+                        f"Unable to reach NCBI E-utilities after retries: {safe_error}. App will continue with limited functionality."
+                    )
 
-    def _make_request(self, endpoint: str, params: Dict[str, Any], retries: int = None) -> Optional[str]:
+    def _make_request(
+        self, endpoint: str, params: Dict[str, Any], retries: int = None
+    ) -> Optional[str]:
         """
         Make request to NCBI E-utilities with retry logic and rate limiting.
-            
+
         Returns:
             Response text or None if all retries failed
         """
         if retries is None:
             retries = self.MAX_RETRIES
-            
+
         url = f"{self.BASE_URL}/{endpoint}"
         params = self._prepare_request_params(params)
-        
+
         for attempt in range(retries):
             try:
                 self._apply_rate_limiting()
@@ -88,56 +98,64 @@ class PubMedRetriever:
             except requests.exceptions.RequestException as e:
                 if not self._handle_request_error(e, attempt, retries):
                     return None
-        
+
         logger.error(f"All retry attempts failed for {endpoint}")
         return None
-    
+
     def _prepare_request_params(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Prepare request parameters with required fields."""
         if self.api_key:
             params["api_key"] = self.api_key
-        params.update({
-            "email": self.email,
-            "tool": "BioAnalyzer"
-        })
+        params.update({"email": self.email, "tool": "BioAnalyzer"})
         return params
-    
+
     def _apply_rate_limiting(self):
         """Apply NCBI rate limiting."""
         delay = max(NCBI_RATE_LIMIT_DELAY, 0.0)
         time.sleep(delay)
-    
+
     def _execute_request(self, url: str, params: Dict[str, Any]) -> requests.Response:
         """Execute the HTTP request."""
         timeout = min(API_TIMEOUT or 30, 8)
         return self.session.get(url, params=params, timeout=(5, timeout))
-    
-    def _handle_request_error(self, error: requests.exceptions.RequestException, 
-                            attempt: int, max_retries: int) -> bool:
+
+    def _handle_request_error(
+        self,
+        error: requests.exceptions.RequestException,
+        attempt: int,
+        max_retries: int,
+    ) -> bool:
         """Handle request errors and determine if retry should continue."""
-        status = getattr(error.response, "status_code", None) if hasattr(error, "response") else None
+        status = (
+            getattr(error.response, "status_code", None)
+            if hasattr(error, "response")
+            else None
+        )
         is_rate_limited = status == 429
-        
+
         # Mask any credentials in error message
         from app.utils.credential_masking import mask_exception_message
+
         safe_error = mask_exception_message(error)
-        
+
         logger.warning(
             f"NCBI request failed (attempt {attempt+1}/{max_retries}): {safe_error} "
             f"{'(rate limited)' if is_rate_limited else ''}"
         )
-        
+
         if attempt < max_retries - 1:
             backoff_time = self._calculate_backoff_time(attempt, is_rate_limited)
             time.sleep(backoff_time)
             return True
-        
-        logger.error(f"PubMed request failed after {max_retries} attempts: {safe_error}")
+
+        logger.error(
+            f"PubMed request failed after {max_retries} attempts: {safe_error}"
+        )
         return False
-    
+
     def _calculate_backoff_time(self, attempt: int, is_rate_limited: bool) -> float:
         """Calculate backoff time for retries."""
-        base_time = 2 ** attempt
+        base_time = 2**attempt
         multiplier = 2.0 if is_rate_limited else 1.0
         return base_time * multiplier
 
@@ -147,7 +165,9 @@ class PubMedRetriever:
         return bool(field and str(field).strip())
 
     def fetch_paper_metadata(self, pmid: str) -> Dict[str, Any]:
-        xml_data = self._make_request("efetch.fcgi", {"db": "pubmed", "id": pmid, "retmode": "xml"})
+        xml_data = self._make_request(
+            "efetch.fcgi", {"db": "pubmed", "id": pmid, "retmode": "xml"}
+        )
 
         if not xml_data:
             logger.error(f"No data returned from PubMed for PMID {pmid}")
@@ -161,7 +181,9 @@ class PubMedRetriever:
                 return {"error": "No article metadata found."}
 
             title = article.findtext("ArticleTitle", default="N/A")
-            abstract = " ".join([t.text for t in article.findall(".//AbstractText") if t.text])
+            abstract = " ".join(
+                [t.text for t in article.findall(".//AbstractText") if t.text]
+            )
             journal = article.findtext("Journal/Title", default="N/A")
             authors = [
                 f"{a.findtext('ForeName', default='')} {a.findtext('LastName', default='')}".strip()
@@ -177,8 +199,9 @@ class PubMedRetriever:
                 "authors": authors,
             }
 
-            pub_date = article.findtext("Journal/JournalIssue/PubDate/Year") \
-                       or article.findtext("ArticleDate/Year")
+            pub_date = article.findtext(
+                "Journal/JournalIssue/PubDate/Year"
+            ) or article.findtext("ArticleDate/Year")
             if pub_date:
                 metadata["publication_date"] = pub_date
 
@@ -190,7 +213,9 @@ class PubMedRetriever:
 
         # fallback to esummary
         try:
-            xml_sum = self._make_request("esummary.fcgi", {"db": "pubmed", "id": pmid, "retmode": "xml"})
+            xml_sum = self._make_request(
+                "esummary.fcgi", {"db": "pubmed", "id": pmid, "retmode": "xml"}
+            )
             if not xml_sum:
                 return {"error": "Failed to retrieve esummary fallback."}
             root = ElementTree.fromstring(xml_sum)
@@ -212,13 +237,16 @@ class PubMedRetriever:
             return fields
         except Exception as e:
             safe_error = mask_exception_message(e)
-            logger.error(f"Error parsing fallback esummary for PMID {pmid}: {safe_error}")
+            logger.error(
+                f"Error parsing fallback esummary for PMID {pmid}: {safe_error}"
+            )
             return {"error": "Fallback retrieval failed."}
 
     def search(self, query: str, max_results: int = 10) -> List[str]:
-        xml_data = self._make_request("esearch.fcgi", {
-            "db": "pubmed", "term": query, "retmax": max_results, "retmode": "xml"
-        })
+        xml_data = self._make_request(
+            "esearch.fcgi",
+            {"db": "pubmed", "term": query, "retmax": max_results, "retmode": "xml"},
+        )
         if not xml_data:
             logger.warning(f"Search for '{query}' returned no results.")
             return []
@@ -240,9 +268,9 @@ class PubMedRetriever:
             if not pmc_id:
                 logger.info(f"No PMC ID found for PMID {pmid}")
                 return ""
-            
+
             return self._get_pmc_fulltext_by_id(pmc_id)
-            
+
         except Exception as e:
             safe_error = mask_exception_message(e)
             logger.warning(f"Error retrieving full text for PMID {pmid}: {safe_error}")
@@ -251,22 +279,23 @@ class PubMedRetriever:
     def _get_pmc_id_from_pmid(self, pmid: str) -> Optional[str]:
         """Get PMC ID from PMID using ELink."""
         try:
-            xml_data = self._make_request("elink.fcgi", {
-                "dbfrom": "pubmed",
-                "db": "pmc",
-                "id": pmid,
-                "retmode": "xml"
-            })
-            
+            xml_data = self._make_request(
+                "elink.fcgi",
+                {"dbfrom": "pubmed", "db": "pmc", "id": pmid, "retmode": "xml"},
+            )
+
             if not xml_data:
                 return None
-                
+
             root = ElementTree.fromstring(xml_data)
             for linksetdb in root.findall(".//LinkSetDb"):
                 db_to_elem = linksetdb.find("DbTo")
                 if db_to_elem is not None and db_to_elem.text == "pmc":
                     link_name_elem = linksetdb.find("LinkName")
-                    if link_name_elem is not None and link_name_elem.text == "pubmed_pmc":
+                    if (
+                        link_name_elem is not None
+                        and link_name_elem.text == "pubmed_pmc"
+                    ):
                         for id_elem in linksetdb.findall(".//Id"):
                             pmc_id = id_elem.text
                             if pmc_id:
@@ -275,7 +304,7 @@ class PubMedRetriever:
                                     pmc_id = f"PMC{pmc_id}"
                                 return pmc_id
             return None
-            
+
         except Exception as e:
             safe_error = mask_exception_message(e)
             logger.warning(f"Error getting PMC ID for PMID {pmid}: {safe_error}")
@@ -286,31 +315,29 @@ class PubMedRetriever:
         try:
             # Remove PMC prefix if present
             clean_id = pmc_id.replace("PMC", "") if pmc_id.startswith("PMC") else pmc_id
-            
-            xml_data = self._make_request("efetch.fcgi", {
-                "db": "pmc",
-                "id": clean_id,
-                "retmode": "xml"
-            })
-            
+
+            xml_data = self._make_request(
+                "efetch.fcgi", {"db": "pmc", "id": clean_id, "retmode": "xml"}
+            )
+
             if not xml_data:
                 return ""
-                
+
             root = ElementTree.fromstring(xml_data)
-            
+
             # Extract full text from PMC XML
             full_text_parts = []
-            
+
             # Get article title
             title = root.findtext(".//article-title")
             if title:
                 full_text_parts.append(f"Title: {title}")
-            
+
             # Get abstract
             abstract = root.findtext(".//abstract")
             if abstract:
                 full_text_parts.append(f"Abstract: {abstract}")
-            
+
             # Get body text
             body = root.find(".//body")
             if body is not None:
@@ -321,9 +348,9 @@ class PubMedRetriever:
                         paragraphs.append(p.text.strip())
                 if paragraphs:
                     full_text_parts.append(f"Full Text: {' '.join(paragraphs)}")
-            
+
             return "\n\n".join(full_text_parts)
-            
+
         except Exception as e:
             safe_error = mask_exception_message(e)
             logger.warning(f"Error retrieving PMC full text for {pmc_id}: {safe_error}")
@@ -340,15 +367,15 @@ class PubMedRetriever:
         """
         try:
             logger.info(f"Retrieving full paper data for PMID: {pmid}")
-            
+
             # Get metadata
             metadata = self.fetch_paper_metadata(pmid)
             if "error" in metadata:
                 return metadata
-            
+
             # Get full text
             full_text = self.get_pmc_fulltext(pmid)
-            
+
             # Combine all data
             paper_data = {
                 "pmid": pmid,
@@ -359,15 +386,17 @@ class PubMedRetriever:
                 "publication_date": metadata.get("publication_date", ""),
                 "full_text": full_text,
                 "has_full_text": bool(full_text.strip()),
-                "retrieval_timestamp": time.time()
+                "retrieval_timestamp": time.time(),
             }
-            
+
             logger.info(f"Successfully retrieved paper data for PMID: {pmid}")
             return paper_data
-            
+
         except Exception as e:
             safe_error = mask_exception_message(e)
-            logger.error(f"Error retrieving full paper data for PMID {pmid}: {safe_error}")
+            logger.error(
+                f"Error retrieving full paper data for PMID {pmid}: {safe_error}"
+            )
             return {
                 "pmid": pmid,
                 "error": f"Failed to retrieve paper data: {str(e)}",
@@ -378,7 +407,7 @@ class PubMedRetriever:
                 "publication_date": "",
                 "full_text": "",
                 "has_full_text": False,
-                "retrieval_timestamp": time.time()
+                "retrieval_timestamp": time.time(),
             }
 
     async def get_full_paper_data_async(self, pmid: str) -> Dict[str, Any]:
@@ -388,7 +417,9 @@ class PubMedRetriever:
     async def get_texts_for_analysis_async(self, pmid: str) -> Dict[str, str]:
         async def fetch_metadata():
             try:
-                return await asyncio.wait_for(self.get_paper_metadata_async(pmid), timeout=6)
+                return await asyncio.wait_for(
+                    self.get_paper_metadata_async(pmid), timeout=6
+                )
             except Exception as e:
                 safe_error = mask_exception_message(e)
                 logger.error(f"Metadata fetch error for PMID {pmid}: {safe_error}")
@@ -396,14 +427,18 @@ class PubMedRetriever:
 
         async def fetch_fulltext():
             try:
-                return await asyncio.wait_for(self.get_pmc_fulltext_async(pmid), timeout=8)
+                return await asyncio.wait_for(
+                    self.get_pmc_fulltext_async(pmid), timeout=8
+                )
             except Exception as e:
                 safe_error = mask_exception_message(e)
                 logger.warning(f"Full text fetch error for PMID {pmid}: {safe_error}")
                 return ""
 
         if USE_FULLTEXT:
-            metadata, full_text = await asyncio.gather(fetch_metadata(), fetch_fulltext())
+            metadata, full_text = await asyncio.gather(
+                fetch_metadata(), fetch_fulltext()
+            )
         else:
             metadata = await fetch_metadata()
             full_text = ""

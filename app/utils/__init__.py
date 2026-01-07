@@ -14,9 +14,9 @@ from .credential_masking import (
 )
 
 __all__ = [
-    'mask_credential',
-    'mask_string',
-    'mask_dict',
-    'safe_log_message',
-    'mask_exception_message',
-] 
+    "mask_credential",
+    "mask_string",
+    "mask_dict",
+    "safe_log_message",
+    "mask_exception_message",
+]
