@@ -1,9 +1,8 @@
-"""Chunk re-ranking service for relevance-based chunk prioritization."""
-
 import logging
 import time
 from typing import List, Optional, Dict, Any
 from dataclasses import dataclass
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +26,8 @@ class RankedChunk:
 
 
 class ChunkReRanker:
+    """Chunk re-ranking service for relevance-based chunk prioritization."""
+
     def __init__(
         self,
         rerank_method: str = "hybrid",
@@ -54,8 +55,8 @@ class ChunkReRanker:
                 if self.rerank_method == "llm":
                     self.rerank_method = "keyword"
 
-    # 🔹 NEW: single normalization point
     def _normalize_score(self, score: float) -> float:
+        """Normalize score to 0-1."""
         if self.use_10_scale:
             return max(0.0, min(1.0, score / 10.0))
         return max(0.0, min(1.0, score))
@@ -68,13 +69,10 @@ class ChunkReRanker:
         evidence_k: Optional[int] = None,
     ) -> List[RankedChunk]:
         start_time = time.time()
-
         if not chunks:
             return []
 
-        chunks_to_rerank = chunks
-        if evidence_k or self.evidence_k:
-            chunks_to_rerank = chunks[: (evidence_k or self.evidence_k)]
+        chunks_to_rerank = chunks[: (evidence_k or self.evidence_k) if (evidence_k or self.evidence_k) else len(chunks)]
 
         if self.rerank_method == "keyword":
             ranked = await self._keyword_rerank(chunks_to_rerank, query)
@@ -83,12 +81,11 @@ class ChunkReRanker:
         else:
             ranked = await self._hybrid_rerank(chunks_to_rerank, query)
 
-        # 🔹 NORMALIZE ALL SCORES HERE
+        # Normalize scores
         for rc in ranked:
             rc.relevance_score = self._normalize_score(rc.relevance_score)
 
         ranked.sort(key=lambda x: x.relevance_score, reverse=True)
-
         for i, rc in enumerate(ranked, start=1):
             rc.rank = i
 
@@ -99,18 +96,13 @@ class ChunkReRanker:
         return ranked
 
     async def _keyword_rerank(self, chunks: List[Text], query: str):
-        import re
-
         terms = set(re.findall(r"\b\w+\b", query.lower()))
         results = []
-
         for chunk in chunks:
             text = chunk.text.lower()
             matches = sum(1 for t in terms if t in text)
             score = matches / len(terms) if terms else 0.0
-
             results.append(RankedChunk(chunk, score, 0))
-
         return results
 
     async def _llm_rerank(self, chunks: List[Text], query: str):
@@ -118,7 +110,6 @@ class ChunkReRanker:
             return await self._keyword_rerank(chunks, query)
 
         results = []
-
         for chunk in chunks:
             try:
                 prompt = self._create_rerank_prompt_10_scale(query, chunk.text)
@@ -128,16 +119,15 @@ class ChunkReRanker:
                     timeout=GEMINI_TIMEOUT,
                 )
                 score = self._parse_score_from_response_10_scale(response.get("text", ""))
+                reasoning = self._extract_reasoning(response.get("text", ""))
             except Exception:
                 score = (await self._calculate_keyword_score(chunk.text, query)) * 10
-
-            results.append(RankedChunk(chunk, score, 0))
-
+                reasoning = None
+            results.append(RankedChunk(chunk, score, 0, reasoning))
         return results
 
     async def _hybrid_rerank(self, chunks: List[Text], query: str):
         keyword_ranked = await self._keyword_rerank(chunks, query)
-
         if not self.llm_manager:
             return keyword_ranked
 
@@ -147,27 +137,43 @@ class ChunkReRanker:
         results = []
         for rc in keyword_ranked:
             if rc.chunk in llm_map:
-                combined = llm_map[rc.chunk] * 0.7 + rc.relevance_score * 10 * 0.3
+                combined = llm_map[rc.chunk] * 0.7 + rc.relevance_score * 0.3
                 results.append(RankedChunk(rc.chunk, combined, 0))
             else:
                 results.append(rc)
-
         return results
 
     def _create_rerank_prompt_10_scale(self, query: str, text: str) -> str:
         return f"Rate relevance (0–10).\nQuery: {query}\nText: {text[:1000]}\nSCORE:"
 
     def _parse_score_from_response_10_scale(self, text: str) -> float:
-        import re
-
         match = re.search(r"([0-9]+(\.[0-9]+)?)", text)
         if match:
             return max(0.0, min(10.0, float(match.group(1))))
         return 5.0
 
     async def _calculate_keyword_score(self, text: str, query: str) -> float:
-        import re
-
         terms = set(re.findall(r"\b\w+\b", query.lower()))
         matches = sum(1 for t in terms if t in text.lower())
         return matches / len(terms) if terms else 0.0
+
+    # ✅ Correctly inside the class
+    def _parse_score_from_response(self, response: str) -> float:
+        match = re.search(r"([0-9]*\.?[0-9]+)", response)
+        if not match:
+            return 0.0
+        return min(max(float(match.group(1)), 0.0), 1.0)
+
+    def _extract_reasoning(self, response: str) -> Optional[str]:
+        if not response:
+            return None
+        patterns = [
+            r"Reasoning\s*[:\-]\s*(.+)",
+            r"Explanation\s*[:\-]\s*(.+)",
+            r"Because\s+(.+)",
+        ]
+        for pattern in patterns:
+            match = re.search(pattern, response, re.IGNORECASE | re.DOTALL)
+            if match:
+                return match.group(1).strip()
+        return response.strip()

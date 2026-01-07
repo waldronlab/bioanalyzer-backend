@@ -33,22 +33,18 @@ API_KEY_ENV_VARS: set[str] = {
 
 def mask_credential(value: Optional[str], show_last: int = 4) -> str:
     """
-    Mask a credential value, showing only the last N characters.
-
-    Examples:
-        abcdef1234 -> ****1234
-        short      -> ****
-        None       -> ****
+    Mask a credential value while preserving total length.
     """
     if not value:
         return "****"
 
-    value = str(value).strip()
+    value = str(value)
 
     if len(value) <= show_last:
         return "****"
 
-    return "****" + value[-show_last:]
+    masked_len = len(value) - show_last
+    return "*" * masked_len + value[-show_last:]
 
 
 def mask_string(text: str, show_last: int = 4) -> str:

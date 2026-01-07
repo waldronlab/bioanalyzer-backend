@@ -9,6 +9,7 @@ import time
 from unittest.mock import Mock, AsyncMock, patch
 import tempfile
 import shutil
+from paperqa.types import Text
 
 from app.services.advanced_rag import AdvancedRAGService
 from app.services.contextual_summarization import (
@@ -28,18 +29,16 @@ class MockDoc:
 
 @pytest.fixture
 def large_chunk_set():
-    """Create a large set of chunks for performance testing."""
     chunks = []
     for i in range(50):
         chunks.append(
             Text(
                 text=(
                     f"Chunk {i}: This is a test chunk with some content about microbiome analysis. "
-                    f"It contains information about host species, body sites, and sequencing methods. "
-                    f"Chunk number {i} has additional details."
+                    f"It contains information about host species, body sites, and sequencing methods."
                 ),
                 name=f"chunk_{i}",
-                doc=MockDoc(f"doc_{i}"),  # ✅ FIX: valid doc object
+                doc={"id": f"doc_{i}"}, 
             )
         )
     return chunks
