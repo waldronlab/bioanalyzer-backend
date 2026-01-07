@@ -6,6 +6,7 @@ from typing import List, Optional
 from datetime import datetime
 
 from paperqa import Docs, Settings
+from paperqa.settings import AgentSettings
 from paperqa.agents import agent_query
 from paperqa.types import Text, Doc
 
@@ -35,8 +36,9 @@ class AgentOrchestrator:
             llm=llm_model,
             summary_llm=llm_model,
             embedding=embedding_model,
-            agent=Settings.model_fields["agent"].default.model_copy(
-                update={"agent_llm": llm_model, "agent_type": "simple"}
+            agent=AgentSettings(
+                agent_llm=llm_model,
+                agent_type="simple",
             ),
         )
 
