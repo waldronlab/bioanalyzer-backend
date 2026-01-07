@@ -27,7 +27,11 @@ class PubMedRetrieverError(Exception):
 
 
 class PubMedRetriever:
-    """Retrieves paper metadata and full text from PubMed using NCBI E-Utilities API."""
+    """Fetches papers from PubMed/PMC via NCBI E-utilities.
+
+    Handles rate limiting (NCBI requires 0.34s between requests) and retries.
+    Caches results to avoid hitting API limits.
+    """
 
     BASE_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
     DEFAULT_TIMEOUT = 10
@@ -36,14 +40,19 @@ class PubMedRetriever:
     def __init__(
         self, api_key: Optional[str] = None, email: str = "bioanalyzer@example.com"
     ):
-        """Initialize PubMed retriever with API key and email."""
+        """Create retriever instance.
+
+        Args:
+            api_key: NCBI API key (optional but recommended for higher rate limits).
+            email: Contact email for NCBI requests (required by their ToS).
+        """
         self.api_key = api_key
         self.email = email
         self.session = self._create_session()
         self._verify_connectivity()
 
     def _create_session(self) -> requests.Session:
-        """Create a configured requests session."""
+        """Set up HTTP session with proper User-Agent header."""
         session = requests.Session()
         session.headers.update(
             {"User-Agent": f"BioAnalyzer/1.0 (contact: {self.email})"}

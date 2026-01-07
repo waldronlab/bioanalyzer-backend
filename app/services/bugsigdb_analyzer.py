@@ -1,4 +1,8 @@
-"""Analysis service for extracting BugSigDB fields from papers."""
+"""Extracts six BugSigDB fields from papers using LLMs.
+
+This is the main analysis service. It orchestrates paper retrieval, text preparation,
+and field extraction. Results are cached to avoid redundant API calls.
+"""
 
 import logging
 from typing import Dict, Optional, List
@@ -76,7 +80,14 @@ ESSENTIAL_FIELDS = {
 
 
 async def analyze_paper_simple(pmid: str) -> Optional[Dict]:
-    """Analyze paper and extract BugSigDB fields."""
+    """Extract BugSigDB fields from a paper.
+
+    Uses v1 API flow: direct LLM queries per field. Fast but less accurate than RAG.
+    Checks cache first, then fetches from PubMed if needed.
+
+    Returns:
+        Dict with field results, or None if paper can't be retrieved.
+    """
     try:
         cache_manager = get_cache_manager()
         pubmed_retriever = get_pubmed_retriever()

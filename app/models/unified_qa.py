@@ -28,7 +28,11 @@ if not PAPERQA_AVAILABLE:
 
 
 class UnifiedQA:
-    """Unified QA system supporting multiple LLM providers."""
+    """Wrapper around LLM providers for question answering.
+
+    Tries LiteLLM first (supports multiple providers), falls back to Paper-QA,
+    then GeminiQA if those fail. Auto-detects provider from available API keys.
+    """
 
     def __init__(
         self,
@@ -38,7 +42,15 @@ class UnifiedQA:
         gemini_api_key: Optional[str] = None,
         use_paperqa: bool = True,
     ):
-        """Initialize QA system with specified provider and model."""
+        """Set up QA system with the specified provider.
+
+        Args:
+            provider: LLM provider (gemini, openai, anthropic, ollama). Auto-detects if None.
+            model: Specific model name. Uses provider default if None.
+            use_gemini: Deprecated. Use provider='gemini' instead.
+            gemini_api_key: Override GEMINI_API_KEY env var.
+            use_paperqa: Try Paper-QA as fallback (default: True).
+        """
         if use_gemini is not None:
             logger.warning(
                 "use_gemini parameter is deprecated. Use provider='gemini' instead."
