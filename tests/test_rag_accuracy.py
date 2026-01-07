@@ -34,26 +34,31 @@ def accuracy_test_chunks():
             text="The host species in this study was clearly identified as Homo sapiens. All 100 participants were human adults.",
             name="highly_relevant",
             doc=test_doc,
+            metadata={},  # added to avoid NoneType errors
         ),
         Text(
             text="This study examined the gut microbiome using 16S rRNA sequencing at the genus level.",
             name="moderately_relevant",
             doc=test_doc,
+            metadata={},
         ),
         Text(
             text="The weather was sunny during the study period. Participants enjoyed the research facilities.",
             name="low_relevance",
             doc=test_doc,
+            metadata={},
         ),
         Text(
             text="Samples were collected from the gastrointestinal tract, specifically the colon region of the digestive system.",
             name="highly_relevant_2",
             doc=test_doc,
+            metadata={},
         ),
         Text(
             text="The analysis focused on taxonomic classification and diversity metrics of microbial communities.",
             name="moderately_relevant_2",
             doc=test_doc,
+            metadata={},
         ),
     ]
 
