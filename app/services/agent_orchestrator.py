@@ -8,11 +8,17 @@ from pathlib import Path
 from typing import List, Optional
 from datetime import datetime
 
+# Set environment variable for Paper-QA directory BEFORE any imports
+# This ensures pqa_directory() uses our directory instead of /.pqa
+_pqa_temp_dir = Path(tempfile.gettempdir()) / "bioanalyzer_paperqa"
+_pqa_temp_dir.mkdir(parents=True, exist_ok=True)
+os.environ["PQA_DIRECTORY"] = str(_pqa_temp_dir.absolute())
+os.environ["HOME"] = str(_pqa_temp_dir.parent.absolute())  # Also set HOME as fallback
+
 # Patch pqa_directory BEFORE importing AgentSettings
 # This is critical because AgentSettings uses a lambda default_factory
 # that captures pqa_directory at class definition time
-# We use a closure with a mutable variable that can be updated later
-_pqa_base_directory = [None]  # Use list to allow mutation
+_pqa_base_directory = [str(_pqa_temp_dir.absolute())]  # Pre-set with temp dir
 
 try:
     import paperqa.utils
@@ -98,38 +104,62 @@ class AgentOrchestrator:
         indexes_dir.mkdir(parents=True, exist_ok=True)
         logger.info(f"Created indexes directory: {indexes_dir}")
 
-        # Update the patched pqa_directory function with our directory
-        # The function was patched at module import time, now we set the actual directory
+        # CRITICAL: Set the directory BEFORE creating AgentSettings
+        # The lambda in AgentSettings.default_factory will call pqa_directory
+        # so we must ensure our patch is active and the directory is set
         try:
             _pqa_base_directory[0] = paper_dir_str
-            logger.info("Updated pqa_directory patch with our directory")
+            logger.info(f"Set pqa_base_directory to: {paper_dir_str}")
         except (NameError, AttributeError) as e:
-            logger.warning(f"Could not update pqa_directory patch: {e}")
-            # Fallback: try to patch directly
+            logger.warning(f"Could not set pqa_base_directory: {e}")
+
+        # Also patch directly as a fallback
+        try:
+            import paperqa.utils
+            def patched_pqa_directory(subdir: str = ""):
+                """Patched version that uses our paper directory."""
+                base_dir = Path(paper_dir_str)
+                if subdir:
+                    result_dir = base_dir / subdir
+                else:
+                    result_dir = base_dir
+                result_dir.mkdir(parents=True, exist_ok=True)
+                return result_dir
+            paperqa.utils.pqa_directory = patched_pqa_directory
+            logger.info("Patched pqa_directory function directly")
+        except Exception as e:
+            logger.warning(f"Could not patch pqa_directory directly: {e}")
+
+        # Try to create AgentSettings with indexes explicitly set
+        # This bypasses the default_factory lambda
+        try:
+            agent_settings = AgentSettings(
+                agent_llm=llm_model,
+                agent_type="simple",
+                indexes=str(indexes_dir),  # Try to pass indexes directly
+            )
+            logger.info("Created AgentSettings with explicit indexes")
+        except (TypeError, ValueError) as e:
+            # If indexes parameter doesn't exist, try without it
+            logger.debug(f"Could not pass indexes to AgentSettings: {e}")
             try:
-                import paperqa.utils
-                def patched_pqa_directory(subdir: str = ""):
-                    """Patched version that uses our paper directory."""
-                    base_dir = Path(paper_dir_str)
-                    if subdir:
-                        result_dir = base_dir / subdir
-                    else:
-                        result_dir = base_dir
-                    result_dir.mkdir(parents=True, exist_ok=True)
-                    return result_dir
-                paperqa.utils.pqa_directory = patched_pqa_directory
-                logger.info("Patched pqa_directory function (late patch fallback)")
+                agent_settings = AgentSettings(
+                    agent_llm=llm_model,
+                    agent_type="simple",
+                )
+                # Try to set indexes after creation
+                if hasattr(agent_settings, 'indexes'):
+                    agent_settings.indexes = str(indexes_dir)
+                    logger.info("Set indexes on AgentSettings after creation")
             except Exception as e2:
-                logger.error(f"Failed to patch pqa_directory: {e2}")
+                logger.error(f"Failed to create AgentSettings: {e2}")
+                raise
 
         self.settings = Settings(
             llm=llm_model,
             summary_llm=llm_model,
             embedding=embedding_model,
-            agent=AgentSettings(
-                agent_llm=llm_model,
-                agent_type="simple",
-            ),
+            agent=agent_settings,
             paper_directory=paper_dir_str,
         )
 
