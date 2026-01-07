@@ -61,9 +61,9 @@ def mock_embedding_model():
 def mock_vector_store():
     """Create a mock vector store."""
     mock = Mock()
-    mock.add_texts_and_embeddings = AsyncMock()
+    mock.add_texts_and_embeddings = AsyncMock(return_value=None)
     mock.similarity_search = AsyncMock(return_value=([], []))
-    mock.mmr_search = AsyncMock(return_value=([], []))
+    mock.max_marginal_relevance_search = AsyncMock(return_value=([], []))
     return mock
 
 
