@@ -2,7 +2,9 @@
 
 import asyncio
 import logging
+import os
 import re
+import tempfile
 from pathlib import Path
 from typing import Optional
 from urllib.parse import urljoin, urlparse
@@ -25,8 +27,7 @@ class WebScraperService:
         timeout: int = 30,
     ):
         """Initialize web scraper."""
-        self.download_dir = Path(download_dir)
-        self.download_dir.mkdir(parents=True, exist_ok=True)
+        self.download_dir = self._ensure_writable_directory(download_dir)
         self.max_file_size = max_file_size_mb * 1024 * 1024
         self.timeout = timeout
 
@@ -46,6 +47,58 @@ class WebScraperService:
         }
 
         self.image_extensions = {".png", ".jpg", ".jpeg", ".gif", ".svg"}
+
+    def _ensure_writable_directory(self, download_dir: str) -> Path:
+        """
+        Ensure the download directory exists and is writable.
+        
+        If the specified directory cannot be created or is not writable,
+        falls back to a temporary directory.
+        
+        Args:
+            download_dir: Desired download directory path
+            
+        Returns:
+            Path to a writable download directory
+        """
+        download_path = Path(download_dir)
+        
+        try:
+            # Try to create the directory if it doesn't exist
+            if not download_path.exists():
+                download_path.mkdir(parents=True, exist_ok=True)
+            
+            # Check if the directory is writable by trying to create a test file
+            test_file = download_path / ".write_test"
+            try:
+                test_file.write_text("test")
+                test_file.unlink()  # Clean up test file
+                logger.info(f"Using download directory: {download_path.absolute()}")
+                return download_path
+            except (OSError, PermissionError) as e:
+                logger.warning(
+                    f"Download directory '{download_path}' is not writable: {e}. "
+                    f"Falling back to temporary directory."
+                )
+        except (OSError, PermissionError) as e:
+            logger.warning(
+                f"Cannot create download directory '{download_path}': {e}. "
+                f"Falling back to temporary directory."
+            )
+        
+        # Fall back to a temporary directory
+        temp_dir = Path(tempfile.gettempdir()) / "bioanalyzer_downloads"
+        try:
+            temp_dir.mkdir(parents=True, exist_ok=True)
+            logger.info(f"Using temporary download directory: {temp_dir.absolute()}")
+            return temp_dir
+        except Exception as e:
+            # Last resort: use system temp directory directly
+            logger.error(
+                f"Cannot create temporary download directory: {e}. "
+                f"Using system temp directory."
+            )
+            return Path(tempfile.gettempdir())
 
     async def scrape_url_to_markdown(self, url: str) -> dict:
         """Scrape URL and convert to markdown."""
@@ -176,9 +229,26 @@ class WebScraperService:
                 filename = self._generate_filename(url)
                 file_path = self.download_dir / filename
 
+                # Ensure parent directory exists and is writable
+                try:
+                    file_path.parent.mkdir(parents=True, exist_ok=True)
+                except (OSError, PermissionError) as e:
+                    logger.error(
+                        f"Cannot create directory for {filename}: {e}. "
+                        f"Download directory may not be writable."
+                    )
+                    return None
+
                 # Download file
                 content = await response.read()
-                file_path.write_bytes(content)
+                try:
+                    file_path.write_bytes(content)
+                except (OSError, PermissionError) as e:
+                    logger.error(
+                        f"Cannot write file {filename}: {e}. "
+                        f"Download directory may not be writable."
+                    )
+                    return None
 
                 logger.info(f"Downloaded: {filename} ({len(content)} bytes)")
 
@@ -217,6 +287,29 @@ class WebScraperService:
         """Clean up downloaded files."""
         import shutil
 
-        if self.download_dir.exists():
-            shutil.rmtree(self.download_dir)
-            logger.info(f"Cleaned up download directory: {self.download_dir}")
+        if not self.download_dir.exists():
+            return
+
+        # Don't delete the system temp directory itself, only our subdirectory
+        system_temp = Path(tempfile.gettempdir())
+        if self.download_dir == system_temp:
+            logger.warning(
+                "Skipping cleanup: download directory is system temp directory. "
+                "Individual files will be cleaned up by the system."
+            )
+            return
+
+        try:
+            # Only delete files in the directory, not the directory itself if it's a shared temp dir
+            if "bioanalyzer_downloads" in str(self.download_dir):
+                # It's our temp directory, safe to delete
+                shutil.rmtree(self.download_dir)
+                logger.info(f"Cleaned up download directory: {self.download_dir}")
+            else:
+                # It's a custom directory, just clean up files
+                for file_path in self.download_dir.iterdir():
+                    if file_path.is_file():
+                        file_path.unlink()
+                logger.info(f"Cleaned up files in download directory: {self.download_dir}")
+        except (OSError, PermissionError) as e:
+            logger.warning(f"Could not clean up download directory {self.download_dir}: {e}")
