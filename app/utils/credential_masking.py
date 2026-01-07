@@ -1,278 +1,111 @@
 """
 Credential masking utility for secure logging.
-
-This module provides functions to mask sensitive credentials (API keys, tokens, etc.)
-in logs and error messages to prevent security vulnerabilities.
 """
 
 import re
-from typing import Optional, Union
+from typing import Optional
 
 
-# Common API key patterns to detect and mask
-API_KEY_PATTERNS = [
-    r'AIza[0-9A-Za-z\-_]{15,}',  # Google API keys (AIza...)
-    r'sk-[0-9A-Za-z]{10,}',  # OpenAI API keys (sk-...)
-    r'api[_-]?key["\']?\s*[:=]\s*["\']?([a-zA-Z0-9_\-]{20,})["\']?',  # api_key: "value"
-    r'apikey["\']?\s*[:=]\s*["\']?([a-zA-Z0-9_\-]{20,})["\']?',  # apikey: "value"
-    r'["\']?([a-zA-Z0-9_\-]{32,})["\']?',  # Long alphanumeric strings (potential keys)
-    r"Bearer\s+([a-zA-Z0-9_\-\.]+)",  # Bearer tokens
-    r'token["\']?\s*[:=]\s*["\']?([a-zA-Z0-9_\-]{20,})["\']?',  # token: "value"
-]
-
-# Known API key environment variable names
-API_KEY_ENV_VARS = [
-    "GEMINI_API_KEY",
-    "OPENAI_API_KEY",
-    "ANTHROPIC_API_KEY",
-    "NCBI_API_KEY",
-    "API_KEY",
-    "SECRET_KEY",
-    "ACCESS_TOKEN",
-    "AUTH_TOKEN",
-]
+API_KEY_ENV_VARS = {
+    "gemini_api_key",
+    "openai_api_key",
+    "anthropic_api_key",
+    "ncbi_api_key",
+    "api_key",
+    "apikey",
+    "api-key",
+    "api_secret",
+    "secret",
+    "secret_key",
+    "token",
+    "access_token",
+    "auth_token",
+    "password",
+    "passwd",
+    "pwd",
+}
 
 
 def mask_credential(value: Optional[str], show_last: int = 4) -> str:
     """
     Mask a credential value, showing only the last N characters.
 
-    Args:
-        value: The credential value to mask
-        show_last: Number of characters to show at the end (default: 4)
-
-    Returns:
-        Masked credential string (e.g., "****1234" for "abcdef1234")
-
-    Examples:
-        >>> mask_credential("AIzaSyD1234567890abcdef")
-        '****cdef'
-        >>> mask_credential("sk-1234567890abcdef")
-        '****cdef'
-        >>> mask_credential(None)
-        '****'
-        >>> mask_credential("")
-        '****'
-        >>> mask_credential("short")
-        '****'
+    Short or empty values are fully masked as "****".
     """
     if not value:
         return "****"
-    
-    value = str(value).strip()
-    
-    # If value is too short to safely show characters, mask everything but preserve length
-    if len(value) <= show_last:
-        return "*" * len(value)
 
-    # Preserve original string length: mask all but last N characters
-    masked_len = len(value) - show_last
-    return "*" * masked_len + value[-show_last:]
+    value = str(value).strip()
+
+    if len(value) <= show_last:
+        return "****"
+
+    return "****" + value[-show_last:]
 
 
 def mask_string(text: str, show_last: int = 4) -> str:
     """
-    Mask all potential credentials found in a text string.
-
-    This function searches for common API key patterns and masks them.
-
-    Args:
-        text: The text string that may contain credentials
-        show_last: Number of characters to show at the end of masked values
-
-    Returns:
-        Text with all potential credentials masked
-
-    Examples:
-        >>> mask_string("Error: API key AIzaSyD1234567890abcdef is invalid")
-        'Error: API key ****cdef is invalid'
-        >>> mask_string("api_key=sk-1234567890abcdef")
-        'api_key=****cdef'
+    Mask common credential patterns inside free text.
     """
-    if not text or not isinstance(text, str):
+    if not isinstance(text, str):
         return str(text) if text is not None else ""
 
-    masked_text = text
+    patterns = [
+        r"(AIza[0-9A-Za-z\-_]{15,})",
+        r"(sk-[0-9A-Za-z]{10,})",
+        r"(Bearer\s+[A-Za-z0-9\-\._]+)",
+        r"([A-Za-z0-9_\-]{20,})",
+    ]
 
-    # First, mask specific API key patterns (AIza..., sk-...) - these are most common
-    # Use a combined pattern to catch both in one pass
-    # AIza keys are typically 35+ chars total, sk- keys are typically 20+ chars total
-    specific_key_pattern = re.compile(
-        r'(AIza[0-9A-Za-z\-_]{15,}|sk-[0-9A-Za-z]{10,})',
-        flags=re.IGNORECASE
-    )
-    
-    def replace_specific_key(match):
-        key_value = match.group(0)
-        return mask_credential(key_value, show_last)
-    
-    masked_text = specific_key_pattern.sub(replace_specific_key, masked_text)
+    def replacer(match):
+        return mask_credential(match.group(0), show_last)
 
-    # Mask other API key patterns (api_key=..., token=..., etc.)
-    for pattern in API_KEY_PATTERNS:
-        # Skip patterns we already handled above
-        if pattern in [r'AIza[0-9A-Za-z\-_]{15,}', r'sk-[0-9A-Za-z]{10,}']:
-            continue
+    masked = text
+    for pattern in patterns:
+        masked = re.sub(pattern, replacer, masked, flags=re.IGNORECASE)
 
-        def replace_match(match):
-            # For patterns without groups (like AIza...), mask the entire match
-            if match.lastindex and match.group(1):
-                key_value = match.group(1)
-                # Skip if already masked
-                if key_value.startswith("*"):
-                    return match.group(0)
-                masked_value = mask_credential(key_value, show_last)
-                # Replace the key value in the original match
-                return match.group(0).replace(key_value, masked_value)
-            else:
-                # For patterns that match the whole key, mask it directly
-                key_value = match.group(0)
-                # Skip if already masked
-                if key_value.startswith("*"):
-                    return key_value
-                return mask_credential(key_value, show_last)
-
-        masked_text = re.sub(pattern, replace_match, masked_text, flags=re.IGNORECASE)
-    
-    # Also mask any standalone long alphanumeric strings that might be API keys
-    # This catches keys in free text like "Error: API key AIzaSyD1234567890abcdef is invalid"
-    standalone_key_pattern = r'\b([A-Za-z0-9_\-]{20,})\b'
-    
-    def replace_standalone(match):
-        key_value = match.group(1)
-        # Skip if it's all digits (likely a number, not an API key)
-        if key_value.isdigit():
-            return key_value
-        # Skip if it contains spaces (not a single token)
-        if ' ' in key_value:
-            return key_value
-        # Avoid re-masking already masked values
-        if key_value.startswith("*"):
-            return key_value
-        # Mask potential API keys
-        masked_value = mask_credential(key_value, show_last)
-        return masked_value
-    
-    masked_text = re.sub(standalone_key_pattern, replace_standalone, masked_text)
-
-    # Also mask any environment variable values that might be in the text
-    for env_var in API_KEY_ENV_VARS:
-        # Pattern: ENV_VAR=value or ENV_VAR: value
-        env_pattern = rf"{re.escape(env_var)}\s*[:=]\s*([a-zA-Z0-9_\-\.]+)"
-
-        def replace_env(match):
-            if match.lastindex and match.group(1):
-                key_value = match.group(1)
-                masked_value = mask_credential(key_value, show_last)
-                return match.group(0).replace(key_value, masked_value)
-            return match.group(0)
-
-        masked_text = re.sub(env_pattern, replace_env, masked_text, flags=re.IGNORECASE)
-
-    return masked_text
+    return masked
 
 
 def mask_dict(data: dict, keys_to_mask: Optional[list] = None) -> dict:
     """
     Mask sensitive values in a dictionary.
-
-    Args:
-        data: Dictionary that may contain sensitive values
-        keys_to_mask: List of keys to mask. If None, uses default list of common key names.
-
-    Returns:
-        New dictionary with sensitive values masked
-
-    Examples:
-        >>> mask_dict({"api_key": "secret123", "name": "test"})
-        {'api_key': '****t123', 'name': 'test'}
     """
     if keys_to_mask is None:
-        keys_to_mask = [
-            "api_key",
-            "apikey",
-            "api-key",
-            "api_secret",
-            "secret",
-            "secret_key",
-            "token",
-            "access_token",
-            "auth_token",
-            "password",
-            "passwd",
-            "pwd",
-            "gemini_api_key",
-            "openai_api_key",
-            "anthropic_api_key",
-            "ncbi_api_key",
-            "GEMINI_API_KEY",
-            "OPENAI_API_KEY",
-            "ANTHROPIC_API_KEY",
-            "NCBI_API_KEY",
-        ]
+        keys_to_mask = API_KEY_ENV_VARS
 
-    masked_data = {}
+    normalized_keys = {k.lower() for k in keys_to_mask}
+
+    masked = {}
     for key, value in data.items():
-        # Check if this key should be masked
         key_lower = str(key).lower()
-        should_mask = any(mask_key.lower() in key_lower for mask_key in keys_to_mask)
 
-        if should_mask and isinstance(value, str):
-            masked_data[key] = mask_credential(value)
+        if key_lower in normalized_keys and isinstance(value, str):
+            masked[key] = mask_credential(value)
         elif isinstance(value, dict):
-            masked_data[key] = mask_dict(value, keys_to_mask)
-        elif isinstance(value, str) and len(value) > 20:
-            # Mask long strings that might be credentials
-            masked_data[key] = mask_credential(value)
+            masked[key] = mask_dict(value, keys_to_mask)
         else:
-            masked_data[key] = value
+            masked[key] = value
 
-    return masked_data
+    return masked
 
 
 def safe_log_message(message: str, *args, **kwargs) -> str:
     """
-    Create a safe log message by masking any credentials in the message and arguments.
-
-    Args:
-        message: Log message format string
-        *args: Positional arguments for the message
-        *kwargs: Keyword arguments for the message
-
-    Returns:
-        Safe log message with all credentials masked
-
-    Examples:
-        >>> safe_log_message("API key %s failed", "AIzaSyD1234567890abcdef")
-        'API key ****cdef failed'
+    Create a safe log message by masking credentials.
     """
-    # Format the message first
     try:
         formatted = message % args if args else message
         if kwargs:
             formatted = formatted.format(**kwargs)
-    except (ValueError, KeyError, TypeError):
-        # If formatting fails, just use the message as-is
+    except Exception:
         formatted = str(message)
 
-    # Mask any credentials in the formatted message
     return mask_string(formatted)
 
 
 def mask_exception_message(exception: Exception) -> str:
     """
-    Get a safe string representation of an exception, masking any credentials.
-
-    Args:
-        exception: Exception object
-
-    Returns:
-        Safe exception message with credentials masked
-
-    Examples:
-        >>> exc = ValueError("API key AIzaSyD1234567890abcdef is invalid")
-        >>> mask_exception_message(exc)
-        'API key ****cdef is invalid'
+    Mask credentials inside exception messages.
     """
-    error_msg = str(exception)
-    return mask_string(error_msg)
+    return mask_string(str(exception))
