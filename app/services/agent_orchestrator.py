@@ -13,6 +13,14 @@ from paperqa.settings import AgentSettings
 from paperqa.agents import agent_query
 from paperqa.types import Text, Doc
 
+# Try to import pqa_directory to patch it if needed
+try:
+    from paperqa.utils import pqa_directory as original_pqa_directory
+    PQA_DIRECTORY_AVAILABLE = True
+except ImportError:
+    PQA_DIRECTORY_AVAILABLE = False
+    original_pqa_directory = None
+
 from app.models.extraction_schemas import (
     ExtractedExperiment,
     MicrobialSignature,
@@ -61,6 +69,29 @@ class AgentOrchestrator:
 
         logger.info(f"Using Paper-QA directory: {paper_dir.absolute()}")
 
+        paper_dir_str = str(paper_dir.absolute())
+        
+        # Create the indexes subdirectory that AgentSettings will try to use
+        indexes_dir = paper_dir / "indexes"
+        indexes_dir.mkdir(parents=True, exist_ok=True)
+        logger.info(f"Created indexes directory: {indexes_dir}")
+
+        # Patch pqa_directory function to use our directory
+        # This is necessary because AgentSettings uses pqa_directory("indexes") 
+        # which defaults to /.pqa/indexes
+        if PQA_DIRECTORY_AVAILABLE:
+            import paperqa.utils
+            def patched_pqa_directory(subdir: str = ""):
+                """Patched version that uses our paper directory."""
+                base_dir = Path(paper_dir_str)
+                if subdir:
+                    return base_dir / subdir
+                return base_dir
+            
+            # Monkey-patch the function
+            paperqa.utils.pqa_directory = patched_pqa_directory
+            logger.info("Patched pqa_directory function to use our directory")
+
         self.settings = Settings(
             llm=llm_model,
             summary_llm=llm_model,
@@ -69,7 +100,7 @@ class AgentOrchestrator:
                 agent_llm=llm_model,
                 agent_type="simple",
             ),
-            paper_directory=str(paper_dir.absolute()),
+            paper_directory=paper_dir_str,
         )
 
         logger.info(f"Initialized agent orchestrator with {llm_model}")
