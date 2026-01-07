@@ -32,6 +32,7 @@ def large_chunk_set():
                 f"It contains information about host species, body sites, and sequencing methods. "
                 f"Chunk number {i} has additional details.",
                 name=f"chunk_{i}",
+                doc=None,
             )
         )
     return chunks
