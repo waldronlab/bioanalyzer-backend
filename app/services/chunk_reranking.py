@@ -159,12 +159,14 @@ class ChunkReRanker:
 
     # ✅ Correctly inside the class
     def _parse_score_from_response(self, response: str) -> float:
+        """Parse score from LLM response, returning 0.5 as default for invalid input."""
         match = re.search(r"([0-9]*\.?[0-9]+)", response)
         if not match:
-            return 0.0
+            return 0.5  # Default fallback score for invalid input
         return min(max(float(match.group(1)), 0.0), 1.0)
 
     def _extract_reasoning(self, response: str) -> Optional[str]:
+        """Extract reasoning from LLM response, returning None if no reasoning marker found."""
         if not response:
             return None
         patterns = [
@@ -176,4 +178,5 @@ class ChunkReRanker:
             match = re.search(pattern, response, re.IGNORECASE | re.DOTALL)
             if match:
                 return match.group(1).strip()
-        return response.strip()
+        # Return None if no reasoning marker found
+        return None

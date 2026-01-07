@@ -16,15 +16,28 @@ from paperqa.types import Text
 @pytest.fixture
 def sample_texts():
     """Create sample Text objects for testing."""
+    from paperqa.types import Doc
+    
+    test_doc = Doc(
+        docname="test_paper",
+        dockey="test_key",
+        citation="Test Paper Citation"
+    )
     return [
         Text(
             text="This study examined the gut microbiome in human participants.",
             name="text_1",
+            doc=test_doc,
         ),
-        Text(text="The host species was identified as Homo sapiens.", name="text_2"),
+        Text(
+            text="The host species was identified as Homo sapiens.",
+            name="text_2",
+            doc=test_doc,
+        ),
         Text(
             text="Samples were collected from the gastrointestinal tract.",
             name="text_3",
+            doc=test_doc,
         ),
     ]
 
@@ -156,7 +169,9 @@ class TestVectorStoreService:
             mock_numpy.return_value = mock_vector_store
 
             # Mock search results
-            result_texts = [Text(text="Result 1", name="r1")]
+            from paperqa.types import Doc
+            test_doc = Doc(docname="test", dockey="test_key", citation="Test")
+            result_texts = [Text(text="Result 1", name="r1", doc=test_doc)]
             result_scores = [0.85]
             mock_vector_store.similarity_search = AsyncMock(
                 return_value=(result_texts, result_scores)
@@ -182,7 +197,9 @@ class TestVectorStoreService:
             mock_factory.return_value = mock_embedding_model
             mock_numpy.return_value = mock_vector_store
 
-            result_texts = [Text(text="Result 1", name="r1")]
+            from paperqa.types import Doc
+            test_doc = Doc(docname="test", dockey="test_key", citation="Test")
+            result_texts = [Text(text="Result 1", name="r1", doc=test_doc)]
             result_scores = [0.85]
             mock_vector_store.mmr_search = AsyncMock(
                 return_value=(result_texts, result_scores)

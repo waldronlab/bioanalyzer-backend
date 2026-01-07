@@ -34,16 +34,35 @@ API_KEY_ENV_VARS: set[str] = {
 def mask_credential(value: Optional[str], show_last: int = 4) -> str:
     """
     Mask a credential value while preserving total length.
+    
+    For very short values (<= 8 chars), return fixed "****" for security.
+    For longer values, ensure at least 4 asterisks at the start, then show last N characters.
     """
     if not value:
         return "****"
 
     value = str(value)
 
+    # For very short values (<= 8 chars), return fixed "****" for security
+    # This prevents leaking any part of short secrets
+    if len(value) <= 8:
+        return "****"
+    
+    # If value is shorter than or equal to show_last, fully mask with fixed "****"
     if len(value) <= show_last:
         return "****"
 
+    # For longer values, ensure at least 4 asterisks, then show last N characters
+    # This ensures all masked values start with "****" for consistency
     masked_len = len(value) - show_last
+    # Ensure minimum 4 asterisks
+    if masked_len < 4:
+        # If we need to show more than (len - 4) chars, just return "****"
+        if show_last > len(value) - 4:
+            return "****"
+        # Otherwise, use 4 asterisks and show remaining chars
+        return "****" + value[-(len(value) - 4):]
+    
     return "*" * masked_len + value[-show_last:]
 
 

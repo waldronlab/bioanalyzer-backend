@@ -17,18 +17,18 @@ from app.services.contextual_summarization import (
     SummarizationConfig,
 )
 from app.services.chunk_reranking import ChunkReRanker
-from paperqa.types import Text
-
-
-class MockDoc:
-    """Minimal mock for PaperQA Doc object."""
-
-    def __init__(self, doc_id: str):
-        self.id = doc_id
+from paperqa.types import Text, Doc
 
 
 @pytest.fixture
 def large_chunk_set():
+    """Create a large set of chunks for performance testing."""
+    # Create a minimal Doc object for all chunks
+    test_doc = Doc(
+        docname="test_paper",
+        dockey="test_key",
+        citation="Test Paper Citation"
+    )
     chunks = []
     for i in range(50):
         chunks.append(
@@ -38,7 +38,7 @@ def large_chunk_set():
                     f"It contains information about host species, body sites, and sequencing methods."
                 ),
                 name=f"chunk_{i}",
-                doc={"id": f"doc_{i}"}, 
+                doc=test_doc,
             )
         )
     return chunks
