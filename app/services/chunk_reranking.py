@@ -132,12 +132,14 @@ class ChunkReRanker:
             return keyword_ranked
 
         llm_ranked = await self._llm_rerank(chunks[:10], query)
-        llm_map = {rc.chunk: rc.relevance_score for rc in llm_ranked}
+        # Use chunk text as key since Text objects can't be hashed if they have unhashable extras
+        llm_map = {rc.chunk.text: rc.relevance_score for rc in llm_ranked}
 
         results = []
         for rc in keyword_ranked:
-            if rc.chunk in llm_map:
-                combined = llm_map[rc.chunk] * 0.7 + rc.relevance_score * 0.3
+            chunk_text = rc.chunk.text
+            if chunk_text in llm_map:
+                combined = llm_map[chunk_text] * 0.7 + rc.relevance_score * 0.3
                 results.append(RankedChunk(rc.chunk, combined, 0))
             else:
                 results.append(rc)

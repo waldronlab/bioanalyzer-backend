@@ -201,7 +201,7 @@ class TestVectorStoreService:
             test_doc = Doc(docname="test", dockey="test_key", citation="Test")
             result_texts = [Text(text="Result 1", name="r1", doc=test_doc)]
             result_scores = [0.85]
-            mock_vector_store.mmr_search = AsyncMock(
+            mock_vector_store.max_marginal_relevance_search = AsyncMock(
                 return_value=(result_texts, result_scores)
             )
 
@@ -212,10 +212,10 @@ class TestVectorStoreService:
             texts, scores = await service.mmr_search("test query", k=5, fetch_k=20)
 
             assert len(texts) == len(scores)
-            assert mock_vector_store.mmr_search.called
+            assert mock_vector_store.max_marginal_relevance_search.called
 
     @pytest.mark.asyncio
-    async def test_embedding_generation(self, sample_texts, mock_embedding_model):
+    async def test_embedding_generation(self, sample_texts, mock_embedding_model, mock_vector_store):
         """Test embedding generation for texts."""
         with patch(
             "app.services.vector_store_service.embedding_model_factory"
@@ -223,9 +223,11 @@ class TestVectorStoreService:
             "app.services.vector_store_service.NumpyVectorStore"
         ) as mock_numpy:
             mock_factory.return_value = mock_embedding_model
-            mock_numpy.return_value = Mock()
+            mock_numpy.return_value = mock_vector_store
+            mock_vector_store.add_texts_and_embeddings = AsyncMock(return_value=None)
 
             service = VectorStoreService(store_type="numpy")
+            service.vector_store = mock_vector_store
             service.embedding_model = mock_embedding_model
 
             # Mock get_embeddable_text
