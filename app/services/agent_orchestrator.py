@@ -171,7 +171,7 @@ class AgentOrchestrator:
         """Analyze study using agent workflow."""
         logger.info(f"Starting study analysis: {study_id}")
 
-        docs = Docs(settings=self.settings)
+        docs = Docs()
         for chunk in chunks:
             docs.texts.append(chunk)
             if chunk.doc.dockey not in docs.docs:
