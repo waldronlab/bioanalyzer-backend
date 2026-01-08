@@ -1,13 +1,14 @@
 import os
 from pathlib import Path
 import logging
+from typing import List, Optional
 from .credential_masking import mask_exception_message, mask_string
 
 try:
     from dotenv import load_dotenv  # type: ignore
 except ImportError:
 
-    def load_dotenv(*args, **kwargs):  # type: ignore[no-redef]
+    def load_dotenv(*args: object, **kwargs: object) -> None:  # type: ignore[no-redef]
         """Fallback when python-dotenv is not installed."""
         logger = logging.getLogger(__name__)
         logger.warning(
@@ -45,7 +46,7 @@ LLM_PROVIDER = os.getenv("LLM_PROVIDER", "").lower() or None
 LLM_MODEL = os.getenv("LLM_MODEL", "") or None
 
 DEFAULT_MODEL = os.getenv("DEFAULT_MODEL", "gemini")
-AVAILABLE_MODELS = []
+AVAILABLE_MODELS: List[str] = []
 
 if GEMINI_API_KEY:
     AVAILABLE_MODELS.append("gemini")
@@ -57,7 +58,7 @@ if os.getenv("OLLAMA_BASE_URL") or os.getenv("OLLAMA_HOST"):
     AVAILABLE_MODELS.append("ollama")
 
 
-def validate_gemini_key():
+def validate_gemini_key() -> bool:
     """Validate Gemini API key by configuring the client."""
     if not GEMINI_API_KEY:
         return False
@@ -75,9 +76,9 @@ def validate_gemini_key():
         return False
 
 
-def validate_env_vars():
+def validate_env_vars() -> bool:
     """Validate that required environment variables are set."""
-    missing_vars = []
+    missing_vars: List[str] = []
 
     if not NCBI_API_KEY:
         missing_vars.append("NCBI_API_KEY")
@@ -103,9 +104,9 @@ def validate_env_vars():
 validate_env_vars()
 
 
-def check_required_vars():
+def check_required_vars() -> bool:
     """Check if all required environment variables are set."""
-    missing_vars = []
+    missing_vars: List[str] = []
 
     if not NCBI_API_KEY:
         missing_vars.append("NCBI_API_KEY")
@@ -212,7 +213,7 @@ MAX_LOG_SIZE = 10 * 1024 * 1024  # 10MB
 MAX_LOG_FILES = 5  # Keep 5 rotated log files
 
 
-def setup_logging():
+def setup_logging() -> logging.Logger:
     """Configure logging with file rotation.
 
     Falls back to console-only logging if file handlers can't be created.
@@ -237,7 +238,7 @@ def setup_logging():
         root_logger.removeHandler(handler)
 
     # Try to create file handlers, but handle permission errors gracefully
-    file_handlers_created = []
+    file_handlers_created: List[str] = []
 
     try:
         # Main application log handler with rotation

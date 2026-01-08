@@ -34,10 +34,10 @@ except ImportError:
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1", tags=["System"])
 
-_unified_qa = None
-_pubmed_retriever = None
+_unified_qa: Optional[UnifiedQA] = None
+_pubmed_retriever: Optional[PubMedRetriever] = None
 
-def get_unified_qa():
+def get_unified_qa() -> Optional[UnifiedQA]:
     """Get or initialize UnifiedQA instance."""
     global _unified_qa
     if _unified_qa is None:
@@ -55,7 +55,7 @@ def get_unified_qa():
 unified_qa = None  # Will be initialized on first use via get_unified_qa()
 
 
-def get_pubmed_retriever():
+def get_pubmed_retriever() -> Optional[PubMedRetriever]:
     """Get or initialize PubMedRetriever instance."""
     global _pubmed_retriever
     if _pubmed_retriever is None:
@@ -69,7 +69,7 @@ def get_pubmed_retriever():
 
 
 @router.get("/")
-async def root():
+async def root() -> Any:
     """Redirect to the frontend application."""
     from fastapi.responses import RedirectResponse
 
@@ -77,7 +77,7 @@ async def root():
 
 
 @router.get("/health")
-async def health_check():
+async def health_check() -> HealthResponse:
     """Health check endpoint to verify service is running."""
     try:
         current_time = get_current_timestamp()
@@ -92,7 +92,7 @@ async def health_check():
 
 
 @router.get("/config")
-async def get_config():
+async def get_config() -> ConfigResponse:
     """
     **Get configuration settings for the frontend.**
 

@@ -6,7 +6,7 @@ scientific identifiers or normal text.
 """
 
 import re
-from typing import Optional, Iterable
+from typing import Optional, Iterable, Any, Dict
 
 # Environment / config keys that should always be masked
 API_KEY_ENV_VARS: set[str] = {
@@ -99,7 +99,7 @@ def mask_string(text: str, show_last: int = 4) -> str:
     return masked
 
 
-def mask_dict(data: dict, keys_to_mask: Optional[Iterable[str]] = None) -> dict:
+def mask_dict(data: Dict[str, Any], keys_to_mask: Optional[Iterable[str]] = None) -> Dict[str, Any]:
     """
     Recursively mask sensitive values in dictionaries.
     """
@@ -122,7 +122,7 @@ def mask_dict(data: dict, keys_to_mask: Optional[Iterable[str]] = None) -> dict:
     return masked
 
 
-def safe_log_message(message: str, *args, **kwargs) -> str:
+def safe_log_message(message: str, *args: Any, **kwargs: Any) -> str:
     """
     Format a log message and safely mask any credentials.
     """

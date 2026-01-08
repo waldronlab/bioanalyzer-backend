@@ -3,6 +3,7 @@
 import logging
 import os
 import traceback
+from typing import Dict, Any
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -78,7 +79,7 @@ app.include_router(system.router)
 
 
 @app.get("/")
-async def root():
+async def root() -> Dict[str, str]:
     """API root endpoint."""
     return {
         "message": "BioAnalyzer Backend API",
@@ -91,7 +92,7 @@ async def root():
 
 
 @app.get("/health")
-async def health_check():
+async def health_check() -> Dict[str, Any]:
     """Health check endpoint."""
     from app.api.routers.system import health_check as system_health_check
 
@@ -99,7 +100,9 @@ async def health_check():
 
 
 @app.exception_handler(RequestValidationError)
-async def validation_exception_handler(request: Request, exc: RequestValidationError):
+async def validation_exception_handler(
+    request: Request, exc: RequestValidationError
+) -> JSONResponse:
     """Handle request validation errors."""
     logger.warning(f"Validation error: {exc.errors()}")
     return JSONResponse(
@@ -113,7 +116,9 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 
 
 @app.exception_handler(Exception)
-async def global_exception_handler(request: Request, exc: Exception):
+async def global_exception_handler(
+    request: Request, exc: Exception
+) -> JSONResponse:
     """Handle unexpected exceptions with credential masking."""
     from app.utils.credential_masking import mask_exception_message, mask_string
 
