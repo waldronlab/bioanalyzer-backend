@@ -8,6 +8,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
+from app.api.models.api_models import HealthResponse
 
 from app.api.routers import (
     bugsigdb_analysis,
@@ -92,7 +93,7 @@ async def root() -> Dict[str, str]:
 
 
 @app.get("/health")
-async def health_check() -> Dict[str, Any]:
+async def health_check() -> HealthResponse:
     """Health check endpoint."""
     from app.api.routers.system import health_check as system_health_check
 
