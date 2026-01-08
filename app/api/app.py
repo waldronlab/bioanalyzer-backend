@@ -1,17 +1,12 @@
 """FastAPI application for BioAnalyzer backend API."""
 
+import logging
+import os
+import traceback
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
-import logging
-import os
-import sys
-import traceback
-
-sys.path.append(
-    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-)
 
 from app.api.routers import (
     bugsigdb_analysis,
@@ -119,19 +114,20 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    """Handle unexpected exceptions."""
+    """Handle unexpected exceptions with credential masking."""
     from app.utils.credential_masking import mask_exception_message, mask_string
 
-    # Mask any credentials in exception message and traceback
     safe_exc_msg = mask_exception_message(exc)
     safe_traceback = mask_string(traceback.format_exc())
+    request_id = getattr(request.state, "request_id", None)
 
     logger.error(
         f"Unhandled exception: {safe_exc_msg}\n"
         f"Traceback: {safe_traceback}\n"
-        f"Request ID: {getattr(request.state, 'request_id', None)}"
+        f"Request ID: {request_id}"
     )
 
+    # Hide internal details in production
     if ENVIRONMENT == "production":
         detail = "An internal error occurred. Please try again later."
     else:
@@ -142,7 +138,7 @@ async def global_exception_handler(request: Request, exc: Exception):
         content={
             "error": "Internal Server Error",
             "detail": detail,
-            "request_id": getattr(request.state, "request_id", None),
+            "request_id": request_id,
         },
     )
 

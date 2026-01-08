@@ -1,4 +1,9 @@
-"""Advanced RAG service with contextual summarization and re-ranking."""
+"""RAG pipeline for better field extraction accuracy.
+
+Re-ranks text chunks by relevance to each field query, then generates
+query-aware summaries. More accurate than simple analysis but slower and
+more expensive (multiple LLM calls per field).
+"""
 
 import logging
 from typing import List, Dict, Optional, Tuple, Any
@@ -26,7 +31,11 @@ logger = logging.getLogger(__name__)
 
 
 class AdvancedRAGService:
-    """Advanced RAG service combining contextual summarization and chunk re-ranking."""
+    """RAG pipeline: re-rank chunks, then summarize before querying LLM.
+
+    This is what makes v2 API more accurate than v1. The tradeoff is speed
+    and cost - expect 2-3x more LLM API calls per field.
+    """
 
     def __init__(
         self,
@@ -38,7 +47,17 @@ class AdvancedRAGService:
         max_sources: Optional[int] = None,
         use_10_scale: bool = True,
     ):
-        """Initialize advanced RAG service."""
+        """Set up RAG service with configuration.
+
+        Args:
+            summary_provider: LLM provider for summarization (default: auto-detect).
+            summary_model: Model for summarization (default: provider default).
+            rerank_method: keyword|llm|hybrid (default: hybrid).
+            cache_dir: Where to cache summaries (default: cache/).
+            evidence_k: Initial chunks to retrieve before re-ranking.
+            max_sources: Max chunks to use after re-ranking.
+            use_10_scale: Use 0-10 relevance scale instead of 0-1.
+        """
         summary_config = SummarizationConfig(
             summary_length=RAG_SUMMARY_LENGTH,
             quality=RAG_SUMMARY_QUALITY,
