@@ -211,7 +211,7 @@ class AdvancedRAGService:
         """Get performance metrics from the re-ranker."""
         return self.reranker.get_metrics()
 
-    def get_summary_stats(self, summaries: List[ChunkSummary]) -> Dict:
+    def get_summary_stats(self, summaries: List[ChunkSummary]) -> Dict[str, Any]:
         """Get statistics about summaries."""
         if not summaries:
             return {

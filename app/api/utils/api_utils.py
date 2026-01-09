@@ -2,7 +2,7 @@
 
 import re
 import logging
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 from datetime import datetime
 import pytz
 
@@ -24,7 +24,7 @@ def extract_taxa(text: str) -> List[str]:
     return list(set(taxa))
 
 
-def create_default_field_structure(field_name: str) -> Dict:
+def create_default_field_structure(field_name: str) -> Dict[str, Any]:
     """Create a default structure for a missing field."""
     field_structures = {
         "host_species": {
@@ -83,7 +83,7 @@ def create_default_field_structure(field_name: str) -> Dict:
     )
 
 
-def validate_field_structure(field_data: Dict, field_name: str) -> bool:
+def validate_field_structure(field_data: Dict[str, Any], field_name: str) -> bool:
     """Validate that a field has the correct structure."""
     required_keys = {
         "status",
@@ -99,7 +99,7 @@ def validate_field_structure(field_data: Dict, field_name: str) -> bool:
     return required_keys.issubset(field_data.keys())
 
 
-def create_comprehensive_fallback_analysis() -> Dict:
+def create_comprehensive_fallback_analysis() -> Dict[str, Any]:
     """Create a comprehensive fallback analysis when parsing completely fails."""
     return {
         "host_species": create_default_field_structure("host_species"),
@@ -131,7 +131,7 @@ def generate_curation_summary(parsed_analysis: Dict, missing_fields: List[str]) 
 
 def get_paper_metadata_from_csv(
     pmid: str, csv_path: str = "data/full_dump.csv"
-) -> Optional[Dict]:
+) -> Optional[Dict[str, str]]:
     """Get paper metadata from CSV file."""
     try:
         import csv

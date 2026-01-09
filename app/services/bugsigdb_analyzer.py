@@ -5,7 +5,7 @@ and field extraction. Results are cached to avoid redundant API calls.
 """
 
 import logging
-from typing import Dict, Optional, List
+from typing import Dict, Optional, List, Any
 import asyncio
 import json
 
@@ -23,12 +23,12 @@ from app.api.utils.api_utils import get_current_timestamp
 
 logger = logging.getLogger(__name__)
 
-_unified_qa = None
-_pubmed_retriever = None
-_cache_manager = None
+_unified_qa: Optional[UnifiedQA] = None
+_pubmed_retriever: Optional[PubMedRetriever] = None
+_cache_manager: Optional[CacheManager] = None
 
 
-def get_unified_qa():
+def get_unified_qa() -> Optional[UnifiedQA]:
     """Get or initialize UnifiedQA instance."""
     global _unified_qa
     if _unified_qa is None:
@@ -49,7 +49,7 @@ def get_unified_qa():
     return _unified_qa
 
 
-def get_pubmed_retriever():
+def get_pubmed_retriever() -> Optional[PubMedRetriever]:
     """Get or initialize PubMedRetriever instance."""
     global _pubmed_retriever
     if _pubmed_retriever is None:
@@ -61,7 +61,7 @@ def get_pubmed_retriever():
     return _pubmed_retriever
 
 
-def get_cache_manager():
+def get_cache_manager() -> CacheManager:
     """Get or initialize CacheManager instance."""
     global _cache_manager
     if _cache_manager is None:
@@ -69,7 +69,7 @@ def get_cache_manager():
     return _cache_manager
 
 
-ESSENTIAL_FIELDS = {
+ESSENTIAL_FIELDS: Dict[str, str] = {
     "host_species": "What host species is being studied in this research?",
     "body_site": "What body site or anatomical location was sampled for microbiome analysis?",
     "condition": "What disease, treatment, or condition is being studied?",
@@ -79,7 +79,7 @@ ESSENTIAL_FIELDS = {
 }
 
 
-async def analyze_paper_simple(pmid: str) -> Optional[Dict]:
+async def analyze_paper_simple(pmid: str) -> Optional[Dict[str, Any]]:
     """Extract BugSigDB fields from a paper.
 
     Uses v1 API flow: direct LLM queries per field. Fast but less accurate than RAG.

@@ -2,6 +2,7 @@
 
 from fastapi import APIRouter, HTTPException
 import logging
+from typing import Dict, Any
 from app.utils.credential_masking import mask_exception_message
 from app.api.utils.constants import ESSENTIAL_FIELDS_INFO, STATUS_VALUES
 from app.services.bugsigdb_analyzer import analyze_paper_simple
@@ -10,7 +11,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1", tags=["BugSigDB Analysis"])
 
 
-async def _run_analysis(pmid: str):
+async def _run_analysis(pmid: str) -> Dict[str, Any]:
     """Run analysis with validated PMID."""
     from app.api.utils.api_utils import validate_pmid
 
@@ -22,7 +23,7 @@ async def _run_analysis(pmid: str):
     return result
 
 
-def _handle_analysis_error(pmid: str, e: Exception):
+def _handle_analysis_error(pmid: str, e: Exception) -> None:
     """Handle analysis errors consistently."""
     safe_error = mask_exception_message(e)
     logger.error(f"Error in analysis for PMID {pmid}: {safe_error}")
@@ -30,7 +31,7 @@ def _handle_analysis_error(pmid: str, e: Exception):
 
 
 @router.get("/analyze/{pmid}")
-async def analyze_paper(pmid: str):
+async def analyze_paper(pmid: str) -> Dict[str, Any]:
     """Analyze paper for BugSigDB fields."""
     try:
         return await _run_analysis(pmid)
@@ -41,7 +42,7 @@ async def analyze_paper(pmid: str):
 
 
 @router.post("/analyze/{pmid}")
-async def analyze_paper_post(pmid: str):
+async def analyze_paper_post(pmid: str) -> Dict[str, Any]:
     """Analyze paper for BugSigDB fields (POST method)."""
     try:
         return await _run_analysis(pmid)

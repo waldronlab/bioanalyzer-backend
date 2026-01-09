@@ -95,7 +95,7 @@ class BioAnalyzerCLI:
         except Exception:
             return {}
 
-    def _collect_env_flags(self) -> list:
+    def _collect_env_flags(self) -> List[str]:
         """Collect docker -e flags for known env vars if present in the host environment."""
         flags = []
         env_file = self._get_env_file_path()
@@ -113,7 +113,7 @@ class BioAnalyzerCLI:
         suffix = path.lstrip("/")
         return f"{base}/{suffix}" if suffix else base
 
-    def _validate_environment(self):
+    def _validate_environment(self) -> None:
         """Warn about missing critical env vars before starting containers."""
         env_file = self._get_env_file_path()
         env_file_values = self._get_env_file_values()
