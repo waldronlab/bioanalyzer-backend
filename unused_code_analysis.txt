@@ -1,0 +1,30 @@
+BioAnalyzer Backend - Unused Code Analysis
+================================================================================
+
+POTENTIALLY UNUSED MODULES:
+--------------------------------------------------------------------------------
+analyze_unused_code.py (analyze_unused_code)
+config/run.py (config.run)
+config/start.py (config.start)
+scripts/log_viewer.py (scripts.log_viewer)
+scripts/log_cleanup.py (scripts.log_cleanup)
+scripts/log_dashboard.py (scripts.log_dashboard)
+scripts/performance_monitor.py (scripts.performance_monitor)
+app/models/paperqa_agent.py (app.models.paperqa_agent)
+app/utils/fallback_extractor.py (app.utils.fallback_extractor)
+app/utils/methods_scorer.py (app.utils.methods_scorer)
+app/utils/text_processing.py (app.utils.text_processing)
+app/utils/utils.py (app.utils.utils)
+app/utils/data_processor.py (app.utils.data_processor)
+app/utils/field_validator.py (app.utils.field_validator)
+app/services/pubmed_retrieval_service.py (app.services.pubmed_retrieval_service)
+
+SPECIFIC FINDINGS:
+--------------------------------------------------------------------------------
+❌ app/services/pubmed_retrieval_service.py - Not used in production code (only CLI)
+❌ app/utils/data_processor.py - Not used in production code
+❌ app/utils/fallback_extractor.py - Not used in production code
+❌ app/utils/methods_scorer.py - Not used in production code
+❌ app/utils/text_processing.py - Not used in production code
+❌ app/models/config.py - Not used in production code
+
