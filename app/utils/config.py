@@ -17,7 +17,15 @@ except ImportError:
         )
 
 
-import google.generativeai as genai
+def get_genai():
+    try:
+        import google.generativeai as genai
+        return genai
+    except ImportError:
+        raise RuntimeError(
+            "google-generativeai is not installed. "
+            "Install with: pip install google-generativeai"
+        )
 
 possible_env_paths = [
     Path(__file__).parents[1] / ".env",  # Original location
