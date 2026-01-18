@@ -1,65 +1,65 @@
-# Core dependencies - CPU versions to reduce size
+# --- Index URLs ---
+--extra-index-url https://download.pytorch.org/whl/cpu
+
+# --- Core ML & Computer Vision (CPU Versions) ---
 torch>=2.1.0+cpu
 torchvision>=0.16.0+cpu
 torchaudio>=2.1.0+cpu
---extra-index-url https://download.pytorch.org/whl/cpu
 
-# Core ML dependencies
-transformers>=4.34.0
-scikit-learn>=1.3.0
-pandas>=2.1.1
+# --- Data Science Stack ---
 numpy>=1.26.0
+pandas>=2.1.1
+scikit-learn>=1.3.0
+matplotlib>=3.7
+seaborn>=0.12
 biopython>=1.81
+pytz>=2023.3
 
-# NLP and LLM dependencies
+# --- NLP & LLM Ecosystem ---
+transformers>=4.34.0
+tokenizers>=0.14.1
 sentencepiece>=0.1.99
+tiktoken>=0.5.0
 accelerate>=0.24.0
 datasets>=2.14.0
 google-generativeai>=0.7.2
-tiktoken>=0.5.0
-litellm>=1.50.0  # Multi-provider LLM support
-
-# Paper-QA agent integration (supports multiple LLMs including Gemini)
-# Install from local directory: pip install -e paper-qa/
-# Or install from PyPI: pip install paper-qa
+litellm>=1.50.0
 paper-qa>=5.0.0
 
-# Web and data retrieval
-requests>=2.31.0
-beautifulsoup4>=4.12.2
-lxml>=4.9.0
+# --- Vector Database ---
+qdrant-client>=1.7.0
 
-# Excel file processing
-openpyxl>=3.1.0
-xlrd>=2.0.1
-
-# Utilities
-tqdm>=4.65.0
-python-dotenv>=1.0.0
-psutil>=5.9.0
-
-# WebSocket dependencies
+# --- Web Framework & API (FastAPI/Uvicorn) ---
 fastapi>=0.104.0
 uvicorn[standard]>=0.23.2
-aiohttp>=3.8.6
-websockets>=11.0.3
-python-multipart>=0.0.5
-aiofiles>=0.7.0
-pydantic>=2.4.2
-typing-extensions>=3.10.0.2
 starlette>=0.31.1
-click>=8.0.1
+pydantic>=2.4.2
+python-multipart>=0.0.5
+typing-extensions>=3.10.0.2
+
+# --- Networking & Web Scraping ---
+requests>=2.31.0
+aiohttp>=3.8.6
+beautifulsoup4>=4.12.2
+lxml>=4.9.0
+websockets>=11.0.3
+wsproto>=1.0.0
 h11>=0.12.0
 httptools>=0.3.0
-PyYAML>=5.4.1
-watchfiles[watchdog]>=1.0.0
-wsproto>=1.0.0
-tokenizers>=0.14.1
-pytz>=2023.3
 
-# Development dependencies (optional - can be commented out for production)
+# --- File Processing (Excel/Env) ---
+openpyxl>=3.1.0
+xlrd>=2.0.1
+python-dotenv>=1.0.0
+PyYAML>=5.4.1
+aiofiles>=0.7.0
+
+# --- Utilities & System ---
+tqdm>=4.65.0
+psutil>=5.9.0
+click>=8.0.1
+watchfiles[watchdog]>=1.0.0
+
+# --- Development (Uncomment to install) ---
 # pytest>=7.4.0
 # pytest-cov>=4.1.0
-
-# Vector database (optional - for persistent storage)
-qdrant-client>=1.7.0
