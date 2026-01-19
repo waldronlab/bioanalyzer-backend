@@ -263,6 +263,106 @@ class BioAnalyzerCLI:
         except subprocess.CalledProcessError:
             return False
 
+    def load_pmids_from_file(self, file_path: str) -> List[str]:
+        """Load PMIDs from a file, supporting txt, csv, xls, and xlsx formats.
+        
+        For Excel files, uses Docker to read them since pandas is only available in Docker.
+        """
+        file_path_obj = Path(file_path)
+        file_ext = file_path_obj.suffix.lower()
+        
+        pmids = []
+        
+        try:
+            if file_ext in ['.xls', '.xlsx']:
+                # Use Docker to read Excel files since pandas is only available in Docker
+                pmids = self._read_excel_via_docker(file_path)
+            elif file_ext == '.csv':
+                # Read CSV using standard library (no pandas needed)
+                with open(file_path, "r", encoding="utf-8") as f:
+                    reader = csv.reader(f)
+                    for row in reader:
+                        if row and row[0].strip():
+                            pmids.append(row[0].strip())
+            else:
+                # Default to text file (one PMID per line)
+                with open(file_path, "r", encoding="utf-8") as f:
+                    for line in f:
+                        line = line.strip()
+                        if line:
+                            # Handle comma-separated PMIDs in text files
+                            if "," in line:
+                                pmids.extend([p.strip() for p in line.split(",") if p.strip()])
+                            else:
+                                pmids.append(line)
+            
+            return pmids
+        except Exception as e:
+            raise Exception(f"Error reading file '{file_path}': {e}")
+
+    def _read_excel_via_docker(self, file_path: str) -> List[str]:
+        """Read Excel file using Docker container where pandas is available."""
+        file_path_obj = Path(file_path).resolve()
+        file_dir = file_path_obj.parent
+        file_name = file_path_obj.name
+        
+        # Check if Docker is available
+        if not self.check_docker():
+            raise Exception("Docker is required to read Excel files but Docker is not available")
+        
+        # Check if Docker image exists
+        if not self.check_image():
+            raise Exception(
+                f"Docker image '{self.image_name}' not found. "
+                "Please run 'BioAnalyzer build' first."
+            )
+        
+        # Create a Python script to read the Excel file
+        script = f"""
+import pandas as pd
+import sys
+import json
+
+try:
+    # Read Excel file - PMIDs should be in the first column
+    df = pd.read_excel('/workspace/{file_name}')
+    # Get the first column
+    first_col = df.iloc[:, 0]
+    # Extract PMIDs (convert to string and strip whitespace)
+    pmids = [str(val).strip() for val in first_col if pd.notna(val) and str(val).strip()]
+    # Output as JSON for easy parsing
+    print(json.dumps(pmids))
+except Exception as e:
+    print('ERROR: ' + str(e), file=sys.stderr)
+    sys.exit(1)
+"""
+        
+        try:
+            # Run the script in Docker
+            result = subprocess.run(
+                [
+                    "docker", "run", "--rm",
+                    "-v", f"{file_dir}:/workspace",
+                    "-w", "/workspace",
+                    self.image_name,
+                    "python", "-c", script
+                ],
+                capture_output=True,
+                text=True,
+                check=True,
+                cwd=file_dir
+            )
+            
+            # Parse the JSON output
+            pmids = json.loads(result.stdout.strip())
+            return pmids
+            
+        except subprocess.CalledProcessError as e:
+            error_msg = e.stderr.strip() if e.stderr else "Unknown error"
+            raise Exception(f"Failed to read Excel file via Docker: {error_msg}")
+        except json.JSONDecodeError:
+            raise Exception(f"Failed to parse Docker output: {result.stdout}")
+
     def build_containers(self):
         """Build Docker containers."""
         print("🔨 Building BioAnalyzer containers...")
@@ -2264,9 +2364,8 @@ Examples:
 
         if args.file:
             try:
-                with open(args.file, "r") as f:
-                    file_pmids = [line.strip() for line in f if line.strip()]
-                    pmids.extend(file_pmids)
+                file_pmids = cli.load_pmids_from_file(args.file)
+                pmids.extend(file_pmids)
             except Exception as e:
                 print(f"❌ Error reading file: {e}")
                 return
@@ -2318,18 +2417,17 @@ Examples:
 
         if args.file:
             try:
-                with open(args.file, "r") as f:
-                    file_pmids = [line.strip() for line in f if line.strip()]
-                    if not file_pmids:
-                        print(
-                            f"❌ Error: File '{args.file}' is empty or contains no valid PMIDs."
-                        )
-                        print(
-                            "   Please add PMIDs to the file (one per line or comma-separated)."
-                        )
-                        return
-                    pmids.extend(file_pmids)
-                    print(f"📁 Loaded {len(file_pmids)} PMID(s) from {args.file}")
+                file_pmids = cli.load_pmids_from_file(args.file)
+                if not file_pmids:
+                    print(
+                        f"❌ Error: File '{args.file}' is empty or contains no valid PMIDs."
+                    )
+                    print(
+                        "   Please add PMIDs to the file (one per line or comma-separated)."
+                    )
+                    return
+                pmids.extend(file_pmids)
+                print(f"📁 Loaded {len(file_pmids)} PMID(s) from {args.file}")
             except FileNotFoundError:
                 print(f"❌ Error: File '{args.file}' not found.")
                 return
