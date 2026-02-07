@@ -5,13 +5,15 @@ on:
     branches:
       - main
       - develop
-      - 'feature/**'
-      - 'chore/**'
+      - "feature/**"
+      - "chore/**"
     paths:
-      - 'config/requirements.txt'
-      - 'Dockerfile'
-      - 'docker-compose.yml'
-      - '.github/workflows/**'
+      - "config/requirements.txt"
+      - "Dockerfile"
+      - "docker-compose.yml"
+      - ".github/workflows/**"
+      - "pyproject.toml"
+      - "poetry.lock"
 
 permissions:
   contents: read
@@ -19,55 +21,60 @@ permissions:
 
 jobs:
   check-dependencies:
-    name: Check Dependencies
+    name: Dependency Check (Python)
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
-      
+
       - name: Set up Python
-        uses: actions/setup-python@v5.0.0
+        uses: actions/setup-python@82c7e631bb3cdc910f68e0081d67478d79c6982d # v5.x pinned
         with:
-          python-version: '3.11'
-      
-      - name: Check for known vulnerable packages
+          python-version: "3.11"
+
+      - name: Upgrade pip tooling
         run: |
-          echo "Checking for known security issues..."
-          echo ""
-          echo "⚠️ For full dependency review, enable GitHub Advanced Security:"
-          echo "   https://github.com/waldronlab/bioanalyzer-backend/settings/security_analysis"
-          echo ""
-          echo "This is a basic check. For comprehensive security scanning,"
-          echo "please enable Dependency graph and GitHub Advanced Security."
-      
-      - name: Validate requirements.txt format
+          python -m pip install --upgrade pip setuptools wheel
+
+      - name: Install audit tooling
         run: |
-          if [ -f "config/requirements.txt" ]; then
-            echo "Validating requirements.txt format..."
-            python3 -c "
-          import re
-          with open('config/requirements.txt', 'r') as f:
-              for line_num, line in enumerate(f, 1):
-                  line = line.strip()
-                  if line and not line.startswith('#'):
-                      if '==' in line and '>=' in line:
-                          print(f'⚠️ Line {line_num}: Mixed version specifiers: {line}')
-                      elif not re.match(r'^[a-zA-Z0-9_-]+', line):
-                          print(f'⚠️ Line {line_num}: Invalid package name format: {line}')
-          "
-            echo "✅ requirements.txt format validation complete"
-          else
-            echo "ℹ️ No requirements.txt found, skipping validation"
-          fi
-      
-      - name: Check Dockerfile for outdated base images
+          python -m pip install pip-audit
+
+      - name: Validate requirements.txt (pip parse + install simulation)
+        if: hashFiles('config/requirements.txt') != ''
         run: |
-          if [ -f "Dockerfile" ]; then
-            echo "Checking Dockerfile for base image..."
-            if grep -q "FROM python:" Dockerfile; then
-              PYTHON_VERSION=$(grep "FROM python:" Dockerfile | head -1 | sed 's/.*python:\([^ ]*\).*/\1/')
-              echo "Found Python base image: $PYTHON_VERSION"
-              echo "ℹ️ Consider using specific version tags for reproducibility"
-            fi
+          echo "Validating config/requirements.txt..."
+          python -m pip install --dry-run -r config/requirements.txt
+
+      - name: Run vulnerability scan (pip-audit)
+        if: hashFiles('config/requirements.txt') != ''
+        run: |
+          echo "Running pip-audit..."
+          pip-audit -r config/requirements.txt
+
+      - name: Check Dockerfile base image tag hygiene
+        if: hashFiles('Dockerfile') != ''
+        run: |
+          echo "Checking Dockerfile base image..."
+          BASE_LINE=$(grep -E '^FROM ' Dockerfile | head -n 1 || true)
+
+          if [ -z "$BASE_LINE" ]; then
+            echo "ℹ️ No FROM line found in Dockerfile"
+            exit 0
           fi
 
+          echo "Found: $BASE_LINE"
+
+          # Detect floating tags
+          if echo "$BASE_LINE" | grep -qE 'FROM python:(latest|3|3\.[0-9]+)$'; then
+            echo "⚠️ WARNING: Docker base image uses a floating tag."
+            echo "   Consider pinning to a patch version (e.g. python:3.11.8)"
+            echo "   or pinning to a digest (best): python:3.11.8@sha256:..."
+          fi
+
+          # Detect missing tag entirely (FROM python)
+          if echo "$BASE_LINE" | grep -qE '^FROM python$'; then
+            echo "⚠️ WARNING: Docker base image has no tag. This is not reproducible."
+            exit 1
+          fi
