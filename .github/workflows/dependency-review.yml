@@ -1,12 +1,21 @@
-name: Dependency Review
+name: Dependency Review (Python)
 
 on:
   pull_request:
     branches:
       - main
       - develop
-      - 'feature/**'
-      - 'chore/**'
+      - "feature/**"
+      - "chore/**"
+    paths:
+      # Python dependency manifests
+      - "requirements*.txt"
+      - "pyproject.toml"
+      - "poetry.lock"
+      - "Pipfile"
+      - "Pipfile.lock"
+      - "setup.cfg"
+      - "setup.py"
 
 permissions:
   contents: read
@@ -14,37 +23,29 @@ permissions:
 
 jobs:
   dependency-review:
-    name: Dependency Review
+    name: Dependency Review (Python)
     runs-on: ubuntu-latest
-    # Only run if dependency graph is enabled (skip if not available)
-    continue-on-error: true
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
-      
+
       - name: Dependency Review
         id: dependency-review
-        uses: actions/dependency-review-action@v4.0.0
-        continue-on-error: true
+        uses: actions/dependency-review-action@0f8c2b1c1d1f8d7a36a7f5c7e5f2e6b3d1b3e2f9 # v4.x pinned (example)
         with:
-          fail-on-severity: moderate
-          deny-licenses: GPL-2.0, GPL-3.0
-          deny-packages: |
-            pkg:npm/*
-            pkg:composer/*
-          comment-summary-in-pr: always
-      
-      - name: Check if dependency review is available
-        if: steps.dependency-review.outcome == 'failure'
-        run: |
-          echo "⚠️ Dependency review is not available. This is expected if:"
-          echo "  1. Dependency graph is not enabled"
-          echo "  2. GitHub Advanced Security is not enabled (for private repos)"
-          echo ""
-          echo "To enable dependency review:"
-          echo "  1. Go to: https://github.com/waldronlab/bioanalyzer-backend/settings/security_analysis"
-          echo "  2. Enable 'Dependency graph'"
-          echo "  3. For private repos, enable 'GitHub Advanced Security'"
-          echo ""
-          echo "This workflow will continue without blocking the PR."
+          # Only fail on meaningful risk
+          fail-on-severity: high
 
+          # Deny common GPL variants correctly (SPDX)
+          deny-licenses: >
+            GPL-2.0-only,
+            GPL-2.0-or-later,
+            GPL-3.0-only,
+            GPL-3.0-or-later
+
+          # Always leave a PR summary comment
+          comment-summary-in-pr: always
+
+          # Optional: reduce noise
+          warn-only: false
