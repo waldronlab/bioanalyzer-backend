@@ -2,9 +2,9 @@
 --extra-index-url https://download.pytorch.org/whl/cpu
 
 # --- Core ML & Computer Vision (CPU Versions) ---
-torch>=2.1.0+cpu
-torchvision>=0.16.0+cpu
-torchaudio>=2.1.0+cpu
+torch>=2.1.0
+torchvision>=0.16.0
+torchaudio>=2.1.0
 
 # --- Data Science Stack ---
 numpy>=1.26.0
