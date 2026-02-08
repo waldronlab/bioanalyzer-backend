@@ -1,73 +1,96 @@
-name: Dependency Check (Alternative)
-
+name: Dependency Check (Python)
 on:
   pull_request:
     branches:
       - main
       - develop
-      - 'feature/**'
-      - 'chore/**'
+      - "feature/**"
+      - "chore/**"
     paths:
-      - 'config/requirements.txt'
-      - 'Dockerfile'
-      - 'docker-compose.yml'
-      - '.github/workflows/**'
-
+      - "config/requirements.txt"
+      - "Dockerfile"
+      - "docker-compose.yml"
+      - ".github/workflows/**"
+      - "pyproject.toml"
+      - "poetry.lock"
 permissions:
   contents: read
   pull-requests: write
-
 jobs:
-  check-dependencies:
-    name: Check Dependencies
+  dependency-check:
+    name: Dependency Check (Python)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
-      
       - name: Set up Python
-        uses: actions/setup-python@v5.0.0
+        uses: actions/setup-python@82c7e631bb3cdc910f68e0081d67478d79c6982d # v5.x pinned
         with:
-          python-version: '3.11'
-      
-      - name: Check for known vulnerable packages
+          python-version: "3.11"
+      - name: Upgrade pip tooling
         run: |
-          echo "Checking for known security issues..."
-          echo ""
-          echo "⚠️ For full dependency review, enable GitHub Advanced Security:"
-          echo "   https://github.com/waldronlab/bioanalyzer-backend/settings/security_analysis"
-          echo ""
-          echo "This is a basic check. For comprehensive security scanning,"
-          echo "please enable Dependency graph and GitHub Advanced Security."
-      
-      - name: Validate requirements.txt format
+          python -m pip install --upgrade pip setuptools wheel
+      - name: Install dependency audit tooling
         run: |
-          if [ -f "config/requirements.txt" ]; then
-            echo "Validating requirements.txt format..."
-            python3 -c "
+          # We install pip-audit, but we do NOT rely on the --skip flag,
+          # since some runner environments can still pull older builds.
+          python -m pip install --upgrade pip-audit
+      - name: Show pip-audit version
+        run: |
+          pip-audit --version
+      - name: Validate requirements.txt (pip parse + install simulation)
+        if: hashFiles('config/requirements.txt') != ''
+        run: |
+          echo "Validating config/requirements.txt..."
+          python -m pip install --dry-run -r config/requirements.txt
+      - name: Run vulnerability scan (pip-audit)
+        if: hashFiles('config/requirements.txt') != ''
+        run: |
+          echo "Running pip-audit..."
+          # pip-audit cannot reliably audit torch CPU wheels from the PyTorch index
+          # because they are not published on PyPI the same way.
+          # So we generate a filtered requirements file for auditing only.
+          python - <<'PY'
           import re
-          with open('config/requirements.txt', 'r') as f:
-              for line_num, line in enumerate(f, 1):
-                  line = line.strip()
-                  if line and not line.startswith('#'):
-                      if '==' in line and '>=' in line:
-                          print(f'⚠️ Line {line_num}: Mixed version specifiers: {line}')
-                      elif not re.match(r'^[a-zA-Z0-9_-]+', line):
-                          print(f'⚠️ Line {line_num}: Invalid package name format: {line}')
-          "
-            echo "✅ requirements.txt format validation complete"
-          else
-            echo "ℹ️ No requirements.txt found, skipping validation"
-          fi
-      
-      - name: Check Dockerfile for outdated base images
+          from pathlib import Path
+          src = Path("config/requirements.txt")
+          dst = Path("config/requirements.audit.txt")
+          skip = {"torch", "torchvision", "torchaudio"}
+          out = []
+          for line in src.read_text().splitlines():
+              stripped = line.strip()
+              # Keep comments, blank lines, and index URLs
+              if not stripped or stripped.startswith("#") or stripped.startswith("--"):
+                  out.append(line)
+                  continue
+              # Extract package name (handles: pkg==, pkg>=, pkg[extra], etc.)
+              name = re.split(r"[<>=!~ \[]", stripped, 1)[0].lower()
+              if name in skip:
+                  continue
+              out.append(line)
+          dst.write_text("\n".join(out) + "\n")
+          print(f"Created {dst} (torch packages removed)")
+          PY
+          pip-audit -r config/requirements.audit.txt --ignore-vuln CVE-2025-68463
+      - name: Check Dockerfile base image tag hygiene
+        if: hashFiles('Dockerfile') != ''
         run: |
-          if [ -f "Dockerfile" ]; then
-            echo "Checking Dockerfile for base image..."
-            if grep -q "FROM python:" Dockerfile; then
-              PYTHON_VERSION=$(grep "FROM python:" Dockerfile | head -1 | sed 's/.*python:\([^ ]*\).*/\1/')
-              echo "Found Python base image: $PYTHON_VERSION"
-              echo "ℹ️ Consider using specific version tags for reproducibility"
-            fi
+          echo "Checking Dockerfile base image..."
+          BASE_LINE=$(grep -E '^FROM ' Dockerfile | head -n 1 || true)
+          if [ -z "$BASE_LINE" ]; then
+            echo "ℹ️ No FROM line found in Dockerfile"
+            exit 0
           fi
-
+          echo "Found: $BASE_LINE"
+          # Missing tag (non reproducible)
+          if echo "$BASE_LINE" | grep -qE '^FROM python$'; then
+            echo "❌ ERROR: Docker base image has no tag. This is not reproducible."
+            echo " Use something like: FROM python:3.11.8-slim"
+            exit 1
+          fi
+          # Floating tags (warn only)
+          if echo "$BASE_LINE" | grep -qE 'FROM python:(latest|3|3\.[0-9]+)$'; then
+            echo "⚠️ WARNING: Docker base image uses a floating tag."
+            echo " Consider pinning to a patch version (e.g. python:3.11.8-slim)"
+            echo " Best practice: pin to a digest too: python:3.11.8-slim@sha256:..."
+          fi
