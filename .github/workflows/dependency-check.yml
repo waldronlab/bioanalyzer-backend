@@ -1,4 +1,4 @@
-name: Dependency Check (Alternative)
+name: Dependency Check (Python)
 
 on:
   pull_request:
@@ -20,7 +20,7 @@ permissions:
   pull-requests: write
 
 jobs:
-  check-dependencies:
+  dependency-check:
     name: Dependency Check (Python)
     runs-on: ubuntu-latest
 
@@ -37,9 +37,10 @@ jobs:
         run: |
           python -m pip install --upgrade pip setuptools wheel
 
-      - name: Install audit tooling
+      - name: Install dependency audit tooling
         run: |
-          python -m pip install pip-audit
+          # Pin pip-audit for stable CLI behavior
+          python -m pip install "pip-audit==2.7.3"
 
       - name: Validate requirements.txt (pip parse + install simulation)
         if: hashFiles('config/requirements.txt') != ''
@@ -51,6 +52,10 @@ jobs:
         if: hashFiles('config/requirements.txt') != ''
         run: |
           echo "Running pip-audit..."
+
+          # pip-audit cannot reliably audit torch CPU wheels from the PyTorch index,
+          # because they are not published on PyPI in the same way.
+          # We skip them but still audit everything else.
           pip-audit -r config/requirements.txt \
             --skip torch \
             --skip torchvision \
@@ -69,15 +74,16 @@ jobs:
 
           echo "Found: $BASE_LINE"
 
-          # Detect floating tags
-          if echo "$BASE_LINE" | grep -qE 'FROM python:(latest|3|3\.[0-9]+)$'; then
-            echo "⚠️ WARNING: Docker base image uses a floating tag."
-            echo "   Consider pinning to a patch version (e.g. python:3.11.8)"
-            echo "   or pinning to a digest (best): python:3.11.8@sha256:..."
+          # Missing tag (non reproducible)
+          if echo "$BASE_LINE" | grep -qE '^FROM python$'; then
+            echo "❌ ERROR: Docker base image has no tag. This is not reproducible."
+            echo "   Use something like: FROM python:3.11.8-slim"
+            exit 1
           fi
 
-          # Detect missing tag entirely (FROM python)
-          if echo "$BASE_LINE" | grep -qE '^FROM python$'; then
-            echo "⚠️ WARNING: Docker base image has no tag. This is not reproducible."
-            exit 1
+          # Floating tags (warn only)
+          if echo "$BASE_LINE" | grep -qE 'FROM python:(latest|3|3\.[0-9]+)$'; then
+            echo "⚠️ WARNING: Docker base image uses a floating tag."
+            echo "   Consider pinning to a patch version (e.g. python:3.11.8-slim)"
+            echo "   Best practice: pin to a digest too: python:3.11.8-slim@sha256:..."
           fi
