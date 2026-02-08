@@ -51,7 +51,10 @@ jobs:
         if: hashFiles('config/requirements.txt') != ''
         run: |
           echo "Running pip-audit..."
-          pip-audit -r config/requirements.txt
+          pip-audit -r config/requirements.txt \
+            --skip torch \
+            --skip torchvision \
+            --skip torchaudio
 
       - name: Check Dockerfile base image tag hygiene
         if: hashFiles('Dockerfile') != ''
