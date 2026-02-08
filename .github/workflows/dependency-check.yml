@@ -39,8 +39,13 @@ jobs:
 
       - name: Install dependency audit tooling
         run: |
-          # Pin pip-audit for stable CLI behavior
-          python -m pip install "pip-audit==2.7.3"
+          # We install pip-audit, but we do NOT rely on the --skip flag,
+          # since some runner environments can still pull older builds.
+          python -m pip install --upgrade pip-audit
+
+      - name: Show pip-audit version
+        run: |
+          pip-audit --version
 
       - name: Validate requirements.txt (pip parse + install simulation)
         if: hashFiles('config/requirements.txt') != ''
@@ -53,13 +58,40 @@ jobs:
         run: |
           echo "Running pip-audit..."
 
-          # pip-audit cannot reliably audit torch CPU wheels from the PyTorch index,
-          # because they are not published on PyPI in the same way.
-          # We skip them but still audit everything else.
-          pip-audit -r config/requirements.txt \
-            --skip torch \
-            --skip torchvision \
-            --skip torchaudio
+          # pip-audit cannot reliably audit torch CPU wheels from the PyTorch index
+          # because they are not published on PyPI the same way.
+          # So we generate a filtered requirements file for auditing only.
+          python - <<'PY'
+          import re
+          from pathlib import Path
+
+          src = Path("config/requirements.txt")
+          dst = Path("config/requirements.audit.txt")
+
+          skip = {"torch", "torchvision", "torchaudio"}
+
+          out = []
+          for line in src.read_text().splitlines():
+              stripped = line.strip()
+
+              # Keep comments, blank lines, and index URLs
+              if not stripped or stripped.startswith("#") or stripped.startswith("--"):
+                  out.append(line)
+                  continue
+
+              # Extract package name (handles: pkg==, pkg>=, pkg[extra], etc.)
+              name = re.split(r"[<>=!~ \[]", stripped, 1)[0].lower()
+
+              if name in skip:
+                  continue
+
+              out.append(line)
+
+          dst.write_text("\n".join(out) + "\n")
+          print(f"Created {dst} (torch packages removed)")
+          PY
+
+          pip-audit -r config/requirements.audit.txt
 
       - name: Check Dockerfile base image tag hygiene
         if: hashFiles('Dockerfile') != ''
