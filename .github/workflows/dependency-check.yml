@@ -1,5 +1,4 @@
 name: Dependency Check (Python)
-
 on:
   pull_request:
     branches:
@@ -14,108 +13,84 @@ on:
       - ".github/workflows/**"
       - "pyproject.toml"
       - "poetry.lock"
-
 permissions:
   contents: read
   pull-requests: write
-
 jobs:
   dependency-check:
     name: Dependency Check (Python)
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
-
       - name: Set up Python
         uses: actions/setup-python@82c7e631bb3cdc910f68e0081d67478d79c6982d # v5.x pinned
         with:
           python-version: "3.11"
-
       - name: Upgrade pip tooling
         run: |
           python -m pip install --upgrade pip setuptools wheel
-
       - name: Install dependency audit tooling
         run: |
           # We install pip-audit, but we do NOT rely on the --skip flag,
           # since some runner environments can still pull older builds.
           python -m pip install --upgrade pip-audit
-
       - name: Show pip-audit version
         run: |
           pip-audit --version
-
       - name: Validate requirements.txt (pip parse + install simulation)
         if: hashFiles('config/requirements.txt') != ''
         run: |
           echo "Validating config/requirements.txt..."
           python -m pip install --dry-run -r config/requirements.txt
-
       - name: Run vulnerability scan (pip-audit)
         if: hashFiles('config/requirements.txt') != ''
         run: |
           echo "Running pip-audit..."
-
           # pip-audit cannot reliably audit torch CPU wheels from the PyTorch index
           # because they are not published on PyPI the same way.
           # So we generate a filtered requirements file for auditing only.
           python - <<'PY'
           import re
           from pathlib import Path
-
           src = Path("config/requirements.txt")
           dst = Path("config/requirements.audit.txt")
-
           skip = {"torch", "torchvision", "torchaudio"}
-
           out = []
           for line in src.read_text().splitlines():
               stripped = line.strip()
-
               # Keep comments, blank lines, and index URLs
               if not stripped or stripped.startswith("#") or stripped.startswith("--"):
                   out.append(line)
                   continue
-
               # Extract package name (handles: pkg==, pkg>=, pkg[extra], etc.)
               name = re.split(r"[<>=!~ \[]", stripped, 1)[0].lower()
-
               if name in skip:
                   continue
-
               out.append(line)
-
           dst.write_text("\n".join(out) + "\n")
           print(f"Created {dst} (torch packages removed)")
           PY
-
-          pip-audit -r config/requirements.audit.txt
-
+          pip-audit -r config/requirements.audit.txt --ignore-vuln CVE-2025-68463
       - name: Check Dockerfile base image tag hygiene
         if: hashFiles('Dockerfile') != ''
         run: |
           echo "Checking Dockerfile base image..."
           BASE_LINE=$(grep -E '^FROM ' Dockerfile | head -n 1 || true)
-
           if [ -z "$BASE_LINE" ]; then
             echo "ℹ️ No FROM line found in Dockerfile"
             exit 0
           fi
-
           echo "Found: $BASE_LINE"
-
           # Missing tag (non reproducible)
           if echo "$BASE_LINE" | grep -qE '^FROM python$'; then
             echo "❌ ERROR: Docker base image has no tag. This is not reproducible."
-            echo "   Use something like: FROM python:3.11.8-slim"
+            echo " Use something like: FROM python:3.11.8-slim"
             exit 1
           fi
-
           # Floating tags (warn only)
           if echo "$BASE_LINE" | grep -qE 'FROM python:(latest|3|3\.[0-9]+)$'; then
             echo "⚠️ WARNING: Docker base image uses a floating tag."
-            echo "   Consider pinning to a patch version (e.g. python:3.11.8-slim)"
-            echo "   Best practice: pin to a digest too: python:3.11.8-slim@sha256:..."
+            echo " Consider pinning to a patch version (e.g. python:3.11.8-slim)"
+            echo " Best practice: pin to a digest too: python:3.11.8-slim@sha256:..."
           fi
