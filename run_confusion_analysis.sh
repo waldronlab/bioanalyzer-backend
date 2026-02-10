@@ -34,35 +34,28 @@ if ! command -v docker &> /dev/null; then
     exit 1
 fi
 
-# Check if docker-compose is available, otherwise use docker run
-if command -v docker-compose &> /dev/null; then
-    DOCKER_CMD="docker-compose"
-elif docker compose version &> /dev/null 2>&1; then
-    DOCKER_CMD="docker compose"
-else
-    echo "Warning: docker-compose not found, using docker run instead"
-    DOCKER_CMD="docker"
-fi
+# Build the Docker image if it doesn't exist or is outdated
+echo "Building/checking Docker image..."
+docker build -t bioanalyzer-backend . > /dev/null 2>&1 || {
+    echo "Building Docker image (this may take a few minutes)..."
+    docker build -t bioanalyzer-backend .
+}
 
+echo ""
 echo "Step 1: Checking PMID overlap..."
-if [ "$DOCKER_CMD" = "docker" ]; then
-    docker build -t bioanalyzer-backend . > /dev/null 2>&1
-    docker run --rm -v "$SCRIPT_DIR:/app" bioanalyzer-backend python align_pmids.py \
-        "$PREDICTIONS_FILE" "$FEEDBACK_FILE"
-else
-    $DOCKER_CMD run --rm bioanalyzer-backend python align_pmids.py \
-        "$PREDICTIONS_FILE" "$FEEDBACK_FILE"
-fi
+docker run --rm \
+    -v "$SCRIPT_DIR:/app" \
+    -w /app \
+    bioanalyzer-backend \
+    python align_pmids.py "$PREDICTIONS_FILE" "$FEEDBACK_FILE"
 
 echo ""
 echo "Step 2: Running confusion matrix analysis..."
-if [ "$DOCKER_CMD" = "docker" ]; then
-    docker run --rm -v "$SCRIPT_DIR:/app" bioanalyzer-backend python confusion_matrix_analysis.py \
-        "$PREDICTIONS_FILE" "$FEEDBACK_FILE"
-else
-    $DOCKER_CMD run --rm bioanalyzer-backend python confusion_matrix_analysis.py \
-        "$PREDICTIONS_FILE" "$FEEDBACK_FILE"
-fi
+docker run --rm \
+    -v "$SCRIPT_DIR:/app" \
+    -w /app \
+    bioanalyzer-backend \
+    python confusion_matrix_analysis.py "$PREDICTIONS_FILE" "$FEEDBACK_FILE"
 
 echo ""
 echo "=========================================="
