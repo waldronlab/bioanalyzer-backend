@@ -187,6 +187,22 @@ Gemini is the default because it's cheap and works well for this use case.
 
 Cache is SQLite-based, stored in `cache/analysis_cache.db`. Results valid for 24 hours by default.
 
+## Validation & Benchmarking
+
+BioAnalyzer includes a formal validation workflow to compare automated predictions against expert curator annotations:
+
+- **Ground truth**: Expert annotations in `feedback.csv` for the six BugSigDB fields  
+- **Predictions**: BioAnalyzer outputs in a predictions CSV (e.g. `analysis_results.csv` or `new.csv`)  
+- **Alignment**: PMIDs are aligned with `align_pmids.py`  
+- **Evaluation**: `confusion_matrix_analysis.py` computes 3-class confusion matrices (`ABSENT`, `PARTIALLY_PRESENT`, `PRESENT`) and per-field accuracy  
+- **Outputs**: Metrics and PNG confusion matrices are written to `confusion_matrix_results/`
+
+For sharing/inspection, `create_validation_dataset.py` can generate a flat CSV:
+
+- Columns: `Study, PMID, Experiment, Outcome of the experiment, Prediction`  
+- Each row = one paper–field comparison  
+- Used in the `Deliverables/` folder to communicate validation results (methods, ground truth analysis, and confusion-matrix summaries).
+
 ## Development
 
 ```bash

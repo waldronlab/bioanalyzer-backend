@@ -123,4 +123,3 @@ Make sure the test script is executable:
 ```bash
 chmod +x run_tests.sh
 ```
-
