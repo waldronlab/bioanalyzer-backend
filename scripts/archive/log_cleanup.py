@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """
-Log Cleanup for BioAnalyzer
-============================
+Archived: Log Cleanup for BioAnalyzer
+=====================================
 
 This script helps manage log files by cleaning up old entries and rotating logs.
+Moved to scripts/archive/ to indicate it's a dev/ops utility and not part of the
+core backend runtime.
 """
 
 import os
@@ -172,7 +174,7 @@ class LogCleanup:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="BioAnalyzer Log Cleanup")
+    parser = argparse.ArgumentParser(description="BioAnalyzer Log Cleanup (Archived)")
     parser.add_argument(
         "--cleanup", type=int, metavar="DAYS", help="Clean up logs older than DAYS"
     )
@@ -207,3 +209,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
