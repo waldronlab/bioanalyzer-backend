@@ -8,7 +8,6 @@ on:
       - "feature/**"
       - "chore/**"
     paths:
-      # Python dependency manifests
       - "requirements*.txt"
       - "pyproject.toml"
       - "poetry.lock"
@@ -32,20 +31,16 @@ jobs:
 
       - name: Dependency Review
         id: dependency-review
-        uses: actions/dependency-review-action@0f8c2b1c1d1f8d7a36a7f5c7e5f2e6b3d1b3e2f9 # v4.x pinned (example)
+        uses: actions/dependency-review-action@v4
         with:
-          # Only fail on meaningful risk
           fail-on-severity: high
 
-          # Deny common GPL variants correctly (SPDX)
           deny-licenses: >
             GPL-2.0-only,
             GPL-2.0-or-later,
             GPL-3.0-only,
             GPL-3.0-or-later
 
-          # Always leave a PR summary comment
           comment-summary-in-pr: always
 
-          # Optional: reduce noise
           warn-only: false
