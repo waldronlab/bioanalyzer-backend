@@ -79,6 +79,9 @@ dependencies = [
     "pytz>=2023.3",
     # Vector database (optional - for persistent storage)
     "qdrant-client>=1.7.0",
+    # Curator table (sortable/searchable Streamlit UI)
+    "streamlit>=1.28.0",
+    "pyarrow>=14.0.0",
 ]
 
 [project.optional-dependencies]

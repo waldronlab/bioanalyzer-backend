@@ -23,6 +23,9 @@ RUN pip install --no-cache-dir -e .
 # Explicit analysis deps (defensive)
 RUN pip install --no-cache-dir pandas scikit-learn matplotlib seaborn
 
+# Curator table (Streamlit) - also in pyproject.toml and config/requirements.txt
+RUN pip install --no-cache-dir streamlit pyarrow
+
 RUN mkdir -p cache logs results
 
 RUN chmod +x cli.py || true

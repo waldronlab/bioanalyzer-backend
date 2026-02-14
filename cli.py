@@ -10,6 +10,7 @@ Usage:
     BioAnalyzer help                    # Show help
     BioAnalyzer build                   # Build Docker containers
     BioAnalyzer start                   # Start the application
+    BioAnalyzer run table               # Run curator table (Streamlit)
     BioAnalyzer analyze <pmid>          # Analyze a single paper
     BioAnalyzer analyze <pmid1,pmid2>   # Analyze multiple papers
     BioAnalyzer status                  # Check system status
@@ -178,6 +179,7 @@ class BioAnalyzerCLI:
 🔧 Setup Commands:
    BioAnalyzer build                    Build Docker containers
    BioAnalyzer start                    Start the application
+   BioAnalyzer run table                Run curator table (Streamlit)
    BioAnalyzer stop                     Stop the application
    BioAnalyzer restart                  Restart the application
    BioAnalyzer status                   Check system status
@@ -215,6 +217,7 @@ class BioAnalyzerCLI:
 📖 Examples:
    BioAnalyzer build
    BioAnalyzer start
+   BioAnalyzer run table                # Curator table at http://localhost:8501
    BioAnalyzer analyze 12345678
    BioAnalyzer analyze 12345678,87654321
    BioAnalyzer analyze --file pmids.txt --format json
@@ -441,6 +444,28 @@ except Exception as e:
 
         return True
 
+    def _ensure_volume_directories(self) -> bool:
+        """Ensure cache, logs, results exist and are writable by the container user."""
+        dirs = ["cache", "logs", "results"]
+        for name in dirs:
+            path = project_root / name
+            try:
+                path.mkdir(parents=True, exist_ok=True)
+            except OSError as e:
+                print(f"❌ Cannot create directory {path}: {e}")
+                return False
+            test_file = path / ".write_test"
+            try:
+                test_file.write_text("")
+                test_file.unlink()
+            except OSError:
+                print(f"❌ Directory not writable by current user: {path}")
+                print("   The backend container needs to write here (e.g. performance.log).")
+                print("   Fix with:")
+                print(f"   sudo chown -R $USER:$USER {path}")
+                return False
+        return True
+
     def start_application(self):
         """Start the BioAnalyzer application."""
         print("🚀 Starting BioAnalyzer application...")
@@ -458,6 +483,8 @@ except Exception as e:
             compose_file = project_root / "docker-compose.yml"
             if not compose_file.exists():
                 print("❌ docker-compose.yml not found. Cannot start containers.")
+                return False
+            if not self._ensure_volume_directories():
                 return False
             if self.check_backend_health():
                 print(f"✅ Backend API is already available at http://localhost:8000")
@@ -712,6 +739,42 @@ except Exception as e:
         time.sleep(2)
         return self.start_application()
 
+    def run_table(self, port: int = 8501) -> bool:
+        """Run the curator table (Streamlit) in Docker for sortable/searchable predictions."""
+        app_path = project_root / "curator_table" / "app.py"
+        if not app_path.exists():
+            print(f"❌ Curator table app not found: {app_path}")
+            return False
+        if not self.check_docker():
+            return False
+        if not self.check_image():
+            print("❌ Docker image not found. Run 'BioAnalyzer build' first.")
+            return False
+        print("📋 Starting BioAnalyzer Curator Table (Docker)...")
+        print(f"   Open http://localhost:{port} in your browser.")
+        print("   Press Ctrl+C to stop.")
+        env_flags = self._collect_env_flags()
+        cmd = [
+            "docker",
+            "run",
+            "--rm",
+            "-v",
+            f"{project_root}:/app",
+            "-w",
+            "/app",
+            "-p",
+            f"{port}:8501",
+            *env_flags,
+            self.image_name,
+            "streamlit",
+            "run",
+            "curator_table/app.py",
+            "--server.port=8501",
+            "--server.address=0.0.0.0",
+        ]
+        result = subprocess.run(cmd, cwd=project_root)
+        return result.returncode == 0
+
     def check_backend_health(self):
         """Check if the backend is healthy."""
         try:
@@ -799,6 +862,11 @@ except Exception as e:
             print("🔧 API Documentation: http://localhost:8000/docs")
         else:
             print("API Health: ❌ Not Responding")
+            if not backend_running:
+                print("")
+                print("💡 To get healthy: run  BioAnalyzer start")
+                print("   If the backend exits with permission errors, fix volume dirs:")
+                print("   sudo chown -R $USER:$USER cache logs results")
 
     def handle_settings_command(self, args):
         """Handle settings commands."""
@@ -2115,6 +2183,7 @@ Examples:
   BioAnalyzer help                    # Show help
   BioAnalyzer build                   # Build containers
   BioAnalyzer start                   # Start application
+  BioAnalyzer run table               # Run curator table (Streamlit)
   BioAnalyzer analyze 12345678        # Analyze single paper
   BioAnalyzer analyze 12345678,87654321  # Analyze multiple papers
   BioAnalyzer retrieve 12345678       # Retrieve single paper
@@ -2146,6 +2215,16 @@ Examples:
 
     # Restart command
     restart_parser = subparsers.add_parser("restart", help="Restart the application")
+
+    # Run command (optional components)
+    run_parser = subparsers.add_parser("run", help="Run optional components")
+    run_subparsers = run_parser.add_subparsers(dest="run_command", help="Component to run")
+    run_table_parser = run_subparsers.add_parser(
+        "table", help="Run curator table (sortable/searchable predictions)"
+    )
+    run_table_parser.add_argument(
+        "--port", "-p", type=int, default=8501, help="Port for Streamlit (default: 8501)"
+    )
 
     # Status command
     status_parser = subparsers.add_parser("status", help="Check system status")
@@ -2333,6 +2412,14 @@ Examples:
 
     if args.command == "restart":
         cli.restart_application()
+        return
+
+    if args.command == "run":
+        if getattr(args, "run_command", None) == "table":
+            port = getattr(args, "port", 8501)
+            cli.run_table(port=port)
+        else:
+            print("Usage: BioAnalyzer run table   # Run curator table (Streamlit)")
         return
 
     if args.command == "status":

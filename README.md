@@ -82,6 +82,9 @@ BioAnalyzer retrieve 12345678
 BioAnalyzer start
 BioAnalyzer stop
 BioAnalyzer status
+
+# Curator table (sortable/searchable predictions)
+BioAnalyzer run table
 ```
 
 ### API
@@ -251,6 +254,8 @@ docker compose logs
 - [SETUP_GUIDE.md](SETUP_GUIDE.md) - Detailed setup
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) - System design
 - [docs/RAG_GUIDE.md](docs/RAG_GUIDE.md) - RAG configuration
+- [docs/CURATOR_TABLE_DESIGN.md](docs/CURATOR_TABLE_DESIGN.md) - Curator table (scale, fields, feedback)
+- [curator_table/README.md](curator_table/README.md) - Sortable/searchable curator table (Streamlit)
 - API docs: http://localhost:8000/docs (when running)
 
 ## License
