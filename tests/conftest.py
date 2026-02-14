@@ -32,7 +32,7 @@ def _ensure_paths() -> None:
     paths = paths + [PROJECT_ROOT_STR]
 
     # sys.path
-    for p in reversed(paths):  # reversed so first item ends up at index 0
+    for p in reversed(paths):  # first item ends up at index 0
         if p not in sys.path:
             sys.path.insert(0, p)
 

@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """
-Log Dashboard for BioAnalyzer
-==============================
+Archived: Log Dashboard for BioAnalyzer
+=======================================
 
 A simple dashboard to monitor logs in real-time with performance metrics.
+Moved to scripts/archive/ to indicate it's a dev/ops utility and not part of the
+core backend runtime.
 """
 
 import os
@@ -13,7 +15,7 @@ import json
 from pathlib import Path
 from datetime import datetime, timedelta
 import argparse
-import re  # Added missing import for regex
+import re
 
 
 class LogDashboard:
@@ -155,7 +157,7 @@ class LogDashboard:
         """Display the dashboard."""
         os.system("clear" if os.name == "posix" else "cls")
 
-        print("🚀 BioAnalyzer Log Dashboard")
+        print("🚀 BioAnalyzer Log Dashboard (Archived)")
         print("=" * 60)
         print(f"📅 Last Updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         print()
@@ -213,7 +215,7 @@ class LogDashboard:
 
     def monitor(self, refresh_interval=5):
         """Monitor logs with periodic updates."""
-        print("Starting log monitoring...")
+        print("Starting log monitoring (Archived script)...")
         print("Press Ctrl+C to stop")
 
         try:
@@ -227,7 +229,9 @@ class LogDashboard:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="BioAnalyzer Log Dashboard")
+    parser = argparse.ArgumentParser(
+        description="BioAnalyzer Log Dashboard (Archived)"
+    )
     parser.add_argument(
         "--refresh",
         "-r",
@@ -247,3 +251,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

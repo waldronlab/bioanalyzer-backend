@@ -17,8 +17,8 @@ RUN pip install --no-cache-dir --extra-index-url https://download.pytorch.org/wh
 
 COPY . .
 
-# Install package + dependencies
-RUN pip install --no-cache-dir -e .
+# Install package + dependencies (including dev extras for pytest in test container)
+RUN pip install --no-cache-dir -e .[dev]
 
 # Explicit analysis deps (defensive)
 RUN pip install --no-cache-dir pandas scikit-learn matplotlib seaborn

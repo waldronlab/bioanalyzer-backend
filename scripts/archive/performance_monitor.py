@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """
-Performance Monitor for BioAnalyzer
-===================================
+Archived: Performance Monitor for BioAnalyzer
+============================================
 
-This script monitors the performance of PMID queries and helps identify bottlenecks.
+This script monitors the performance of PMID queries and helps identify
+API bottlenecks. Moved to scripts/archive/ to indicate it's a dev/ops
+utility and not part of the core backend runtime.
 """
 
 import requests
@@ -132,7 +134,9 @@ def test_multiple_pmids(pmids, base_url="http://localhost:8000"):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Performance Monitor for BioAnalyzer")
+    parser = argparse.ArgumentParser(
+        description="Performance Monitor for BioAnalyzer (Archived)"
+    )
     parser.add_argument("--pmid", help="Single PMID to test")
     parser.add_argument("--pmids", nargs="+", help="Multiple PMIDs to test")
     parser.add_argument("--file", help="File containing PMIDs (one per line)")
@@ -164,3 +168,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
