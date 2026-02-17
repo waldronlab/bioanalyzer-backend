@@ -1,15 +1,63 @@
-"""
-BioAnalyzer Curator Table – sortable, searchable table of predictions for real-world testing.
+#!/usr/bin/env python3
+""" 
+BioAnalyzer Curator Table (with column-level validation)
+======================================================
 
-Run: streamlit run curator_table/app.py
-Data: CSV or Parquet with columns PMID, Title, (optional) Journal, and the 6 *Status columns.
+A scalable Streamlit dashboard for real-world validation of BioAnalyzer predictions.
+
+What this app supports
+----------------------
+1) A big sortable & searchable table of candidate curatable PubMed articles.
+2) A curator feedback workflow.
+3) Column-level correctness checks for each BioAnalyzer field.
+4) Exportable feedback suitable for:
+   - confusion matrices
+   - binary + multiclass evaluation
+   - MCC (with explicit treatment for PARTIALLY_PRESENT)
+
+Run:
+    streamlit run curator_table/app.py
+
+Input data:
+    CSV or Parquet with at minimum:
+        - PMID
+    Recommended:
+        - Title, Journal, Year, Summary
+    Expected BioAnalyzer outputs:
+        - Host Species Status
+        - Body Site Status
+        - Condition Status
+        - Sequencing Type Status
+        - Taxa Level Status
+        - Sample Size Status
+
+Status values expected:
+    ABSENT | PARTIALLY_PRESENT | PRESENT
+
+Feedback storage:
+    results/curator_feedback.csv
+    results/curator_feedback.parquet
+
+Design notes
+------------
+- Feedback is upserted by (PMID, curator_id) to prevent duplicates.
+- Column-level validation is stored in wide format for simplicity.
+- If you later want multi-curator adjudication, we can add a second table.
 """
 
-import streamlit as st
-import pandas as pd
+from __future__ import annotations
+
+import os
 from pathlib import Path
+from typing import Optional, List, Dict
 
-# Expected status columns (BioAnalyzer output)
+import pandas as pd
+import streamlit as st
+
+
+# -----------------------------
+# Expected prediction columns
+# -----------------------------
 STATUS_COLUMNS = [
     "Host Species Status",
     "Body Site Status",
@@ -19,199 +67,623 @@ STATUS_COLUMNS = [
     "Sample Size Status",
 ]
 
-# Optional columns we can show if present
-OPTIONAL_COLUMNS = ["Journal", "Summary", "Processing Time", "Year", "Publication Date"]
+OPTIONAL_COLUMNS = [
+    "Title",
+    "Journal",
+    "Summary",
+    "Processing Time",
+    "Year",
+    "Publication Date",
+]
+
+VALID_STATES = ["ABSENT", "PARTIALLY_PRESENT", "PRESENT"]
+
+# Column-level feedback options
+COL_FEEDBACK_OPTIONS = [
+    "Not reviewed",
+    "Correct",
+    "Incorrect",
+    "Unclear",
+]
 
 
-def load_data(path: str) -> pd.DataFrame:
-    """Load CSV or Parquet into a DataFrame."""
-    path = Path(path)
-    if not path.exists():
-        return pd.DataFrame()
-    suf = path.suffix.lower()
-    if suf == ".csv":
-        return pd.read_csv(path)
-    if suf in (".parquet", ".pq"):
-        return pd.read_parquet(path)
-    raise ValueError(f"Unsupported format: {suf}. Use .csv or .parquet.")
+# -----------------------------
+# Feedback persistence
+# -----------------------------
+DEFAULT_FEEDBACK_DIR = Path("results")
+DEFAULT_FEEDBACK_DIR.mkdir(exist_ok=True)
+
+FEEDBACK_CSV = DEFAULT_FEEDBACK_DIR / "curator_feedback.csv"
+FEEDBACK_PARQUET = DEFAULT_FEEDBACK_DIR / "curator_feedback.parquet"
 
 
-def normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
-    """Ensure we have PMID and standard status columns; derive Year if possible."""
-    if df.empty:
-        return df
-    if "PMID" not in df.columns:
-        st.error("Data must contain a 'PMID' column.")
-        return pd.DataFrame()
-    # Year from publication date or other column if present
-    if "Year" not in df.columns and "Publication Date" in df.columns:
-        try:
-            df["Year"] = pd.to_datetime(df["Publication Date"], errors="coerce").dt.year
-        except Exception:
-            pass
-    return df
-
-
+# -----------------------------
+# Helpers
+# -----------------------------
 def make_pmid_link(pmid) -> str:
     """Return PubMed URL for a PMID."""
     try:
         pid = str(int(float(pmid)))
         return f"https://pubmed.ncbi.nlm.nih.gov/{pid}/"
-    except (ValueError, TypeError):
+    except Exception:
         return ""
 
 
-def render_table(df: pd.DataFrame) -> None:
-    """Render sortable/searchable table and optional feedback."""
-    if df.empty:
-        st.info("No data to display. Load a CSV or Parquet file with BioAnalyzer predictions.")
-        return
+def safe_int(x) -> Optional[int]:
+    try:
+        return int(float(x))
+    except Exception:
+        return None
 
-    st.subheader("Candidate curatable articles")
-    st.caption("Sort using the column selector; search in the text box below.")
+
+def normalize_status_value(x: str) -> str:
+    """Normalize status values to one of ABSENT/PARTIALLY_PRESENT/PRESENT."""
+    if pd.isna(x):
+        return ""
+    x = str(x).strip().upper()
+    if x in VALID_STATES:
+        return x
+    # Common variants
+    if x in {"PARTIAL", "PARTIALLY", "PARTLY"}:
+        return "PARTIALLY_PRESENT"
+    if x in {"YES", "TRUE"}:
+        return "PRESENT"
+    if x in {"NO", "FALSE"}:
+        return "ABSENT"
+    return x
+
+
+def compute_priority_score(row: pd.Series) -> float:
+    """Rank candidates by how many fields are predicted present."""
+    score = 0.0
+    for col in STATUS_COLUMNS:
+        val = str(row.get(col, "")).strip().upper()
+        if val == "PRESENT":
+            score += 1.0
+        elif val == "PARTIALLY_PRESENT":
+            score += 0.5
+    return score
+
+
+@st.cache_data(show_spinner=False)
+def load_data_from_path(path: str) -> pd.DataFrame:
+    path = Path(path)
+    if not path.exists():
+        return pd.DataFrame()
+
+    suf = path.suffix.lower()
+    if suf == ".csv":
+        return pd.read_csv(path)
+    if suf in (".parquet", ".pq"):
+        return pd.read_parquet(path)
+
+    raise ValueError(f"Unsupported format: {suf}. Use .csv or .parquet.")
+
+
+@st.cache_data(show_spinner=False)
+def load_data_from_upload(uploaded) -> pd.DataFrame:
+    if uploaded is None:
+        return pd.DataFrame()
+
+    name = uploaded.name.lower()
+    if name.endswith(".csv"):
+        return pd.read_csv(uploaded)
+    if name.endswith(".parquet") or name.endswith(".pq"):
+        return pd.read_parquet(uploaded)
+
+    raise ValueError("Unsupported upload. Use .csv or .parquet.")
+
+
+def normalize_dataset(df: pd.DataFrame) -> pd.DataFrame:
+    if df.empty:
+        return df
+
+    if "PMID" not in df.columns:
+        st.error("Data must contain a 'PMID' column.")
+        return pd.DataFrame()
+
+    # Normalize PMID
+    df["PMID"] = df["PMID"].apply(safe_int)
+    df = df.dropna(subset=["PMID"]).copy()
+    df["PMID"] = df["PMID"].astype(int)
+
+    # Year derivation
+    if "Year" not in df.columns and "Publication Date" in df.columns:
+        try:
+            df["Year"] = pd.to_datetime(df["Publication Date"], errors="coerce").dt.year
+        except Exception:
+            pass
+
+    # Normalize statuses
+    for col in STATUS_COLUMNS:
+        if col in df.columns:
+            df[col] = df[col].apply(normalize_status_value)
+
+    # Priority score
+    if any(c in df.columns for c in STATUS_COLUMNS):
+        df["Priority Score"] = df.apply(compute_priority_score, axis=1)
+
+    # PubMed link
+    df["PubMed Link"] = df["PMID"].apply(make_pmid_link)
+
+    return df
+
+
+def _default_feedback_columns() -> List[str]:
+    """Defines the full schema for feedback rows."""
+    base = [
+        "PMID",
+        "curator_id",
+        "overall_verdict",
+        "comment",
+        "timestamp",
+        "bioanalyzer_version",
+    ]
+
+    # One column per predicted field
+    # e.g. col_feedback__Host_Species_Status
+    per_field = []
+    for col in STATUS_COLUMNS:
+        safe = col.replace(" ", "_")
+        per_field.append(f"col_feedback__{safe}")
+
+    return base + per_field
+
+
+def load_feedback() -> pd.DataFrame:
+    if FEEDBACK_PARQUET.exists():
+        try:
+            df = pd.read_parquet(FEEDBACK_PARQUET)
+            return df
+        except Exception:
+            pass
+
+    if FEEDBACK_CSV.exists():
+        try:
+            df = pd.read_csv(FEEDBACK_CSV)
+            return df
+        except Exception:
+            pass
+
+    return pd.DataFrame(columns=_default_feedback_columns())
+
+
+def save_feedback(df: pd.DataFrame) -> None:
+    DEFAULT_FEEDBACK_DIR.mkdir(exist_ok=True)
+
+    # Ensure schema contains all columns
+    for col in _default_feedback_columns():
+        if col not in df.columns:
+            df[col] = ""
+
+    df.to_csv(FEEDBACK_CSV, index=False)
+
+    try:
+        df.to_parquet(FEEDBACK_PARQUET, index=False)
+    except Exception:
+        # Parquet may fail if pyarrow isn't installed
+        pass
+
+
+def upsert_feedback(existing: pd.DataFrame, row: Dict) -> pd.DataFrame:
+    """Upsert by PMID + curator_id."""
+    if existing.empty:
+        return pd.DataFrame([row])
+
+    # Ensure all columns exist
+    for col in _default_feedback_columns():
+        if col not in existing.columns:
+            existing[col] = ""
+
+    key_cols = ["PMID", "curator_id"]
+    mask = (existing["PMID"].astype(str) == str(row["PMID"])) & (
+        existing["curator_id"].astype(str) == str(row["curator_id"])
+    )
+
+    if mask.any():
+        for k, v in row.items():
+            existing.loc[mask, k] = v
+        return existing
+
+    return pd.concat([existing, pd.DataFrame([row])], ignore_index=True)
+
+
+# -----------------------------
+# UI rendering
+# -----------------------------
+def render_filters(df: pd.DataFrame) -> pd.DataFrame:
+    st.sidebar.header("Filters")
+
+    search = st.sidebar.text_input(
+        "Search (PMID, title, journal, summary)",
+        placeholder="e.g. obesity, 2019, Lactobacillus",
+    ).strip().lower()
+
+    status_filters = {}
+    for col in STATUS_COLUMNS:
+        if col in df.columns:
+            status_filters[col] = st.sidebar.multiselect(
+                col,
+                options=VALID_STATES,
+                default=[],
+            )
+
+    if "Year" in df.columns:
+        years = df["Year"].dropna()
+        if not years.empty:
+            years = years.astype(int)
+            min_y, max_y = int(years.min()), int(years.max())
+            year_range = st.sidebar.slider(
+                "Year range",
+                min_value=min_y,
+                max_value=max_y,
+                value=(min_y, max_y),
+            )
+        else:
+            year_range = None
+    else:
+        year_range = None
+
+    out = df.copy()
 
     # Search
-    search = st.text_input("Search (PMID, title, journal, summary)", key="search")
     if search:
-        search = search.strip().lower()
-        mask = pd.Series(False, index=df.index)
-        for col in df.select_dtypes(include=["object"]).columns:
-            mask |= df[col].astype(str).str.lower().str.contains(search, na=False)
-        df = df.loc[mask]
-    if df.empty:
-        st.warning("No rows match the search.")
-        return
+        mask = pd.Series(False, index=out.index)
+        mask |= out["PMID"].astype(str).str.contains(search, na=False)
+        for col in ["Title", "Journal", "Summary"]:
+            if col in out.columns:
+                mask |= out[col].astype(str).str.lower().str.contains(search, na=False)
+        out = out.loc[mask]
 
-    # Sort
-    sort_col = st.selectbox(
-        "Sort by",
-        options=["PMID", "Title"] + [c for c in STATUS_COLUMNS if c in df.columns],
-        key="sort_col",
+    # Status filters
+    for col, allowed in status_filters.items():
+        if allowed:
+            out = out[out[col].isin(allowed)]
+
+    # Year filter
+    if year_range and "Year" in out.columns:
+        out = out[(out["Year"] >= year_range[0]) & (out["Year"] <= year_range[1])]
+
+    return out
+
+
+def render_table(df: pd.DataFrame) -> Optional[int]:
+    if df.empty:
+        st.warning("No rows match your filters.")
+        return None
+
+    st.subheader("Candidate curatable articles")
+    st.caption(
+        "Tip: Sort by Priority Score to review the most promising candidates first."
     )
-    ascending = st.checkbox("Ascending", value=True, key="asc")
+
+    sort_options = ["Priority Score", "PMID"]
+    if "Title" in df.columns:
+        sort_options.append("Title")
+    for c in STATUS_COLUMNS:
+        if c in df.columns:
+            sort_options.append(c)
+
+    sort_col = st.selectbox("Sort by", options=sort_options, index=0)
+    ascending = st.checkbox("Ascending", value=False)
+
     if sort_col in df.columns:
         df = df.sort_values(by=sort_col, ascending=ascending, na_position="last")
 
-    # Columns to show: PMID (as link), Title, Journal, Year, status columns, Summary if present
-    display_cols = ["PMID", "Title"]
-    for c in ["Journal", "Year"] + STATUS_COLUMNS:
-        if c in df.columns and c not in display_cols:
-            display_cols.append(c)
-    if "Summary" in df.columns:
-        display_cols.append("Summary")
-    display_cols = [c for c in display_cols if c in df.columns]
-    table_df = df[display_cols].copy()
+    st.divider()
+    max_rows = st.slider("Rows to display", 50, 2000, 300, 50)
+    df_show = df.head(max_rows).copy()
 
-    # Add PubMed link column
-    table_df["PubMed"] = table_df["PMID"].apply(
-        lambda x: f"[Open]({make_pmid_link(x)})" if pd.notna(x) else ""
-    )
-    # Reorder so link is after PMID
-    cols = ["PMID", "PubMed"] + [c for c in display_cols if c != "PMID"]
-    table_df = table_df[[c for c in cols if c in table_df.columns]]
+    display_cols: List[str] = ["PMID"]
+    if "PubMed Link" in df_show.columns:
+        display_cols.append("PubMed Link")
+
+    for c in ["Priority Score", "Title", "Journal", "Year"]:
+        if c in df_show.columns:
+            display_cols.append(c)
+
+    for c in STATUS_COLUMNS:
+        if c in df_show.columns:
+            display_cols.append(c)
+
+    if "Summary" in df_show.columns:
+        display_cols.append("Summary")
+
+    df_show = df_show[display_cols]
 
     st.dataframe(
-        table_df,
+        df_show,
         use_container_width=True,
+        height=650,
         column_config={
-            "PubMed": st.column_config.LinkColumn("PubMed", display_text="Open"),
+            "PubMed Link": st.column_config.LinkColumn("PubMed", display_text="Open"),
         },
-        height=min(600, 80 + 35 * len(table_df)),
     )
 
-    st.metric("Rows shown", len(table_df))
+    st.metric("Rows after filtering", len(df))
+    st.metric("Rows displayed", len(df_show))
 
-    # Optional: curator feedback (one verdict per PMID)
+    st.divider()
+    st.subheader("Quick select for feedback")
+    selected = st.selectbox(
+        "Select a PMID from currently displayed rows",
+        options=[""] + df_show["PMID"].astype(str).tolist(),
+        index=0,
+    )
+    if selected:
+        return int(selected)
+    return None
+
+
+def render_column_level_validation(selected_row: pd.Series) -> Dict[str, str]:
+    """Render per-column correctness UI and return selections."""
+
+    st.markdown("### Column-level validation")
+    st.caption(
+        "For each predicted field, mark whether BioAnalyzer's status looks correct based on the paper."
+    )
+
+    col_feedback = {}
+
+    # Use 2 columns layout for compactness
+    left, right = st.columns(2)
+    halves = [STATUS_COLUMNS[:3], STATUS_COLUMNS[3:]]
+
+    for pane, cols in zip([left, right], halves):
+        with pane:
+            for col in cols:
+                if col not in selected_row.index:
+                    continue
+
+                pred = str(selected_row.get(col, ""))
+                label = col.replace(" Status", "")
+
+                st.markdown(f"**{label}**")
+                st.write(f"Predicted: `{pred}`")
+
+                safe = col.replace(" ", "_")
+                key = f"col_feedback__{safe}"
+
+                choice = st.selectbox(
+                    f"Validation for {label}",
+                    options=COL_FEEDBACK_OPTIONS,
+                    index=0,
+                    key=f"ui__{key}",
+                )
+                col_feedback[key] = choice
+
+                st.divider()
+
+    return col_feedback
+
+
+def render_feedback_section(selected_pmid: Optional[int], dataset_df: pd.DataFrame) -> None:
     st.subheader("Curator feedback")
-    st.caption("Record your verdict for a paper to support real-world benchmarking.")
-    feedback_file = Path("curator_feedback.csv")
-    with st.form("feedback_form"):
-        fb_pmid = st.text_input("PMID", key="fb_pmid", placeholder="e.g. 31215600")
-        verdict = st.selectbox(
-            "Verdict",
-            options=["Correct", "Incorrect", "Uncertain", "Not reviewed"],
-            key="verdict",
+    st.caption(
+        "Feedback is stored locally in results/. Entries are upserted by PMID + curator_id."
+    )
+
+    feedback_df = load_feedback()
+
+    selected_row = None
+    title_prefill = ""
+
+    if selected_pmid is not None:
+        try:
+            selected_row = dataset_df.loc[dataset_df["PMID"] == selected_pmid].iloc[0]
+        except Exception:
+            selected_row = None
+
+    if selected_row is not None and "Title" in selected_row.index:
+        title_prefill = str(selected_row.get("Title", ""))
+
+    with st.form("feedback_form", clear_on_submit=False):
+        curator_id = st.text_input(
+            "Curator ID / initials",
+            value=os.getenv("USER", ""),
+            placeholder="e.g. Ronald Ouma",
+        ).strip()
+
+        fb_pmid = st.text_input(
+            "PMID",
+            value=str(selected_pmid) if selected_pmid else "",
+            placeholder="e.g. 31215600",
+        ).strip()
+
+        if title_prefill:
+            st.write(f"**Title:** {title_prefill}")
+
+        overall_verdict = st.selectbox(
+            "Overall paper verdict",
+            options=["Curatable", "Not curatable", "Uncertain", "Not reviewed"],
+            index=0,
         )
-        comment = st.text_area("Comment (optional)", key="fb_comment", height=80)
+
+        comment = st.text_area(
+            "Comment (optional)",
+            placeholder="Evidence, edge case, missing field, false positive reason, etc.",
+            height=90,
+        )
+
+        bioanalyzer_version = st.text_input(
+            "BioAnalyzer version (recommended)",
+            value=os.getenv("BIOANALYZER_VERSION", ""),
+            placeholder="e.g. 1.0.0, commit SHA, docker tag",
+        ).strip()
+
+        # Column-level validation
+        col_feedback = {}
+        if selected_row is not None:
+            col_feedback = render_column_level_validation(selected_row)
+        else:
+            st.info("Select a PMID above to enable column-level validation.")
+
         submitted = st.form_submit_button("Save feedback")
-        if submitted and fb_pmid and fb_pmid.strip():
-            try:
-                row = {
-                    "PMID": fb_pmid.strip(),
-                    "verdict": verdict,
-                    "comment": (comment or "").strip(),
-                    "timestamp": pd.Timestamp.now().isoformat(),
-                }
-                new_df = pd.DataFrame([row])
-                if feedback_file.exists():
-                    existing = pd.read_csv(feedback_file)
-                    existing = pd.concat([existing, new_df], ignore_index=True)
-                else:
-                    existing = new_df
-                existing.to_csv(feedback_file, index=False)
-                st.success(f"Saved verdict for PMID {fb_pmid}.")
-            except Exception as e:
-                st.error(f"Could not save feedback: {e}")
-    if feedback_file.exists():
-        fb_df = pd.read_csv(feedback_file)
-        st.download_button(
-            "Download feedback CSV",
-            data=fb_df.to_csv(index=False),
-            file_name=feedback_file.name,
-            mime="text/csv",
-            key="dl_feedback",
-        )
+
+        if submitted:
+            if not curator_id:
+                st.error("Please provide curator_id (initials or username).")
+                return
+            if not fb_pmid:
+                st.error("Please provide a PMID.")
+                return
+
+            pid = safe_int(fb_pmid)
+            if pid is None:
+                st.error("PMID must be numeric.")
+                return
+
+            row = {
+                "PMID": int(pid),
+                "curator_id": curator_id,
+                "overall_verdict": overall_verdict,
+                "comment": comment.strip(),
+                "timestamp": pd.Timestamp.now(tz="UTC").isoformat(),
+                "bioanalyzer_version": bioanalyzer_version,
+            }
+
+            # Add per-column feedback
+            for k in _default_feedback_columns():
+                if k.startswith("col_feedback__"):
+                    row[k] = col_feedback.get(k, "Not reviewed")
+
+            feedback_df = upsert_feedback(feedback_df, row)
+            save_feedback(feedback_df)
+            st.success(f"Saved feedback for PMID {pid} (curator={curator_id}).")
+
+    st.divider()
+    st.subheader("Existing feedback")
+
+    if feedback_df.empty:
+        st.info("No feedback recorded yet.")
+        return
+
+    # Display a compact view first
+    compact_cols = [
+        "PMID",
+        "curator_id",
+        "overall_verdict",
+        "timestamp",
+        "bioanalyzer_version",
+    ]
+
+    # Add per-column feedback if present
+    for col in _default_feedback_columns():
+        if col.startswith("col_feedback__") and col in feedback_df.columns:
+            compact_cols.append(col)
+
+    # Ensure columns exist
+    compact_cols = [c for c in compact_cols if c in feedback_df.columns]
+
+    st.dataframe(
+        feedback_df.sort_values("timestamp", ascending=False)[compact_cols],
+        use_container_width=True,
+        height=320,
+    )
+
+    st.download_button(
+        "Download feedback CSV",
+        data=feedback_df.to_csv(index=False),
+        file_name=FEEDBACK_CSV.name,
+        mime="text/csv",
+    )
 
 
+# -----------------------------
+# Main
+# -----------------------------
 def main():
     st.set_page_config(page_title="BioAnalyzer Curator Table", layout="wide")
     st.title("BioAnalyzer Curator Table")
+
     st.markdown(
-        "Sortable, searchable table of BioAnalyzer predictions for **candidate curatable articles**. "
-        "Use this for real-world testing by curators."
+        """
+This dashboard provides a **sortable, searchable, filterable** table of BioAnalyzer predictions for
+candidate curatable PubMed articles.
+
+### Why this is useful
+- Lets curators review predictions in a real-world workflow
+- Captures feedback aligned by PMID
+- Adds **column-level correctness** per predicted field
+
+This makes the exported feedback suitable for:
+- confusion matrices
+- error analysis per field
+- MCC decisions on how to treat PARTIALLY_PRESENT
+        """
     )
 
-    # Data source: file upload or path
-    data_source = st.radio(
-        "Data source",
+    st.sidebar.header("Data source")
+
+    data_source = st.sidebar.radio(
+        "Choose input mode",
         options=["Upload CSV/Parquet", "Use file path"],
-        key="data_source",
+        index=0,
     )
 
-    df = pd.DataFrame()
+    raw_df = pd.DataFrame()
+
     if data_source == "Upload CSV/Parquet":
-        uploaded = st.file_uploader("Choose a file", type=["csv", "parquet"], key="upload")
+        uploaded = st.sidebar.file_uploader(
+            "Upload dataset",
+            type=["csv", "parquet", "pq"],
+        )
         if uploaded:
             try:
-                if uploaded.name.lower().endswith(".csv"):
-                    df = pd.read_csv(uploaded)
-                else:
-                    df = pd.read_parquet(uploaded)
+                raw_df = load_data_from_upload(uploaded)
             except Exception as e:
                 st.error(f"Could not load file: {e}")
+                return
     else:
-        path = st.text_input(
-            "Path to CSV or Parquet (e.g. analysis_results.csv or ../validation_dataset.csv)",
-            value="",
-            key="path",
-        )
+        path = st.sidebar.text_input(
+            "Path to CSV/Parquet",
+            placeholder="e.g. analysis_results.csv",
+        ).strip()
         if path:
             try:
-                df = load_data(path.strip())
+                raw_df = load_data_from_path(path)
             except Exception as e:
                 st.error(str(e))
+                return
 
-    df = normalize_columns(df)
-    render_table(df)
+    if raw_df.empty:
+        st.info("Upload a dataset or provide a file path to begin.")
+        st.stop()
 
-    st.sidebar.header("About")
+    df = normalize_dataset(raw_df)
+
+    if df.empty:
+        st.error("Dataset loaded, but no valid rows found after normalization.")
+        st.stop()
+
+    missing = [c for c in STATUS_COLUMNS if c not in df.columns]
+    if missing:
+        st.warning(
+            "Some expected status columns are missing. "
+            "Priority scoring and filtering will be partial.\n\n"
+            f"Missing columns: {missing}"
+        )
+
+    filtered_df = render_filters(df)
+    selected_pmid = render_table(filtered_df)
+
+    st.divider()
+    render_feedback_section(selected_pmid, filtered_df)
+
+    st.sidebar.divider()
+    st.sidebar.header("Notes")
     st.sidebar.markdown(
-        "Data should contain **PMID** and the 6 status columns: "
-        "Host Species Status, Body Site Status, Condition Status, "
-        "Sequencing Type Status, Taxa Level Status, Sample Size Status. "
-        "Optional: Title, Journal, Summary, Year."
+        f"""
+Feedback files are saved to:
+
+- `{FEEDBACK_CSV}`
+- `{FEEDBACK_PARQUET}` (if parquet supported)
+
+Tip: set an environment variable to track versions:
+
+- `BIOANALYZER_VERSION=commit_sha`
+        """
     )
-    st.sidebar.markdown("See `docs/CURATOR_TABLE_DESIGN.md` for scale, fields, and feedback plan.")
 
 
 if __name__ == "__main__":
