@@ -54,7 +54,6 @@ from typing import Optional, List, Dict
 import pandas as pd
 import streamlit as st
 
-
 # -----------------------------
 # Expected prediction columns
 # -----------------------------
@@ -86,7 +85,6 @@ COL_FEEDBACK_OPTIONS = [
     "Unclear",
 ]
 
-
 # -----------------------------
 # Feedback persistence
 # -----------------------------
@@ -95,7 +93,6 @@ DEFAULT_FEEDBACK_DIR.mkdir(exist_ok=True)
 
 FEEDBACK_CSV = DEFAULT_FEEDBACK_DIR / "curator_feedback.csv"
 FEEDBACK_PARQUET = DEFAULT_FEEDBACK_DIR / "curator_feedback.parquet"
-
 
 # -----------------------------
 # Helpers
@@ -108,13 +105,11 @@ def make_pmid_link(pmid) -> str:
     except Exception:
         return ""
 
-
 def safe_int(x) -> Optional[int]:
     try:
         return int(float(x))
     except Exception:
         return None
-
 
 def normalize_status_value(x: str) -> str:
     """Normalize status values to one of ABSENT/PARTIALLY_PRESENT/PRESENT."""
@@ -132,7 +127,6 @@ def normalize_status_value(x: str) -> str:
         return "ABSENT"
     return x
 
-
 def compute_priority_score(row: pd.Series) -> float:
     """Rank candidates by how many fields are predicted present."""
     score = 0.0
@@ -143,7 +137,6 @@ def compute_priority_score(row: pd.Series) -> float:
         elif val == "PARTIALLY_PRESENT":
             score += 0.5
     return score
-
 
 @st.cache_data(show_spinner=False)
 def load_data_from_path(path: str) -> pd.DataFrame:
@@ -159,7 +152,6 @@ def load_data_from_path(path: str) -> pd.DataFrame:
 
     raise ValueError(f"Unsupported format: {suf}. Use .csv or .parquet.")
 
-
 @st.cache_data(show_spinner=False)
 def load_data_from_upload(uploaded) -> pd.DataFrame:
     if uploaded is None:
@@ -172,7 +164,6 @@ def load_data_from_upload(uploaded) -> pd.DataFrame:
         return pd.read_parquet(uploaded)
 
     raise ValueError("Unsupported upload. Use .csv or .parquet.")
-
 
 def normalize_dataset(df: pd.DataFrame) -> pd.DataFrame:
     if df.empty:
@@ -208,7 +199,6 @@ def normalize_dataset(df: pd.DataFrame) -> pd.DataFrame:
 
     return df
 
-
 def _default_feedback_columns() -> List[str]:
     """Defines the full schema for feedback rows."""
     base = [
@@ -229,7 +219,6 @@ def _default_feedback_columns() -> List[str]:
 
     return base + per_field
 
-
 def load_feedback() -> pd.DataFrame:
     if FEEDBACK_PARQUET.exists():
         try:
@@ -247,7 +236,6 @@ def load_feedback() -> pd.DataFrame:
 
     return pd.DataFrame(columns=_default_feedback_columns())
 
-
 def save_feedback(df: pd.DataFrame) -> None:
     DEFAULT_FEEDBACK_DIR.mkdir(exist_ok=True)
 
@@ -263,7 +251,6 @@ def save_feedback(df: pd.DataFrame) -> None:
     except Exception:
         # Parquet may fail if pyarrow isn't installed
         pass
-
 
 def upsert_feedback(existing: pd.DataFrame, row: Dict) -> pd.DataFrame:
     """Upsert by PMID + curator_id."""
@@ -286,7 +273,6 @@ def upsert_feedback(existing: pd.DataFrame, row: Dict) -> pd.DataFrame:
         return existing
 
     return pd.concat([existing, pd.DataFrame([row])], ignore_index=True)
-
 
 # -----------------------------
 # UI rendering
@@ -456,7 +442,6 @@ def render_column_level_validation(selected_row: pd.Series) -> Dict[str, str]:
 
     return col_feedback
 
-
 def render_feedback_section(selected_pmid: Optional[int], dataset_df: pd.DataFrame) -> None:
     st.subheader("Curator feedback")
     st.caption(
@@ -588,7 +573,6 @@ def render_feedback_section(selected_pmid: Optional[int], dataset_df: pd.DataFra
         mime="text/csv",
     )
 
-
 # -----------------------------
 # Main
 # -----------------------------
@@ -684,7 +668,6 @@ Tip: set an environment variable to track versions:
 - `BIOANALYZER_VERSION=commit_sha`
         """
     )
-
 
 if __name__ == "__main__":
     main()
