@@ -12,7 +12,7 @@ You'll need:
 
 ## Docker Setup (Recommended)
 
-Works on modern Linux systems.
+Works on modern Linux systems, windows and macbook
 
 ```bash
 git clone https://github.com/waldronlab/bioanalyzer-backend.git

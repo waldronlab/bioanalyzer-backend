@@ -1,12 +1,5 @@
 # Curator Table: Design & Implementation Plan
 
-## Goal (from Levi)
-
-> "It could get some real-world testing if you create a **big sortable & searchable online table** with predictions for **candidate curatable articles from PubMed**. You would probably want to do a big analysis like that on **superstudio**."
-
-This document answers the questions you raised with Levi and outlines how we'll build the table so curators can test BioAnalyzer in the real world.
-
----
 
 ## 1. Scale & Backend
 
@@ -50,7 +43,7 @@ We can start with **PMID, Title, Year, Journal, the 6 field statuses, and one co
 
 ## 3. Curation Feedback Loop
 
-**Recommendation:** **Yes – support a lightweight feedback loop** so curators can mark predictions as correct/incorrect/uncertain.
+**My Recommendation:** **Yes – support a lightweight feedback loop** so curators can mark predictions as correct/incorrect/uncertain.
 
 - **MVP:** One extra column or side panel: **Curator verdict** (e.g. Correct / Incorrect / Uncertain / Not reviewed).  
 - Store verdicts in a **separate file or table** (e.g. `curator_feedback.csv` or `curator_feedback` table) keyed by PMID (and optionally field name if we want field-level feedback later).  
@@ -64,10 +57,9 @@ We can start with **PMID, Title, Year, Journal, the 6 field statuses, and one co
 | Concern | Approach |
 |---------|----------|
 | **PubMed E-utilities** | BioAnalyzer already calls them. For the **table**, we do **not** call PubMed at display time: we use **cached metadata** (title, year, journal) that was stored when the batch was run. So the table is a view over **precomputed results**. |
-| **Storing metadata locally** | **Yes.** Batch run (on your machine or SuperStudio) writes: PMID, title, year, journal, and all BioAnalyzer fields + confidence to CSV/Parquet/DB. The curator table only reads that. |
+| **Storing metadata locally** | **Yes.** Batch run (on the machine or SuperStudio) writes: PMID, title, year, journal, and all BioAnalyzer fields + confidence to CSV/Parquet/DB. The curator table only reads that. |
 | **SuperStudio** | Used for **running the big batch** (e.g. 50k–500k PMIDs). Results are then copied to a shared store (file or DB) and the table reads from that. |
 
-So: **no live PubMed calls in the table UI**; optional live calls only for “Analyze this PMID now” if we add that later.
 
 ---
 
@@ -77,8 +69,6 @@ So: **no live PubMed calls in the table UI**; optional live calls only for “An
 - **Data:** **Pandas** + **CSV or Parquet** (same shape as current validation/export).  
 - **Table:** Sortable and searchable via **Streamlit’s native dataframe + filters**, or **st.data_editor** / **streamlit-aggrid** if we need more interactivity.  
 - **Feedback:** Form or buttons per row → append to `curator_feedback.csv` (or SQLite) with PMID, verdict, optional comment, timestamp.
-
-R/Shiny remains an option later if the group prefers; the data format (CSV/Parquet/DB) can stay the same.
 
 ---
 
@@ -95,14 +85,6 @@ R/Shiny remains an option later if the group prefers; the data format (CSV/Parqu
 
 ---
 
-## 7. Suggested Reply to Levi (Summary)
-
-You can send something along these lines:
-
-- **Scale:** First version will support **~1k–5k PMIDs** with a flat file (CSV/Parquet); we’ll scale to 50k+ with a DB and SuperStudio for the big batch run.  
-- **Fields:** Table will include **PMID, title, year, journal, all 6 field statuses, confidence, and curation summary**; evidence snippets can be added in a follow-up.  
-- **Feedback:** We’ll support a **curation feedback loop** (e.g. correct/incorrect/uncertain) stored separately so we can use it for real-world benchmarking.  
-- **APIs:** The table will **not** call PubMed at display time; it will use **locally stored metadata** from the batch run. SuperStudio will be used for **large batch analysis**; the table will consume the exported results.
 
 ---
 

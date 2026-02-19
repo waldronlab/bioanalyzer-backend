@@ -32,7 +32,7 @@ cp .env.example .env
 ```bash
 # Required API Keys
 NCBI_API_KEY=your_ncbi_api_key
-EMAIL=your_email@example.com
+EMAIL=your_email@example.com (This is not so much crucial)
 
 # At least one LLM provider
 GEMINI_API_KEY=your_gemini_key
