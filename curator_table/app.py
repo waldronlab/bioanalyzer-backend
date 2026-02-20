@@ -668,7 +668,7 @@ candidate curatable PubMed articles.
   - curator correctness flags
 
 This makes the exported feedback suitable for:
-- confusion matrices
+- confusion matrices to evaluate accuracy 
 - per-field error profiling
 - MCC decisions for PARTIALLY_PRESENT
         """
