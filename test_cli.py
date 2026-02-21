@@ -6,7 +6,7 @@ BioAnalyzer CLI Test - Simple test without dependencies
 
 def test_cli_structure():
     """Test that the CLI structure is correct."""
-    print("🧪 Testing BioAnalyzer Backend CLI Structure...")
+    print("🧪 Testing BioAnalyzer Package CLI Structure...")
 
     # Test CLI file exists
     import os
@@ -106,7 +106,7 @@ def test_field_info():
 
 
 if __name__ == "__main__":
-    print("🚀 BioAnalyzer Backend CLI Test")
+    print("🚀 BioAnalyzer Package CLI Test")
     print("=" * 40)
 
     # Test structure
@@ -114,10 +114,10 @@ if __name__ == "__main__":
         # Test field info
         test_field_info()
 
-        print("\n✅ Backend CLI structure is correct!")
+        print("\n✅ Package CLI structure is correct!")
         print("📝 To use the CLI, install dependencies:")
         print("   pip install -r config/requirements.txt")
         print("   python3 cli.py fields")
         print("   python3 cli.py analyze 12345678")
     else:
-        print("\n❌ Backend CLI structure has issues!")
+        print("\n❌ Package CLI structure has issues!")

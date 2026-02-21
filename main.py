@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Main entry point for BioAnalyzer Backend API server."""
+"""Main entry point for BioAnalyzer Package API server."""
 
 import sys
 import os
@@ -42,7 +42,7 @@ def _get_workers() -> int:
 
 def main():
     """Start the API server."""
-    parser = argparse.ArgumentParser(description="BioAnalyzer Backend API Server")
+    parser = argparse.ArgumentParser(description="BioAnalyzer Package API Server")
     parser.add_argument("--host", default="0.0.0.0", help="Host to bind to")
     parser.add_argument("--port", type=int, default=8000, help="Port to bind to")
     parser.add_argument("--reload", action="store_true", help="Enable auto-reload")
@@ -57,7 +57,7 @@ def main():
     reload_enabled = _should_reload(args)
     workers = _get_workers()
 
-    print("Starting BioAnalyzer Backend API Server...")
+    print("Starting BioAnalyzer Package API Server...")
     print(f"API: http://{args.host}:{args.port}")
     print(f"Docs: http://{args.host}:{args.port}/docs")
     print(f"Health: http://{args.host}:{args.port}/health")

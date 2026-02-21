@@ -1,6 +1,6 @@
-# BioAnalyzer Backend - Complete Setup Guide
+# BioAnalyzer Package - Complete Setup Guide
 
-This guide documents the actual steps taken to successfully build and run the BioAnalyzer Backend system. Based on testing on Ubuntu Linux with Docker.
+This guide documents the actual steps taken to successfully build and run the BioAnalyzer Package system. Based on testing on Ubuntu Linux with Docker.
 
 ## System Requirements
 
@@ -16,7 +16,7 @@ This guide documents the actual steps taken to successfully build and run the Bi
 
 ```bash
 # Navigate to project directory
-cd /home/<computer_user_bame>/Desktop/new/bioanalyzer-backend
+cd /path/to/BioAnalyzer-Backend
 
 # Verify project structure
 ls -la
@@ -175,7 +175,7 @@ docker compose logs --tail=20
 ## System Status After Setup
 
 ✅ **Docker**: Available and working  
-✅ **Backend Container**: Running and healthy  
+✅ **Package Container**: Running and healthy  
 ✅ **API Server**: Responding on port 8000  
 ✅ **CLI Commands**: Installed and functional  
 ✅ **Health Check**: All systems operational  

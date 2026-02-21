@@ -827,7 +827,7 @@ GET /api/v1/config
 
 ## Technology Stack
 
-### Backend
+### Package (API)
 - **Framework:** FastAPI
 - **Language:** Python 3.8+
 - **LLM Integration:** litellm (via Paper-QA)
@@ -859,7 +859,7 @@ GET /api/v1/config
 
 ```bash
 # Build
-docker build -t bioanalyzer-backend .
+docker build -t bioanalyzer-package .
 
 # Run
 docker run -d \
@@ -868,7 +868,7 @@ docker run -d \
   -e GEMINI_API_KEY=your_key \
   -e NCBI_API_KEY=your_key \
   -e EMAIL=your@email.com \
-  bioanalyzer-backend
+  bioanalyzer-package
 ```
 
 ### Environment Variables

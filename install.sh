@@ -46,7 +46,7 @@ mkdir -p "$INSTALL_DIR"
 
 # Get the current directory (BioAnalyzer-Backend)
 CURRENT_DIR=$(pwd)
-print_status "BioAnalyzer backend directory: $CURRENT_DIR"
+print_status "BioAnalyzer package directory: $CURRENT_DIR"
 
 # Check if we're in the right directory
 if [[ ! -f "cli.py" ]] || [[ ! -f "BioAnalyzer" ]]; then
@@ -147,7 +147,7 @@ echo "  BioAnalyzer analyze --batch 12345678,87654321"
 echo "  BioAnalyzer analyze --file pmids.txt"
 echo ""
 echo "Installation location: $INSTALL_DIR"
-echo "Backend directory: $CURRENT_DIR"
+echo "Package directory: $CURRENT_DIR"
 echo ""
 
 if [[ $SYSTEM_INSTALL == true ]]; then

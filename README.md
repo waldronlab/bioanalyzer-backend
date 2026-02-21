@@ -1,4 +1,4 @@
-# BioAnalyzer Backend
+# BioAnalyzer Package
 
 [![CI/CD Pipeline](https://github.com/waldronlab/bioanalyzer-backend/actions/workflows/ci.yml/badge.svg)](https://github.com/waldronlab/bioanalyzer-backend/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://python.org)
@@ -34,7 +34,7 @@ Each field gets a status: `PRESENT`, `PARTIALLY_PRESENT`, or `ABSENT`, plus a co
 
 ```bash
 git clone https://github.com/waldronlab/bioanalyzer-backend.git
-cd bioanalyzer-backend
+cd BioAnalyzer-Backend
 
 chmod +x install.sh
 ./install.sh
@@ -51,7 +51,7 @@ API docs at http://localhost:8000/docs
 
 ```bash
 git clone https://github.com/waldronlab/bioanalyzer-backend.git
-cd bioanalyzer-backend
+cd BioAnalyzer-Backend
 
 python3 -m venv .venv
 source .venv/bin/activate

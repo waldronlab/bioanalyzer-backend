@@ -1,9 +1,9 @@
 # Curator Table: Design & Implementation Plan
 
 
-## 1. Scale & Backend
+## 1. Scale & storage
 
-| Scale | Approach | Backend | Notes |
+| Scale | Approach | Storage | Notes |
 |-------|----------|---------|--------|
 | **1k–10k PMIDs** | MVP / first version | **Flat file (CSV or Parquet)** | Single file, load in memory in Streamlit. Fast to build and iterate. |
 | **10k–50k PMIDs** | Growth | **Parquet** or **SQLite** | Parquet: columnar, good for filtering. SQLite: simple queries, no extra server. |

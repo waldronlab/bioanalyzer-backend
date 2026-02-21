@@ -1,6 +1,6 @@
-# BioAnalyzer Backend Architecture
+# BioAnalyzer Package Architecture
 
-BioAnalyzer Backend is a microservices-oriented system for scientific paper analysis and retrieval. Uses a layered architecture with clear separation of concerns.
+BioAnalyzer Package is a microservices-oriented system for scientific paper analysis and retrieval. Uses a layered architecture with clear separation of concerns.
 
 ## System Overview
 
@@ -787,4 +787,4 @@ groups:
 
 ---
 
-This architecture documentation provides a comprehensive overview of the BioAnalyzer Backend system design, implementation patterns, and operational considerations. It serves as a guide for developers, operators, and stakeholders to understand the system's structure and capabilities.
+This architecture documentation provides a comprehensive overview of the BioAnalyzer Package system design, implementation patterns, and operational considerations. It serves as a guide for developers, operators, and stakeholders to understand the system's structure and capabilities.

@@ -1,7 +1,7 @@
 services:
-  bioanalyzer-backend:
+  bioanalyzer-package:
     build: .
-    container_name: bioanalyzer-backend
+    container_name: bioanalyzer-package
     user: "${UID:-1000}:${GID:-1000}"
     env_file:
       - .env

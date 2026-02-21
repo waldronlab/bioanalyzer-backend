@@ -1,11 +1,11 @@
 version: '3.8'
 
 services:
-  bioanalyzer-backend:
+  bioanalyzer-package:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: bioanalyzer-backend-prod
+    container_name: bioanalyzer-package-prod
     env_file:
       - .env
     environment:

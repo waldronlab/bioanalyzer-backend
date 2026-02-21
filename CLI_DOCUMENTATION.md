@@ -33,7 +33,7 @@ BioAnalyzer build
 ```
 
 **What it does:**
-- Builds the backend Docker image
+- Builds the package Docker image
 - Builds the frontend Docker image (if available)
 - Prepares all necessary containers
 
@@ -41,8 +41,8 @@ BioAnalyzer build
 ```bash
 $ BioAnalyzer build
 🔨 Building BioAnalyzer containers...
-📦 Building backend image...
-✅ Backend image built successfully!
+📦 Building package image...
+✅ Package image built successfully!
 📦 Building frontend image...
 ✅ Frontend image built successfully!
 🎉 All containers built successfully!
@@ -57,7 +57,7 @@ BioAnalyzer start --interactive      # Start with interactive mode
 ```
 
 **What it does:**
-- Starts the backend API server
+- Starts the API server
 - Starts the frontend web interface
 - Makes the application available at:
   - Web Interface: http://localhost:3000
@@ -67,9 +67,9 @@ BioAnalyzer start --interactive      # Start with interactive mode
 ```bash
 $ BioAnalyzer start
 🚀 Starting BioAnalyzer application...
-🔧 Starting backend API...
-⏳ Waiting for backend to be ready...
-✅ Backend API is running at http://localhost:8000
+🔧 Starting API...
+⏳ Waiting for API to be ready...
+✅ API is running at http://localhost:8000
 🌐 Starting frontend...
 ✅ Frontend is running at http://localhost:3000
 
@@ -130,8 +130,8 @@ $ BioAnalyzer status
 📊 BioAnalyzer System Status
 ========================================
 Docker: ✅ Available
-Backend Image: ✅ Built
-Backend Container: ✅ Up 2 minutes (healthy)
+Package Image: ✅ Built
+Package Container: ✅ Up 2 minutes (healthy)
 Frontend Container: ✅ Up 2 minutes (healthy)
 API Health: ✅ Healthy
 🌐 Web Interface: http://localhost:3000
@@ -404,7 +404,7 @@ sudo usermod -aG docker $USER
 # Log out and back in
 ```
 
-**2. "Backend not found"**
+**2. "Package container not found"**
 ```bash
 # Make sure you're in the right directory
 cd BioAnalyzer-Backend
@@ -435,13 +435,13 @@ chmod +x BioAnalyzer
 - 2GB+ disk space
 
 ### File Locations
-- Backend: `BioAnalyzer-Backend/`
+- Package: `BioAnalyzer-Backend/`
 - Frontend: `BioAnalyzer-Frontend/`
-- Docker Images: `bioanalyzer-backend`, `bioanalyzer-frontend`
+- Docker Images: `bioanalyzer-package`, `bioanalyzer-frontend`
 - Containers: `bioanalyzer-api`, `bioanalyzer-frontend`
 
 ### Environment Variables
-- `BIOANALYZER_PATH` - Path to BioAnalyzer backend
+- `BIOANALYZER_PATH` - Path to BioAnalyzer package
 - `DOCKER_HOST` - Docker daemon location
 
 ## 🎯 Best Practices
@@ -457,7 +457,7 @@ chmod +x BioAnalyzer
 - **BugSigDB:** https://bugsigdb.org/
 - **API Documentation:** http://localhost:8000/docs (when running)
 - **Web Interface:** http://localhost:3000 (when running)
-- **GitHub Repository:** https://github.com/your-repo/bioanalyzer-backend
+- **GitHub Repository:** https://github.com/your-repo/bioanalyzer-package
 
 ---
 

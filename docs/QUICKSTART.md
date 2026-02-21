@@ -1,6 +1,6 @@
 # Quick Start Guide
 
-Get BioAnalyzer Backend up and running in 5 minutes.
+Get BioAnalyzer Package up and running in 5 minutes.
 
 ## Prerequisites
 
@@ -16,7 +16,7 @@ Works on modern Linux systems, windows and macbook
 
 ```bash
 git clone https://github.com/waldronlab/bioanalyzer-backend.git
-cd bioanalyzer-backend
+cd BioAnalyzer-Backend
 
 chmod +x install.sh
 ./install.sh
@@ -39,7 +39,7 @@ Note: This may encounter issues with externally managed Python environments.
 
 ```bash
 git clone https://github.com/waldronlab/bioanalyzer-backend.git
-cd bioanalyzer-backend
+cd BioAnalyzer-Backend
 
 sudo apt install python3.12-venv python3-full
 python3 -m venv .venv

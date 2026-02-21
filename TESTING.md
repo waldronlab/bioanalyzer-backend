@@ -1,4 +1,4 @@
-# Testing Guide for BioAnalyzer Backend
+# Testing Guide for BioAnalyzer Package
 
 ## Running Tests
 
@@ -99,8 +99,8 @@ docker exec bioanalyzer-api pytest -m integration -v
 For CI/CD pipelines, you can run tests like this:
 
 ```bash
-docker build -t bioanalyzer-backend .
-docker run --rm bioanalyzer-backend pytest tests/ -v --cov=app --cov-report=xml
+docker build -t bioanalyzer-package .
+docker run --rm bioanalyzer-package pytest tests/ -v --cov=app --cov-report=xml
 ```
 
 ## Troubleshooting

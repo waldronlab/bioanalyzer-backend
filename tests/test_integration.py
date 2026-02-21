@@ -1,5 +1,5 @@
 """
-Integration tests for BioAnalyzer Backend
+Integration tests for BioAnalyzer Package
 These tests verify that different components work together correctly.
 """
 

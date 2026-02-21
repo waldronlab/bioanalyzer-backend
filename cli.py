@@ -56,8 +56,8 @@ class BioAnalyzerCLI:
     """User-friendly Command Line Interface for BioAnalyzer."""
 
     def __init__(self):
-        self.container_name = "bioanalyzer-backend"
-        self.image_name = "bioanalyzer-backend"
+        self.container_name = "bioanalyzer-package"
+        self.image_name = "bioanalyzer-package"
         self.network_name = "bioanalyzer-network"
         self.verbose = False
         self.api_base_url = os.getenv(
@@ -374,15 +374,15 @@ except Exception as e:
             return False
 
         try:
-            # Build the backend image
-            print("📦 Building backend image...")
+            # Build the package image
+            print("📦 Building package image...")
             result = subprocess.run(
                 ["docker", "build", "-t", self.image_name, "."],
                 cwd=project_root,
                 check=True,
             )
 
-            print("✅ Backend image built successfully!")
+            print("✅ Package image built successfully!")
             frontend_dir = project_root.parent / "BioAnalyzer-Frontend"
             if frontend_dir.exists():
                 print("📦 Building frontend image...")
@@ -460,7 +460,7 @@ except Exception as e:
                 test_file.unlink()
             except OSError:
                 print(f"❌ Directory not writable by current user: {path}")
-                print("   The backend container needs to write here (e.g. performance.log).")
+                print("   The package container needs to write here (e.g. performance.log).")
                 print("   Fix with:")
                 print(f"   sudo chown -R $USER:$USER {path}")
                 return False
@@ -487,7 +487,7 @@ except Exception as e:
             if not self._ensure_volume_directories():
                 return False
             if self.check_backend_health():
-                print(f"✅ Backend API is already available at http://localhost:8000")
+                print("✅ API is already available at http://localhost:8000")
                 return True
             compose_cmd = ["docker-compose"]
             check_compose = subprocess.run(
@@ -520,12 +520,12 @@ except Exception as e:
                             "rm",
                             "-f",
                             "bioanalyzer-redis",
-                            "bioanalyzer-backend",
+                            "bioanalyzer-package",
                         ],
                         capture_output=True,
                         check=False,
                     )
-            print("🔧 Starting backend API...")
+            print("🔧 Starting API...")
             import os
             import pwd
             import grp
@@ -558,10 +558,10 @@ except Exception as e:
                     print(f"\n📋 Output: {result.stdout}")
                 return False
             if self._wait_for_backend_health(timeout=60, interval=2):
-                print("✅ Backend API is running at http://localhost:8000")
+                print("✅ API is running at http://localhost:8000")
             else:
                 print(
-                    "⚠️  Backend container started but /health did not report healthy within 60s"
+                    "⚠️  Package container started but /health did not report healthy within 60s"
                 )
             frontend_dir = project_root.parent / "BioAnalyzer-Frontend"
             if frontend_dir.exists():
@@ -607,7 +607,7 @@ except Exception as e:
                             check=False,
                         )
                         print("🌐 Starting frontend...")
-                        compose_network = "bioanalyzer-backend_bioanalyzer-net"
+                        compose_network = "bioanalyzer-package_bioanalyzer-net"
                         subprocess.run(
                             [
                                 "docker",
@@ -626,7 +626,7 @@ except Exception as e:
                         print("✅ Frontend is running at http://localhost:3000")
                 else:
                     print("🌐 Starting frontend...")
-                    compose_network = "bioanalyzer-backend_bioanalyzer-net"
+                    compose_network = "bioanalyzer-package_bioanalyzer-net"
                     subprocess.run(
                         [
                             "docker",
@@ -686,7 +686,7 @@ except Exception as e:
                     return True
             containers = [
                 self.container_name,
-                "bioanalyzer-backend",
+                "bioanalyzer-package",
                 "bioanalyzer-frontend",
                 "bioanalyzer-redis",
             ]
@@ -776,7 +776,7 @@ except Exception as e:
         return result.returncode == 0
 
     def check_backend_health(self):
-        """Check if the backend is healthy."""
+        """Check if the API is healthy."""
         try:
             import requests
 
@@ -786,9 +786,9 @@ except Exception as e:
             return False
 
     def _wait_for_backend_health(self, timeout: int = 60, interval: float = 2) -> bool:
-        """Poll the backend /health endpoint until it reports healthy or we time out."""
+        """Poll the API /health endpoint until it reports healthy or we time out."""
         deadline = time.time() + timeout
-        print(f"⏳ Waiting for backend health (timeout: {timeout}s)...")
+        print(f"⏳ Waiting for API health (timeout: {timeout}s)...")
         while time.time() < deadline:
             if self.check_backend_health():
                 return True
@@ -805,10 +805,10 @@ except Exception as e:
         if not docker_available:
             return
         image_exists = self.check_image()
-        print(f"Backend Image: {'✅ Built' if image_exists else '❌ Not Built'}")
+        print(f"Package Image: {'✅ Built' if image_exists else '❌ Not Built'}")
         backend_running = False
         backend_status = ""
-        for container_name in [self.container_name, "bioanalyzer-backend"]:
+        for container_name in [self.container_name, "bioanalyzer-package"]:
             try:
                 result = subprocess.run(
                     [
@@ -832,9 +832,9 @@ except Exception as e:
                 continue
 
         if backend_running:
-            print(f"Backend Container: ✅ {backend_status}")
+            print(f"Package Container: ✅ {backend_status}")
         else:
-            print("Backend Container: ❌ Not Running")
+            print("Package Container: ❌ Not Running")
         try:
             result = subprocess.run(
                 [
@@ -865,7 +865,7 @@ except Exception as e:
             if not backend_running:
                 print("")
                 print("💡 To get healthy: run  BioAnalyzer start")
-                print("   If the backend exits with permission errors, fix volume dirs:")
+                print("   If the package exits with permission errors, fix volume dirs:")
                 print("   sudo chown -R $USER:$USER cache logs results")
 
     def handle_settings_command(self, args):

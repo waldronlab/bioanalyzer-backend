@@ -1,6 +1,6 @@
 # Production Deployment Guide
 
-Guide for deploying BioAnalyzer Backend to production with best practices for security, performance, and maintainability.
+Guide for deploying BioAnalyzer Package to production with best practices for security, performance, and maintainability.
 
 ## Prerequisites
 
@@ -76,7 +76,7 @@ RAG_RERANK_METHOD=hybrid
 ### 1. Build Production Image
 
 ```bash
-docker build -t bioanalyzer-backend:latest .
+docker build -t bioanalyzer-package:latest .
 ```
 
 ### 2. Run with Docker Compose
@@ -92,7 +92,7 @@ docker compose -f docker-compose.prod.yml up -d
 docker compose ps
 
 # Check logs
-docker compose logs -f bioanalyzer-backend
+docker compose logs -f bioanalyzer-package
 
 # Test health endpoint
 curl http://localhost:8000/health
@@ -227,7 +227,7 @@ Run multiple instances behind a load balancer:
 
 ```yaml
 services:
-  bioanalyzer-backend:
+  bioanalyzer-package:
     deploy:
       replicas: 3
 ```
@@ -265,10 +265,10 @@ DATE=$(date +%Y%m%d_%H%M%S)
 mkdir -p "$BACKUP_DIR"
 
 # Backup cache
-docker exec bioanalyzer-backend tar czf - /app/cache > "$BACKUP_DIR/cache_$DATE.tar.gz"
+docker exec bioanalyzer-package tar czf - /app/cache > "$BACKUP_DIR/cache_$DATE.tar.gz"
 
 # Backup logs
-docker exec bioanalyzer-backend tar czf - /app/logs > "$BACKUP_DIR/logs_$DATE.tar.gz"
+docker exec bioanalyzer-package tar czf - /app/logs > "$BACKUP_DIR/logs_$DATE.tar.gz"
 ```
 
 ### 3. Recovery Procedure

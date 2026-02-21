@@ -110,7 +110,7 @@ LLM_PROVIDER=ollama
 
 ```bash
 git clone https://github.com/waldronlab/bioanalyzer-backend.git
-cd bioanalyzer-backend
+cd BioAnalyzer-Backend
 
 cp .env.example .env
 # Edit .env with your API keys
@@ -125,7 +125,7 @@ curl http://localhost:8000/health
 
 ```bash
 git clone https://github.com/waldronlab/bioanalyzer-backend.git
-cd bioanalyzer-backend
+cd BioAnalyzer-Backend
 
 python3 -m venv .venv
 source .venv/bin/activate
