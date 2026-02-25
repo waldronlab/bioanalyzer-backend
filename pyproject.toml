@@ -3,14 +3,14 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "bioanalyzer-backend"
+name = "bioanalyzer-package"
 version = "1.0.0"
 description = "A specialized AI-powered tool for analyzing scientific papers for BugSigDB curation readiness"
 readme = "README.md"
 requires-python = ">=3.8"
 license = {text = "MIT"}
 authors = [
-    {name = "BioAnalyzer Team", email = "team@bioanalyzer.org"}
+    {name = "Ouma Ronald", email = "ronald2ouma2@gmail.com"}
 ]
 keywords = ["bioinformatics", "microbiome", "bugsigdb", "curation", "ai", "analysis"]
 classifiers = [

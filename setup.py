@@ -36,14 +36,14 @@ with open("config/requirements.txt", "r", encoding="utf-8") as fh:
         requirements.append(line)
 
 setup(
-    name="bioanalyzer-backend",
+    name="bioanalyzer-package",
     version="1.0.0",
-    author="BioAnalyzer Team",
-    author_email="team@bioanalyzer.org",
+    author="Ouma Ronald",
+    author_email="ronald2ouma2@gmail.com",
     description="A specialized AI-powered tool for analyzing scientific papers for BugSigDB curation readiness",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/your-repo/bioanalyzer-backend",
+    url="https://github.com/your-repo/bioanalyzer-package",
     packages=find_packages(),
     classifiers=[
         "Development Status :: 4 - Beta",
@@ -84,8 +84,8 @@ setup(
     },
     keywords="bioinformatics, microbiome, bugsigdb, curation, ai, analysis",
     project_urls={
-        "Bug Reports": "https://github.com/your-repo/bioanalyzer-backend/issues",
-        "Source": "https://github.com/your-repo/bioanalyzer-backend",
-        "Documentation": "https://github.com/your-repo/bioanalyzer-backend/docs",
+        "Bug Reports": "https://github.com/your-repo/bioanalyzer-package/issues",
+        "Source": "https://github.com/your-repo/bioanalyzer-package",
+        "Documentation": "https://github.com/your-repo/bioanalyzer-package/docs",
     },
 )

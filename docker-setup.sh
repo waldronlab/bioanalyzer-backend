@@ -1,9 +1,9 @@
 #!/bin/bash
-# BioAnalyzer Backend Docker Setup Script
+# BioAnalyzer Package Docker Setup Script
 
 set -e
 
-echo "🐳 BioAnalyzer Backend Docker Setup"
+echo "🐳 BioAnalyzer Package Docker Setup"
 echo "===================================="
 
 # Colors for output
@@ -51,12 +51,12 @@ docker stop $(docker ps -aq --filter "name=bioanalyzer") 2>/dev/null || true
 docker rm $(docker ps -aq --filter "name=bioanalyzer") 2>/dev/null || true
 
 # Remove existing images
-docker rmi bioanalyzer-backend 2>/dev/null || true
+docker rmi bioanalyzer-package 2>/dev/null || true
 
-print_status "Building BioAnalyzer Backend Docker image..."
+print_status "Building BioAnalyzer Package Docker image..."
 
 # Build the Docker image
-docker build -t bioanalyzer-backend .
+docker build -t bioanalyzer-package .
 
 if [ $? -eq 0 ]; then
     print_success "Docker image built successfully!"
@@ -68,7 +68,7 @@ fi
 print_status "Testing Docker image..."
 
 # Test the image with a simple command
-docker run --rm bioanalyzer-backend python test_cli.py
+docker run --rm bioanalyzer-package python test_cli.py
 
 if [ $? -eq 0 ]; then
     print_success "Docker image test passed!"
@@ -83,14 +83,14 @@ echo ""
 echo "Available commands:"
 echo ""
 echo "1. Start API Server:"
-echo "   docker run -d --name bioanalyzer-api -p 8000:8000 bioanalyzer-backend"
+echo "   docker run -d --name bioanalyzer-api -p 8000:8000 bioanalyzer-package"
 echo ""
 echo "2. Use CLI (interactive):"
-echo "   docker run -it --rm bioanalyzer-backend python cli.py fields"
-echo "   docker run -it --rm bioanalyzer-backend python cli.py analyze 12345678"
+echo "   docker run -it --rm bioanalyzer-package python cli.py fields"
+echo "   docker run -it --rm bioanalyzer-package python cli.py analyze 12345678"
 echo ""
 echo "3. Use CLI with custom command:"
-echo "   docker run --rm bioanalyzer-backend python cli.py analyze --help"
+echo "   docker run --rm bioanalyzer-package python cli.py analyze --help"
 echo ""
 echo "4. Start with Docker Compose:"
 echo "   $COMPOSE_CMD up -d"
@@ -106,8 +106,8 @@ echo ""
 read -p "Would you like to start the API server now? (y/n): " -n 1 -r
 echo
 if [[ $REPLY =~ ^[Yy]$ ]]; then
-    print_status "Starting BioAnalyzer Backend API server..."
-    docker run -d --name bioanalyzer-api -p 8000:8000 bioanalyzer-backend
+    print_status "Starting BioAnalyzer Package API server..."
+    docker run -d --name bioanalyzer-api -p 8000:8000 bioanalyzer-package
     
     if [ $? -eq 0 ]; then
         print_success "API server started successfully!"

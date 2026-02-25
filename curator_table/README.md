@@ -2,6 +2,8 @@
 
 Sortable, searchable online table of BioAnalyzer predictions for **candidate curatable articles** from PubMed, for real-world testing by curators (see [Levi’s suggestion](https://github.com/waldronlab/bioanalyzer-backend/blob/main/docs/CURATOR_TABLE_DESIGN.md)).
 
+**Zero-cost option:** A **static** version of the curator table can be hosted on **GitHub Pages** (no server, no Docker). See [docs/curator-table/README.md](../docs/curator-table/README.md) for setup. Use the Streamlit app when you need to **collect curator feedback**; use the static table for **viewing and sharing** predictions with curators at minimal cost.
+
 ## Quick start
 
 **Recommended – use the CLI** (Streamlit is included in the main project):

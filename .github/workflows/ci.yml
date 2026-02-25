@@ -191,15 +191,15 @@ jobs:
         file: ./Dockerfile
         push: false
         load: true
-        tags: bioanalyzer-backend:test
+        tags: bioanalyzer-package:test
         cache-from: type=gha
         cache-to: type=gha,mode=max
     
     - name: Test Docker image
       run: |
-        docker run --rm bioanalyzer-backend:test python -c "import app; print('Docker image works!')"
-        docker run --rm bioanalyzer-backend:test python --version
-        docker run --rm bioanalyzer-backend:test pip list | grep -i bioanalyzer
+        docker run --rm bioanalyzer-package:test python -c "import app; print('Docker image works!')"
+        docker run --rm bioanalyzer-package:test python --version
+        docker run --rm bioanalyzer-package:test pip list | grep -i bioanalyzer
 
   all-checks:
     name: All Checks Summary

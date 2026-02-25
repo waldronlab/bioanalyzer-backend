@@ -36,9 +36,9 @@ fi
 
 # Build the Docker image if it doesn't exist or is outdated
 echo "Building/checking Docker image..."
-docker build -t bioanalyzer-backend . > /dev/null 2>&1 || {
+docker build -t bioanalyzer-package . > /dev/null 2>&1 || {
     echo "Building Docker image (this may take a few minutes)..."
-    docker build -t bioanalyzer-backend .
+    docker build -t bioanalyzer-package .
 }
 
 echo ""
@@ -46,7 +46,7 @@ echo "Step 1: Checking PMID overlap..."
 docker run --rm \
     -v "$SCRIPT_DIR:/app" \
     -w /app \
-    bioanalyzer-backend \
+    bioanalyzer-package \
     python align_pmids.py "$PREDICTIONS_FILE" "$FEEDBACK_FILE"
 
 echo ""
@@ -54,7 +54,7 @@ echo "Step 2: Running confusion matrix analysis..."
 docker run --rm \
     -v "$SCRIPT_DIR:/app" \
     -w /app \
-    bioanalyzer-backend \
+    bioanalyzer-package \
     python confusion_matrix_analysis.py "$PREDICTIONS_FILE" "$FEEDBACK_FILE"
 
 echo ""

@@ -2,7 +2,7 @@
 # BioAnalyzer CLI Docker Runner
 
 # Default image name
-IMAGE_NAME="bioanalyzer-backend"
+IMAGE_NAME="bioanalyzer-package"
 
 # Function to show usage
 show_usage() {

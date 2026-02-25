@@ -1,4 +1,4 @@
-# BioAnalyzer Backend Documentation
+# BioAnalyzer Package Documentation
 
 Technical documentation for developers working on or integrating with BioAnalyzer.
 
@@ -104,7 +104,7 @@ Only applies to v2 API:
 
 ```bash
 git clone https://github.com/waldronlab/bioanalyzer-backend.git
-cd bioanalyzer-backend
+cd BioAnalyzer-Backend
 
 python3 -m venv .venv
 source .venv/bin/activate
@@ -131,7 +131,7 @@ mypy .
 ## Project Structure
 
 ```
-bioanalyzer-backend/
+BioAnalyzer-Backend/
 ├── app/
 │   ├── api/              # FastAPI routes
 │   ├── services/         # Business logic

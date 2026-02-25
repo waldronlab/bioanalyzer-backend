@@ -1,4 +1,4 @@
-"""FastAPI application for BioAnalyzer backend API."""
+"""FastAPI application for BioAnalyzer Package API."""
 
 import logging
 import os
@@ -30,12 +30,12 @@ from app.utils.config import (
 setup_logging()
 logger = logging.getLogger(__name__)
 app = FastAPI(
-    title="BioAnalyzer Backend API",
+    title="BioAnalyzer Package API",
     description="API for analyzing scientific papers and extracting BugSigDB curation fields.",
     version="1.0.0",
     contact={
         "name": "BioAnalyzer Team",
-        "url": "https://github.com/your-repo/bioanalyzer-backend",
+        "url": "https://github.com/your-repo/bioanalyzer-package",
     },
     license_info={
         "name": "MIT",
@@ -83,7 +83,7 @@ app.include_router(system.router)
 async def root() -> Dict[str, str]:
     """API root endpoint."""
     return {
-        "message": "BioAnalyzer Backend API",
+        "message": "BioAnalyzer Package API",
         "version": "1.0.0",
         "description": "AI-powered Curatable Signature analysis API",
         "documentation": "/docs",

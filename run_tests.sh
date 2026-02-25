@@ -6,11 +6,11 @@ echo "🧪 Running BioAnalyzer tests in Docker container..."
 # Check if container is running
 if ! docker ps | grep -q bioanalyzer-api; then
     echo "📦 Container not running. Building and starting..."
-    docker build -t bioanalyzer-backend . || exit 1
+    docker build -t bioanalyzer-package . || exit 1
     docker run -d --name bioanalyzer-api-test \
         -v "$(pwd)/tests:/app/tests" \
         -v "$(pwd)/app:/app/app" \
-        bioanalyzer-backend \
+        bioanalyzer-package \
         tail -f /dev/null
     sleep 2
 fi
