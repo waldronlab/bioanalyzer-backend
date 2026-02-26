@@ -92,4 +92,4 @@ We can start with **PMID, Title, Year, Journal, the 6 field statuses, and one co
 
 - **Design:** `docs/CURATOR_TABLE_DESIGN.md` (this file).  
 - **App:** `curator_table/` (Streamlit app + README).  
-- **Data format:** Same as existing BioAnalyzer export (e.g. `analysis_results.csv` / validation dataset shape); see `create_validation_dataset.py` and `confusion_matrix_analysis.py` for column names.
+- **Data format:** Same as existing BioAnalyzer export (e.g. `analysis_results.csv` / validation dataset shape); see `create_validation_dataset.py` and `scripts/eval/confusion_matrix_analysis.py` for column names.

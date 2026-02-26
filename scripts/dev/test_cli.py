@@ -121,3 +121,4 @@ if __name__ == "__main__":
         print("   python3 cli.py analyze 12345678")
     else:
         print("\n❌ Package CLI structure has issues!")
+

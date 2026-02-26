@@ -55,7 +55,7 @@ docker run --rm \
     -v "$SCRIPT_DIR:/app" \
     -w /app \
     bioanalyzer-package \
-    python confusion_matrix_analysis.py "$PREDICTIONS_FILE" "$FEEDBACK_FILE"
+    python scripts/eval/confusion_matrix_analysis.py "$PREDICTIONS_FILE" "$FEEDBACK_FILE"
 
 echo ""
 echo "=========================================="

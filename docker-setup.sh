@@ -68,7 +68,7 @@ fi
 print_status "Testing Docker image..."
 
 # Test the image with a simple command
-docker run --rm bioanalyzer-package python test_cli.py
+docker run --rm bioanalyzer-package python scripts/dev/test_cli.py
 
 if [ $? -eq 0 ]; then
     print_success "Docker image test passed!"
