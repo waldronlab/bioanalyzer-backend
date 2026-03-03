@@ -1,3 +1,0 @@
-PMID,Title,Journal,Year,Host Species Status,Body Site Status,Condition Status,Sequencing Type Status,Taxa Level Status,Sample Size Status
-12345678,Sample study on gut microbiome,Gut Microbes,2023,PRESENT,PRESENT,PRESENT,PRESENT,PRESENT,PRESENT
-87654321,Another paper for curation,Sci Rep,2022,PARTIALLY_PRESENT,PRESENT,ABSENT,PRESENT,PRESENT,ABSENT
