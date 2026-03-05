@@ -3,6 +3,7 @@ from pathlib import Path
 import logging
 from typing import List, Optional
 from .credential_masking import mask_exception_message, mask_string
+from app.core.settings import get_settings
 
 try:
     from dotenv import load_dotenv  # type: ignore
@@ -326,5 +327,63 @@ def setup_logging() -> logging.Logger:
     return root_logger
 
 
-# Initialize logging when module is imported
 logger = setup_logging()
+
+# ---------------------------------------------------------------------------
+# Bridge to structured settings (app.core.settings)
+# This keeps app.core.settings as the single source of truth while preserving
+# existing config module attributes used across the codebase.
+# ---------------------------------------------------------------------------
+try:
+    _settings = get_settings()
+
+    # API / timeout settings
+    API_TIMEOUT = _settings.api.timeout
+    ANALYSIS_TIMEOUT = _settings.api.analysis_timeout
+    GEMINI_TIMEOUT = _settings.api.gemini_timeout
+    FRONTEND_TIMEOUT = _settings.api.frontend_timeout
+    NCBI_RATE_LIMIT_DELAY = _settings.api.ncbi_rate_limit_delay
+    MAX_CONCURRENT_REQUESTS = _settings.api.max_concurrent_requests
+
+    # LLM config
+    if _settings.llm.provider:
+        LLM_PROVIDER = _settings.llm.provider
+    if _settings.llm.model:
+        LLM_MODEL = _settings.llm.model
+
+    # RAG settings
+    RAG_SUMMARY_PROVIDER = _settings.rag.summary_provider or RAG_SUMMARY_PROVIDER
+    RAG_SUMMARY_MODEL = _settings.rag.summary_model or RAG_SUMMARY_MODEL
+    RAG_SUMMARY_LENGTH = _settings.rag.summary_length.value
+    RAG_SUMMARY_QUALITY = _settings.rag.summary_quality.value
+    RAG_RERANK_METHOD = _settings.rag.rerank_method.value
+    RAG_USE_SUMMARY_CACHE = _settings.rag.use_cache
+    RAG_MAX_SUMMARY_KEY_POINTS = _settings.rag.max_summary_key_points
+    RAG_TOP_K_CHUNKS = _settings.rag.top_k_chunks
+
+    # Cache settings
+    CACHE_VALIDITY_HOURS = _settings.cache.validity_hours
+    MAX_CACHE_SIZE = _settings.cache.max_size
+
+    # Retrieval settings
+    USE_FULLTEXT = _settings.retrieval.use_fulltext
+    if _settings.retrieval.ncbi_api_key:
+        NCBI_API_KEY = _settings.retrieval.ncbi_api_key
+    if _settings.retrieval.email:
+        EMAIL = _settings.retrieval.email
+
+    # Security / environment
+    ENVIRONMENT = _settings.environment.value
+    CORS_ORIGINS = _settings.security.cors_origins
+    ENABLE_REQUEST_ID = _settings.security.enable_request_id
+
+    # Rate limiting
+    ENABLE_RATE_LIMITING = _settings.rate_limit.enabled
+    RATE_LIMIT_PER_MINUTE = _settings.rate_limit.requests_per_minute
+
+    # Logging
+    LOG_LEVEL = _settings.logging.level.value
+except Exception:
+    # Fail gracefully; fall back to env-based values defined above
+    pass
+

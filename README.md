@@ -197,7 +197,7 @@ BioAnalyzer includes a formal validation workflow to compare automated predictio
 - **Ground truth**: Expert annotations in `feedback.csv` for the six BugSigDB fields  
 - **Predictions**: BioAnalyzer outputs in a predictions CSV (e.g. `analysis_results.csv` or `new.csv`)  
 - **Alignment**: PMIDs are aligned with `align_pmids.py`  
-- **Evaluation**: `confusion_matrix_analysis.py` computes 3-class confusion matrices (`ABSENT`, `PARTIALLY_PRESENT`, `PRESENT`) and per-field accuracy  
+- **Evaluation**: `scripts/eval/confusion_matrix_analysis.py` computes 3-class confusion matrices (`ABSENT`, `PARTIALLY_PRESENT`, `PRESENT`) and per-field accuracy  
 - **Outputs**: Metrics and PNG confusion matrices are written to `confusion_matrix_results/`
 
 For sharing/inspection, `create_validation_dataset.py` can generate a flat CSV:
