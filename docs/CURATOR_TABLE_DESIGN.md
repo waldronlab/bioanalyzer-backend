@@ -83,12 +83,9 @@ We can start with **PMID, Title, Year, Journal, the 6 field statuses, and one co
 3. **Document** how to run a batch (CLI or API) and export the result into the format the table expects.  
 4. **Later:** Point the table at a DB or at results from a SuperStudio batch and add evidence snippets if needed.
 
----
 
 
----
-
-## 8. Where the Code Lives
+## 7. Where the Code Lives
 
 - **Design:** `docs/CURATOR_TABLE_DESIGN.md` (this file).  
 - **App:** `curator_table/` (Streamlit app + README).  
