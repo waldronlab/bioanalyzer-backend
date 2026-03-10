@@ -8,7 +8,7 @@ There are **two ways** you may see the table:
 - A **read‑only web table** (hosted on GitHub Pages) – for **browsing** predictions.
 - A **Streamlit app** – for **entering feedback** that is saved and later used for evaluation.
 
-Your coordinator will tell you which link to use. This guide explains what you see and **how to review and record feedback**.
+This guide explains what you see and **how to review and record feedback**. You can use the link here https://waldronlab.io/curator-desk/ to access the curator's table
 
 ## 2. What you need
 
