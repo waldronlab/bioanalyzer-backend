@@ -91,8 +91,8 @@ class AgentOrchestrator:
                 paper_dir.mkdir(parents=True, exist_ok=True)
             except (OSError, PermissionError) as e2:
                 logger.error(f"Could not create paper directory {paper_dir}: {e2}")
-                # Last resort: use /tmp which should always be writable
-                paper_dir = Path("/tmp") / "bioanalyzer_paperqa"
+                # Last resort: use system temp directory which should always be writable
+                paper_dir = Path(tempfile.gettempdir()) / "bioanalyzer_paperqa"
                 paper_dir.mkdir(parents=True, exist_ok=True)
 
         logger.info(f"Using Paper-QA directory: {paper_dir.absolute()}")

@@ -152,4 +152,5 @@ async def global_exception_handler(
 if __name__ == "__main__":
     import uvicorn
 
+    # nosec B104: binding to 0.0.0.0 is required for containerized deployment
     uvicorn.run(app, host="0.0.0.0", port=8000)

@@ -113,9 +113,9 @@ Summary should:
         }
 
     def _get_cache_key(self, chunk_text: str, query: str, summary_length: str) -> str:
-        """Generate cache key for summary."""
+        """Generate cache key for summary (non-cryptographic)."""
         content = f"{chunk_text[:500]}_{query}_{summary_length}"
-        return hashlib.md5(content.encode()).hexdigest()
+        return hashlib.sha256(content.encode()).hexdigest()
 
     def _load_cached_summary(self, cache_key: str) -> Optional[Dict]:
         """Load cached summary if available."""

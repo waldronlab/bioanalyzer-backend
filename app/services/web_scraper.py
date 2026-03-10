@@ -300,10 +300,10 @@ class WebScraperService:
         filename = Path(path).name
 
         if not filename or "." not in filename:
-            # Use hash of URL as filename
+            # Use hash of URL as filename (non-cryptographic)
             import hashlib
 
-            url_hash = hashlib.md5(url.encode()).hexdigest()[:8]
+            url_hash = hashlib.sha256(url.encode()).hexdigest()[:8]
             filename = f"file_{url_hash}.bin"
 
         # Sanitize filename

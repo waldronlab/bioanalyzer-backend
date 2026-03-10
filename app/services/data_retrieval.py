@@ -5,7 +5,7 @@ import time
 import asyncio
 import logging
 from typing import List, Dict, Any, Optional
-from xml.etree import ElementTree
+from defusedxml import ElementTree
 
 try:
     from app.utils.config import NCBI_RATE_LIMIT_DELAY, API_TIMEOUT, USE_FULLTEXT
