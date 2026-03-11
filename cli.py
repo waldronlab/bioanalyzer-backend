@@ -52,6 +52,10 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+# Compose project name: ensures network is always "bioanalyzer-package_bioanalyzer-net"
+COMPOSE_PROJECT_NAME = "bioanalyzer-package"
+
+
 class BioAnalyzerCLI:
     """User-friendly Command Line Interface for BioAnalyzer."""
 
@@ -466,6 +470,35 @@ except Exception as e:
                 return False
         return True
 
+    def _get_compose_network(self) -> str:
+        """Return the compose network name so the frontend can attach. Uses fixed project-based
+        name; if that network does not exist, tries to use the backend container's network."""
+        fixed_network = f"{COMPOSE_PROJECT_NAME}_bioanalyzer-net"
+        check = subprocess.run(
+            ["docker", "network", "inspect", fixed_network, "--format", "{{.Name}}"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if check.returncode == 0 and check.stdout.strip():
+            return fixed_network
+        # Fallback: use the network the backend container is on
+        inspect = subprocess.run(
+            [
+                "docker",
+                "inspect",
+                self.container_name,
+                "--format",
+                "{{range $k, $v := .NetworkSettings.Networks}}{{$k}} {{end}}",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if inspect.returncode == 0 and inspect.stdout.strip():
+            return inspect.stdout.strip().split()[0]
+        return fixed_network
+
     def start_application(self):
         """Start the BioAnalyzer application."""
         print("🚀 Starting BioAnalyzer application...")
@@ -496,7 +529,7 @@ except Exception as e:
             if not check_compose.stdout.strip():
                 compose_cmd = ["docker", "compose"]
             ps_result = subprocess.run(
-                compose_cmd + ["ps", "-q"],
+                compose_cmd + ["-p", COMPOSE_PROJECT_NAME, "ps", "-q"],
                 cwd=str(project_root),
                 capture_output=True,
                 text=True,
@@ -507,7 +540,7 @@ except Exception as e:
             if containers_running and not self.check_backend_health():
                 print("🧹 Cleaning up existing containers...")
                 cleanup_result = subprocess.run(
-                    compose_cmd + ["down", "--remove-orphans"],
+                    compose_cmd + ["-p", COMPOSE_PROJECT_NAME, "down", "--remove-orphans"],
                     cwd=str(project_root),
                     capture_output=True,
                     text=True,
@@ -539,7 +572,7 @@ except Exception as e:
             except (KeyError, AttributeError):
                 env["UID"] = str(os.getuid())
                 env["GID"] = str(os.getgid())
-            up_cmd = compose_cmd + ["up", "-d", "--force-recreate", "--remove-orphans"]
+            up_cmd = compose_cmd + ["-p", COMPOSE_PROJECT_NAME, "up", "-d", "--force-recreate", "--remove-orphans"]
 
             result = subprocess.run(
                 up_cmd,
@@ -607,7 +640,7 @@ except Exception as e:
                             check=False,
                         )
                         print("🌐 Starting frontend...")
-                        compose_network = "bioanalyzer-package_bioanalyzer-net"
+                        compose_network = self._get_compose_network()
                         subprocess.run(
                             [
                                 "docker",
@@ -626,22 +659,22 @@ except Exception as e:
                         print("✅ Frontend is running at http://localhost:3000")
                 else:
                     print("🌐 Starting frontend...")
-                    compose_network = "bioanalyzer-package_bioanalyzer-net"
+                    compose_network = self._get_compose_network()
                     subprocess.run(
-                        [
-                            "docker",
-                            "run",
-                            "-d",
-                            "--name",
-                            frontend_name,
-                            "--network",
-                            compose_network,
-                            "-p",
-                            "3000:80",
-                            "bioanalyzer-frontend",
-                        ],
-                        check=True,
-                    )
+                            [
+                                "docker",
+                                "run",
+                                "-d",
+                                "--name",
+                                frontend_name,
+                                "--network",
+                                compose_network,
+                                "-p",
+                                "3000:80",
+                                "bioanalyzer-frontend",
+                            ],
+                            check=True,
+                        )
                     print("✅ Frontend is running at http://localhost:3000")
 
             print("\n🎉 BioAnalyzer is now running!")
@@ -674,7 +707,7 @@ except Exception as e:
                     compose_cmd = ["docker", "compose"]
 
                 result = subprocess.run(
-                    compose_cmd + ["down", "--remove-orphans"],
+                    compose_cmd + ["-p", COMPOSE_PROJECT_NAME, "down", "--remove-orphans"],
                     cwd=str(project_root),
                     capture_output=True,
                     text=True,
