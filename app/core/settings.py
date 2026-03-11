@@ -67,7 +67,7 @@ class APIConfig(BaseModel):
         default=30, ge=1, le=300, description="Gemini API timeout in seconds"
     )
     frontend_timeout: int = Field(
-        default=60, ge=1, le=600, description="Frontend timeout in seconds"
+        default=60, ge=1, le=600, description="API client timeout in seconds (e.g. for long-running analysis)"
     )
     ncbi_timeout: int = Field(
         default=60, ge=1, le=300, description="NCBI API timeout in seconds"

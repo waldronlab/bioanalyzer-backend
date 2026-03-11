@@ -29,7 +29,7 @@ Each layer has distinct responsibilities:
 ```
 ┌─────────────────────────────────────────┐
 │           Presentation Layer            │
-│  (CLI, Web Interface, API Endpoints)    │
+│  (CLI, API Endpoints)                    │
 ├─────────────────────────────────────────┤
 │            Service Layer                │
 │  (Business Logic, Orchestration)        │
@@ -133,7 +133,6 @@ Implements business logic and orchestrates operations.
 ```mermaid
 graph TB
     CLI[CLI Interface] --> API[API Layer]
-    WEB[Web Interface] --> API
     API --> SERVICE[Service Layer]
     SERVICE --> MODEL[Model Layer]
     SERVICE --> UTIL[Utility Layer]

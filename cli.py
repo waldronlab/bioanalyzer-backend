@@ -238,8 +238,8 @@ class BioAnalyzerCLI:
    BioAnalyzer status
    BioAnalyzer stop
 
-🌐 Web Interface:
-   Once started, visit: http://localhost:3000
+🔧 API:
+   Once started: http://localhost:8000
    API Documentation: http://localhost:8000/docs
 
 ❓ Need Help?
@@ -387,17 +387,7 @@ except Exception as e:
             )
 
             print("✅ Package image built successfully!")
-            frontend_dir = project_root.parent / "BioAnalyzer-Frontend"
-            if frontend_dir.exists():
-                print("📦 Building frontend image...")
-                subprocess.run(
-                    ["docker", "build", "-t", "bioanalyzer-frontend", "."],
-                    cwd=frontend_dir,
-                    check=True,
-                )
-                print("✅ Frontend image built successfully!")
-
-            print(" All containers built successfully!")
+            print("✅ All containers built successfully!")
             return True
 
         except subprocess.CalledProcessError as e:
@@ -469,35 +459,6 @@ except Exception as e:
                 print(f"   sudo chown -R $USER:$USER {path}")
                 return False
         return True
-
-    def _get_compose_network(self) -> str:
-        """Return the compose network name so the frontend can attach. Uses fixed project-based
-        name; if that network does not exist, tries to use the backend container's network."""
-        fixed_network = f"{COMPOSE_PROJECT_NAME}_bioanalyzer-net"
-        check = subprocess.run(
-            ["docker", "network", "inspect", fixed_network, "--format", "{{.Name}}"],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        if check.returncode == 0 and check.stdout.strip():
-            return fixed_network
-        # Fallback: use the network the backend container is on
-        inspect = subprocess.run(
-            [
-                "docker",
-                "inspect",
-                self.container_name,
-                "--format",
-                "{{range $k, $v := .NetworkSettings.Networks}}{{$k}} {{end}}",
-            ],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        if inspect.returncode == 0 and inspect.stdout.strip():
-            return inspect.stdout.strip().split()[0]
-        return fixed_network
 
     def start_application(self):
         """Start the BioAnalyzer application."""
@@ -596,90 +557,10 @@ except Exception as e:
                 print(
                     "⚠️  Package container started but /health did not report healthy within 60s"
                 )
-            frontend_dir = project_root.parent / "BioAnalyzer-Frontend"
-            if frontend_dir.exists():
-                frontend_name = "bioanalyzer-frontend"
-                frontend_check = subprocess.run(
-                    [
-                        "docker",
-                        "ps",
-                        "-a",
-                        "--filter",
-                        f"name={frontend_name}",
-                        "--format",
-                        "{{.Names}}",
-                    ],
-                    capture_output=True,
-                    text=True,
-                    check=False,
-                )
-                if frontend_check.stdout.strip():
-                    frontend_ps = subprocess.run(
-                        [
-                            "docker",
-                            "ps",
-                            "--filter",
-                            f"name={frontend_name}",
-                            "--format",
-                            "{{.Names}}",
-                        ],
-                        capture_output=True,
-                        text=True,
-                        check=False,
-                    )
 
-                    if frontend_ps.stdout.strip():
-                        print(
-                            f"⚠️  Frontend container '{frontend_name}' is already running!"
-                        )
-                    else:
-                        print(f"🧹 Removing existing stopped frontend container...")
-                        subprocess.run(
-                            ["docker", "rm", frontend_name],
-                            capture_output=True,
-                            check=False,
-                        )
-                        print("🌐 Starting frontend...")
-                        compose_network = self._get_compose_network()
-                        subprocess.run(
-                            [
-                                "docker",
-                                "run",
-                                "-d",
-                                "--name",
-                                frontend_name,
-                                "--network",
-                                compose_network,
-                                "-p",
-                                "3000:80",
-                                "bioanalyzer-frontend",
-                            ],
-                            check=True,
-                        )
-                        print("✅ Frontend is running at http://localhost:3000")
-                else:
-                    print("🌐 Starting frontend...")
-                    compose_network = self._get_compose_network()
-                    subprocess.run(
-                            [
-                                "docker",
-                                "run",
-                                "-d",
-                                "--name",
-                                frontend_name,
-                                "--network",
-                                compose_network,
-                                "-p",
-                                "3000:80",
-                                "bioanalyzer-frontend",
-                            ],
-                            check=True,
-                        )
-                    print("✅ Frontend is running at http://localhost:3000")
-
-            print("\n🎉 BioAnalyzer is now running!")
-            print("📱 Web Interface: http://localhost:3000")
-            print("🔧 API Documentation: http://localhost:8000/docs")
+            print("\n🎉 BioAnalyzer backend is now running!")
+            print("🔧 API: http://localhost:8000")
+            print("📖 API Documentation: http://localhost:8000/docs")
             print("💡 Use 'BioAnalyzer status' to check system status")
 
             return True
@@ -720,7 +601,6 @@ except Exception as e:
             containers = [
                 self.container_name,
                 "bioanalyzer-package",
-                "bioanalyzer-frontend",
                 "bioanalyzer-redis",
             ]
             stopped_any = False
@@ -868,31 +748,10 @@ except Exception as e:
             print(f"Package Container: ✅ {backend_status}")
         else:
             print("Package Container: ❌ Not Running")
-        try:
-            result = subprocess.run(
-                [
-                    "docker",
-                    "ps",
-                    "--filter",
-                    "name=bioanalyzer-frontend",
-                    "--format",
-                    "{{.Status}}",
-                ],
-                capture_output=True,
-                text=True,
-                check=True,
-            )
-
-            if result.stdout.strip():
-                print(f"Frontend Container: ✅ {result.stdout.strip()}")
-            else:
-                print("Frontend Container: ❌ Not Running")
-        except:
-            print("Frontend Container: ❌ Not Running")
         if self.check_backend_health():
             print("API Health: ✅ Healthy")
-            print("🌐 Web Interface: http://localhost:3000")
-            print("🔧 API Documentation: http://localhost:8000/docs")
+            print("🔧 API: http://localhost:8000")
+            print("📖 API Documentation: http://localhost:8000/docs")
         else:
             print("API Health: ❌ Not Responding")
             if not backend_running:
