@@ -33,9 +33,8 @@ BioAnalyzer build
 ```
 
 **What it does:**
-- Builds the package Docker image
-- Builds the frontend Docker image (if available)
-- Prepares all necessary containers
+- Builds the package (backend) Docker image
+- Prepares the container for API and CLI use
 
 **Example:**
 ```bash
@@ -43,9 +42,7 @@ $ BioAnalyzer build
 🔨 Building BioAnalyzer containers...
 📦 Building package image...
 ✅ Package image built successfully!
-📦 Building frontend image...
-✅ Frontend image built successfully!
-🎉 All containers built successfully!
+✅ All containers built successfully!
 ```
 
 ### `BioAnalyzer start`
@@ -57,25 +54,21 @@ BioAnalyzer start --interactive      # Start with interactive mode
 ```
 
 **What it does:**
-- Starts the API server
-- Starts the frontend web interface
-- Makes the application available at:
-  - Web Interface: http://localhost:3000
-  - API Documentation: http://localhost:8000/docs
+- Starts the backend API server (and Redis if using docker-compose)
+- Makes the API available at http://localhost:8000
+- API docs at http://localhost:8000/docs
 
 **Example:**
 ```bash
 $ BioAnalyzer start
 🚀 Starting BioAnalyzer application...
 🔧 Starting API...
-⏳ Waiting for API to be ready...
+⏳ Waiting for API health (timeout: 60s)...
 ✅ API is running at http://localhost:8000
-🌐 Starting frontend...
-✅ Frontend is running at http://localhost:3000
 
-🎉 BioAnalyzer is now running!
-📱 Web Interface: http://localhost:3000
-🔧 API Documentation: http://localhost:8000/docs
+🎉 BioAnalyzer backend is now running!
+🔧 API: http://localhost:8000
+📖 API Documentation: http://localhost:8000/docs
 ```
 
 ### `BioAnalyzer stop`
@@ -94,8 +87,8 @@ BioAnalyzer stop
 ```bash
 $ BioAnalyzer stop
 🛑 Stopping BioAnalyzer application...
-✅ Stopped bioanalyzer-api
-✅ Stopped bioanalyzer-frontend
+✅ Stopped bioanalyzer-package
+✅ Stopped bioanalyzer-redis
 ✅ BioAnalyzer application stopped
 ```
 
@@ -120,9 +113,8 @@ BioAnalyzer status
 
 **What it shows:**
 - Docker availability
-- Container status
+- Package image and container status
 - API health
-- Web interface availability
 
 **Example:**
 ```bash
@@ -132,10 +124,9 @@ $ BioAnalyzer status
 Docker: ✅ Available
 Package Image: ✅ Built
 Package Container: ✅ Up 2 minutes (healthy)
-Frontend Container: ✅ Up 2 minutes (healthy)
 API Health: ✅ Healthy
-🌐 Web Interface: http://localhost:3000
-🔧 API Documentation: http://localhost:8000/docs
+🔧 API: http://localhost:8000
+📖 API Documentation: http://localhost:8000/docs
 ```
 
 ## 🔬 Analysis Commands
@@ -332,11 +323,11 @@ BioAnalyzer analyze 12345678,87654321 --output batch_results.csv
 BioAnalyzer analyze 12345678 --verbose
 ```
 
-## 🌐 Web Interface
+## 🌐 API
 
-Once you start BioAnalyzer, you can also use the web interface:
+Once you start BioAnalyzer, the backend API is available at:
 
-- **Main Interface:** http://localhost:3000
+- **API:** http://localhost:8000
 - **API Documentation:** http://localhost:8000/docs
 - **Health Check:** http://localhost:8000/health
 
@@ -436,9 +427,8 @@ chmod +x BioAnalyzer
 
 ### File Locations
 - Package: `BioAnalyzer-Backend/`
-- Frontend: `BioAnalyzer-Frontend/`
-- Docker Images: `bioanalyzer-package`, `bioanalyzer-frontend`
-- Containers: `bioanalyzer-api`, `bioanalyzer-frontend`
+- Docker Image: `bioanalyzer-package`
+- Containers: `bioanalyzer-package`, `bioanalyzer-redis`
 
 ### Environment Variables
 - `BIOANALYZER_PATH` - Path to BioAnalyzer package
@@ -456,7 +446,6 @@ chmod +x BioAnalyzer
 
 - **BugSigDB:** https://bugsigdb.org/
 - **API Documentation:** http://localhost:8000/docs (when running)
-- **Web Interface:** http://localhost:3000 (when running)
 - **GitHub Repository:** https://github.com/your-repo/bioanalyzer-package
 
 ---

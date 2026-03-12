@@ -37,7 +37,6 @@
 graph TB
     subgraph "User Interface Layer"
         CLI[CLI Commands]
-        WEB[Web Frontend<br/>Port 3000]
     end
     
     subgraph "API Layer - Port 8000"
@@ -834,10 +833,6 @@ GET /api/v1/config
 - **Vector Storage:** Numpy/Qdrant
 - **Caching:** SQLite
 - **Async:** aiohttp, asyncio
-
-### Frontend
-- **Framework:** React (orunos-main)
-- **Port:** 3000
 
 ### External Services
 - **NCBI E-Utilities:** PubMed/PMC data
