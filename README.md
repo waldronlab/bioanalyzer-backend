@@ -10,6 +10,8 @@ Extracts six BugSigDB fields from scientific papers using LLMs. Pulls metadata a
 
 Works on Ubuntu with Docker. Python 3.8+ for local installs.
 
+**Full documentation:** [docs/](docs/README.md)
+
 ## What It Does
 
 Takes a PMID, fetches the paper from PubMed, and extracts:
@@ -39,13 +41,12 @@ cd BioAnalyzer-Backend
 chmod +x install.sh
 ./install.sh
 
-docker compose build
-docker compose up -d
-
-curl http://localhost:8000/health
+BioAnalyzer build
+BioAnalyzer start
+BioAnalyzer status   # confirm running
 ```
 
-API docs at http://localhost:8000/docs
+API docs at http://localhost:8000/docs when the API is running.
 
 ### Local Install
 
@@ -251,12 +252,17 @@ docker compose logs
 
 ## Documentation
 
-- [SETUP_GUIDE.md](SETUP_GUIDE.md) - Detailed setup
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) - System design
-- [docs/RAG_GUIDE.md](docs/RAG_GUIDE.md) - RAG configuration
-- [docs/CURATOR_TABLE_DESIGN.md](docs/CURATOR_TABLE_DESIGN.md) - Curator table (scale, fields, feedback)
-- [curator_table/README.md](curator_table/README.md) - Sortable/searchable curator table (Streamlit)
-- API docs: http://localhost:8000/docs (when running)
+All documentation lives in the **[docs/](docs/)** folder:
+
+- **[docs/README.md](docs/README.md)** – Index of all documentation
+- **Getting started:** [QUICKSTART](docs/QUICKSTART.md), [SETUP_GUIDE](docs/SETUP_GUIDE.md), [QUICK_REFERENCE](docs/QUICK_REFERENCE.md)
+- **Architecture:** [ARCHITECTURE](docs/ARCHITECTURE.md), [ARCHITECTURE_FLOW](docs/ARCHITECTURE_FLOW.md)
+- **CLI:** [CLI_DOCUMENTATION](docs/CLI_DOCUMENTATION.md)
+- **Features:** [RAG_GUIDE](docs/RAG_GUIDE.md), [CURATOR_TABLE_DESIGN](docs/CURATOR_TABLE_DESIGN.md), [CURATOR_TABLE_USER_GUIDE](docs/CURATOR_TABLE_USER_GUIDE.md)
+- **Deployment:** [DOCKER_DEPLOYMENT](docs/DOCKER_DEPLOYMENT.md), [PRODUCTION_DEPLOYMENT](docs/PRODUCTION_DEPLOYMENT.md)
+- **Development:** [TESTING](docs/TESTING.md)
+
+When the API is running, interactive API docs: **http://localhost:8000/docs**
 
 ## License
 

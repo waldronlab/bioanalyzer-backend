@@ -1,6 +1,7 @@
 services:
   bioanalyzer-package:
     build: .
+    image: bioanalyzer-package
     container_name: bioanalyzer-package
     user: "${UID:-1000}:${GID:-1000}"
     env_file:
