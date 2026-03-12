@@ -572,23 +572,23 @@ except Exception as e:
             except (KeyError, AttributeError):
                 env["UID"] = str(os.getuid())
                 env["GID"] = str(os.getgid())
-            up_cmd = compose_cmd + ["-p", COMPOSE_PROJECT_NAME, "up", "-d", "--force-recreate", "--remove-orphans"]
+            # Only force-recreate when recovering from a bad state; normal start is faster without it
+            force_recreate = containers_running and not self.check_backend_health()
+            up_cmd = compose_cmd + ["-p", COMPOSE_PROJECT_NAME, "up", "-d", "--remove-orphans"]
+            if force_recreate:
+                up_cmd.append("--force-recreate")
 
             result = subprocess.run(
                 up_cmd,
                 cwd=str(project_root),
                 env=env,
-                capture_output=True,
+                capture_output=False,
                 text=True,
                 check=False,
             )
 
             if result.returncode != 0:
-                if "permission denied" in result.stderr.lower():
-                    self._check_docker_permissions()
-                print(f"❌ Error starting containers: {result.stderr}")
-                if result.stdout:
-                    print(f"\n📋 Output: {result.stdout}")
+                print("❌ Error starting containers. Check the output above for details.")
                 return False
             if self._wait_for_backend_health(timeout=60, interval=2):
                 print("✅ API is running at http://localhost:8000")
@@ -688,6 +688,22 @@ except Exception as e:
             print(f"❌ Error starting application: {e}")
             return False
 
+    def _is_package_container_running(self) -> bool:
+        """Return True if the BioAnalyzer package container is currently running."""
+        for name in [self.container_name, "bioanalyzer-package"]:
+            try:
+                r = subprocess.run(
+                    ["docker", "ps", "--filter", f"name={name}", "-q"],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                if r.returncode == 0 and r.stdout.strip():
+                    return True
+            except Exception:
+                pass
+        return False
+
     def stop_application(self):
         """Stop the BioAnalyzer application."""
         print("🛑 Stopping BioAnalyzer application...")
@@ -706,6 +722,7 @@ except Exception as e:
                 if not check_compose.stdout.strip():
                     compose_cmd = ["docker", "compose"]
 
+                # Stop using compose (project name used by CLI start)
                 result = subprocess.run(
                     compose_cmd + ["-p", COMPOSE_PROJECT_NAME, "down", "--remove-orphans"],
                     cwd=str(project_root),
@@ -713,10 +730,22 @@ except Exception as e:
                     text=True,
                     check=False,
                 )
-
-                if result.returncode == 0:
+                # If container still running (e.g. started without -p bioanalyzer-package),
+                # try default project name (directory name)
+                if self._is_package_container_running():
+                    default_project = project_root.name
+                    subprocess.run(
+                        compose_cmd + ["-p", default_project, "down", "--remove-orphans"],
+                        cwd=str(project_root),
+                        capture_output=True,
+                        text=True,
+                        check=False,
+                    )
+                # If container is now stopped, we're done
+                if not self._is_package_container_running():
                     print("✅ BioAnalyzer application stopped")
                     return True
+            # Fallback: stop by container name (e.g. compose down used different project name)
             containers = [
                 self.container_name,
                 "bioanalyzer-package",
