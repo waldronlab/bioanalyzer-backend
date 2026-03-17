@@ -51,9 +51,9 @@ BioAnalyzer analyze 12345678 --verbose
 - `--format json` - JSON format
 - `--format csv` - CSV format
 
-## 🌐 Web Interface
+## 🌐 API
 
-- **Main App:** http://localhost:3000
+- **API:** http://localhost:8000
 - **API Docs:** http://localhost:8000/docs
 
 ## ❓ Troubleshooting

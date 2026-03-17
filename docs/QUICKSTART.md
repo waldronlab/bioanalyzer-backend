@@ -118,7 +118,7 @@ docker compose restart
 
 ## Next Steps
 
-- Read the [Complete Setup Guide](../SETUP_GUIDE.md)
+- Read the [Complete Setup Guide](SETUP_GUIDE.md)
 - Explore the [API documentation](http://localhost:8000/docs)
 - Test with real PMIDs
 - Configure API keys for full functionality

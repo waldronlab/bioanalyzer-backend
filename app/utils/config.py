@@ -141,7 +141,7 @@ ANALYSIS_TIMEOUT = int(
 GEMINI_TIMEOUT = int(os.getenv("GEMINI_TIMEOUT", "30"))  # seconds - Gemini API timeout
 FRONTEND_TIMEOUT = int(
     os.getenv("FRONTEND_TIMEOUT", "60")
-)  # seconds - frontend timeout
+)  # seconds - API client timeout
 
 # RAG Configuration - Advanced RAG with Contextual Summarization
 RAG_SUMMARY_PROVIDER = (

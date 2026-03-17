@@ -64,4 +64,3 @@ watchfiles[watchdog]>=1.0.0
 # --- Curator table (Streamlit) ---
 streamlit>=1.28.0
 pyarrow>=14.0.0
-pyarrow>=14.0.0

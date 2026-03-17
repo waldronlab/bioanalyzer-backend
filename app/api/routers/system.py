@@ -71,10 +71,10 @@ def get_pubmed_retriever() -> Optional[PubMedRetriever]:
 
 @router.get("/")
 async def root() -> Any:
-    """Redirect to the frontend application."""
+    """API v1 root; redirect to API docs."""
     from fastapi.responses import RedirectResponse
 
-    return RedirectResponse(url="/static/index.html")
+    return RedirectResponse(url="/docs")
 
 
 @router.get("/health")
@@ -95,14 +95,13 @@ async def health_check() -> HealthResponse:
 @router.get("/config")
 async def get_config() -> ConfigResponse:
     """
-    **Get configuration settings for the frontend.**
+    **Get configuration settings for API clients.**
 
-    This endpoint provides configuration information
-    that the frontend needs to operate correctly.
+    Returns configuration information including available models,
+    timeouts, and other system parameters.
 
     **Response:**
-    Returns configuration settings including available models,
-    timeouts, and other system parameters.
+    Configuration settings for clients (e.g. timeouts, available LLM models).
     """
     try:
         return ConfigResponse(

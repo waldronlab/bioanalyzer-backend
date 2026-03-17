@@ -52,6 +52,10 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+# Compose project name: ensures network is always "bioanalyzer-package_bioanalyzer-net"
+COMPOSE_PROJECT_NAME = "bioanalyzer-package"
+
+
 class BioAnalyzerCLI:
     """User-friendly Command Line Interface for BioAnalyzer."""
 
@@ -234,8 +238,8 @@ class BioAnalyzerCLI:
    BioAnalyzer status
    BioAnalyzer stop
 
-🌐 Web Interface:
-   Once started, visit: http://localhost:3000
+🔧 API:
+   Once started: http://localhost:8000
    API Documentation: http://localhost:8000/docs
 
 ❓ Need Help?
@@ -393,17 +397,7 @@ except Exception as e:
             )
 
             print("✅ Package image built successfully!")
-            frontend_dir = project_root.parent / "BioAnalyzer-Frontend"
-            if frontend_dir.exists():
-                print("📦 Building frontend image...")
-                subprocess.run(
-                    ["docker", "build", "-t", "bioanalyzer-frontend", "."],
-                    cwd=frontend_dir,
-                    check=True,
-                )
-                print("✅ Frontend image built successfully!")
-
-            print(" All containers built successfully!")
+            print("✅ All containers built successfully!")
             return True
 
         except subprocess.CalledProcessError as e:
@@ -508,7 +502,7 @@ except Exception as e:
             if not check_compose.stdout.strip():
                 compose_cmd = ["docker", "compose"]
             ps_result = subprocess.run(
-                compose_cmd + ["ps", "-q"],
+                compose_cmd + ["-p", COMPOSE_PROJECT_NAME, "ps", "-q"],
                 cwd=str(project_root),
                 capture_output=True,
                 text=True,
@@ -568,7 +562,7 @@ except Exception as e:
                 up_cmd,
                 cwd=str(project_root),
                 env=env,
-                capture_output=True,
+                capture_output=False,
                 text=True,
                 check=False,
             )
@@ -584,90 +578,10 @@ except Exception as e:
                 print(
                     "⚠️  Package container started but /health did not report healthy within 60s"
                 )
-            frontend_dir = project_root.parent / "BioAnalyzer-Frontend"
-            if frontend_dir.exists():
-                frontend_name = "bioanalyzer-frontend"
-                frontend_check = subprocess.run(
-                    [
-                        "docker",
-                        "ps",
-                        "-a",
-                        "--filter",
-                        f"name={frontend_name}",
-                        "--format",
-                        "{{.Names}}",
-                    ],
-                    capture_output=True,
-                    text=True,
-                    check=False,
-                )
-                if frontend_check.stdout.strip():
-                    frontend_ps = subprocess.run(
-                        [
-                            "docker",
-                            "ps",
-                            "--filter",
-                            f"name={frontend_name}",
-                            "--format",
-                            "{{.Names}}",
-                        ],
-                        capture_output=True,
-                        text=True,
-                        check=False,
-                    )
 
-                    if frontend_ps.stdout.strip():
-                        print(
-                            f"⚠️  Frontend container '{frontend_name}' is already running!"
-                        )
-                    else:
-                        print(f"🧹 Removing existing stopped frontend container...")
-                        subprocess.run(
-                            ["docker", "rm", frontend_name],
-                            capture_output=True,
-                            check=False,
-                        )
-                        print("🌐 Starting frontend...")
-                        compose_network = "bioanalyzer-package_bioanalyzer-net"
-                        subprocess.run(
-                            [
-                                "docker",
-                                "run",
-                                "-d",
-                                "--name",
-                                frontend_name,
-                                "--network",
-                                compose_network,
-                                "-p",
-                                "3000:80",
-                                "bioanalyzer-frontend",
-                            ],
-                            check=True,
-                        )
-                        print("✅ Frontend is running at http://localhost:3000")
-                else:
-                    print("🌐 Starting frontend...")
-                    compose_network = "bioanalyzer-package_bioanalyzer-net"
-                    subprocess.run(
-                        [
-                            "docker",
-                            "run",
-                            "-d",
-                            "--name",
-                            frontend_name,
-                            "--network",
-                            compose_network,
-                            "-p",
-                            "3000:80",
-                            "bioanalyzer-frontend",
-                        ],
-                        check=True,
-                    )
-                    print("✅ Frontend is running at http://localhost:3000")
-
-            print("\n🎉 BioAnalyzer is now running!")
-            print("📱 Web Interface: http://localhost:3000")
-            print("🔧 API Documentation: http://localhost:8000/docs")
+            print("\n🎉 BioAnalyzer backend is now running!")
+            print("🔧 API: http://localhost:8000")
+            print("📖 API Documentation: http://localhost:8000/docs")
             print("💡 Use 'BioAnalyzer status' to check system status")
 
             return True
@@ -675,6 +589,22 @@ except Exception as e:
         except subprocess.CalledProcessError as e:
             print(f"❌ Error starting application: {e}")
             return False
+
+    def _is_package_container_running(self) -> bool:
+        """Return True if the BioAnalyzer package container is currently running."""
+        for name in [self.container_name, "bioanalyzer-package"]:
+            try:
+                r = subprocess.run(
+                    ["docker", "ps", "--filter", f"name={name}", "-q"],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                if r.returncode == 0 and r.stdout.strip():
+                    return True
+            except Exception:
+                pass
+        return False
 
     def stop_application(self):
         """Stop the BioAnalyzer application."""
@@ -694,6 +624,7 @@ except Exception as e:
                 if not check_compose.stdout.strip():
                     compose_cmd = ["docker", "compose"]
 
+                # Stop using compose (project name used by CLI start)
                 result = subprocess.run(
                     compose_cmd
                     + ["-p", COMPOSE_PROJECT_NAME, "down", "--remove-orphans"],
@@ -718,10 +649,10 @@ except Exception as e:
                 if not self._is_package_container_running():
                     print("✅ BioAnalyzer application stopped")
                     return True
+            # Fallback: stop by container name (e.g. compose down used different project name)
             containers = [
                 self.container_name,
                 "bioanalyzer-package",
-                "bioanalyzer-frontend",
                 "bioanalyzer-redis",
             ]
             stopped_any = False
@@ -869,31 +800,10 @@ except Exception as e:
             print(f"Package Container: ✅ {backend_status}")
         else:
             print("Package Container: ❌ Not Running")
-        try:
-            result = subprocess.run(
-                [
-                    "docker",
-                    "ps",
-                    "--filter",
-                    "name=bioanalyzer-frontend",
-                    "--format",
-                    "{{.Status}}",
-                ],
-                capture_output=True,
-                text=True,
-                check=True,
-            )
-
-            if result.stdout.strip():
-                print(f"Frontend Container: ✅ {result.stdout.strip()}")
-            else:
-                print("Frontend Container: ❌ Not Running")
-        except:
-            print("Frontend Container: ❌ Not Running")
         if self.check_backend_health():
             print("API Health: ✅ Healthy")
-            print("🌐 Web Interface: http://localhost:3000")
-            print("🔧 API Documentation: http://localhost:8000/docs")
+            print("🔧 API: http://localhost:8000")
+            print("📖 API Documentation: http://localhost:8000/docs")
         else:
             print("API Health: ❌ Not Responding")
             if not backend_running:
