@@ -289,15 +289,21 @@ class PubMedRetriever:
 
         except (requests.exceptions.RequestException, PubMedRetrieverError) as e:
             safe_error = mask_exception_message(e)
-            logger.warning(f"Network error retrieving full text for PMID {pmid}: {safe_error}")
+            logger.warning(
+                f"Network error retrieving full text for PMID {pmid}: {safe_error}"
+            )
             return ""
         except (ElementTree.ParseError, ValueError) as e:
             safe_error = mask_exception_message(e)
-            logger.warning(f"Parse error retrieving full text for PMID {pmid}: {safe_error}")
+            logger.warning(
+                f"Parse error retrieving full text for PMID {pmid}: {safe_error}"
+            )
             return ""
         except Exception as e:
             safe_error = mask_exception_message(e)
-            logger.warning(f"Unexpected error retrieving full text for PMID {pmid}: {safe_error}")
+            logger.warning(
+                f"Unexpected error retrieving full text for PMID {pmid}: {safe_error}"
+            )
             return ""
 
     def _get_pmc_id_from_pmid(self, pmid: str) -> Optional[str]:
@@ -331,7 +337,9 @@ class PubMedRetriever:
 
         except (requests.exceptions.RequestException, PubMedRetrieverError) as e:
             safe_error = mask_exception_message(e)
-            logger.warning(f"Network error getting PMC ID for PMID {pmid}: {safe_error}")
+            logger.warning(
+                f"Network error getting PMC ID for PMID {pmid}: {safe_error}"
+            )
             return None
         except (ElementTree.ParseError, AttributeError) as e:
             safe_error = mask_exception_message(e)
@@ -339,7 +347,9 @@ class PubMedRetriever:
             return None
         except Exception as e:
             safe_error = mask_exception_message(e)
-            logger.warning(f"Unexpected error getting PMC ID for PMID {pmid}: {safe_error}")
+            logger.warning(
+                f"Unexpected error getting PMC ID for PMID {pmid}: {safe_error}"
+            )
             return None
 
     def _get_pmc_fulltext_by_id(self, pmc_id: str) -> str:
@@ -385,15 +395,21 @@ class PubMedRetriever:
 
         except (requests.exceptions.RequestException, PubMedRetrieverError) as e:
             safe_error = mask_exception_message(e)
-            logger.warning(f"Network error retrieving PMC full text for {pmc_id}: {safe_error}")
+            logger.warning(
+                f"Network error retrieving PMC full text for {pmc_id}: {safe_error}"
+            )
             return ""
         except (ElementTree.ParseError, AttributeError, ValueError) as e:
             safe_error = mask_exception_message(e)
-            logger.warning(f"Parse error retrieving PMC full text for {pmc_id}: {safe_error}")
+            logger.warning(
+                f"Parse error retrieving PMC full text for {pmc_id}: {safe_error}"
+            )
             return ""
         except Exception as e:
             safe_error = mask_exception_message(e)
-            logger.warning(f"Unexpected error retrieving PMC full text for {pmc_id}: {safe_error}")
+            logger.warning(
+                f"Unexpected error retrieving PMC full text for {pmc_id}: {safe_error}"
+            )
             return ""
 
     async def get_pmc_fulltext_async(self, pmid: str) -> str:
@@ -462,11 +478,15 @@ class PubMedRetriever:
                 return {}
             except (requests.exceptions.RequestException, PubMedRetrieverError) as e:
                 safe_error = mask_exception_message(e)
-                logger.error(f"Network error fetching metadata for PMID {pmid}: {safe_error}")
+                logger.error(
+                    f"Network error fetching metadata for PMID {pmid}: {safe_error}"
+                )
                 return {}
             except Exception as e:
                 safe_error = mask_exception_message(e)
-                logger.error(f"Unexpected error fetching metadata for PMID {pmid}: {safe_error}")
+                logger.error(
+                    f"Unexpected error fetching metadata for PMID {pmid}: {safe_error}"
+                )
                 return {}
 
         async def fetch_fulltext():
@@ -479,11 +499,15 @@ class PubMedRetriever:
                 return ""
             except (requests.exceptions.RequestException, PubMedRetrieverError) as e:
                 safe_error = mask_exception_message(e)
-                logger.warning(f"Network error fetching full text for PMID {pmid}: {safe_error}")
+                logger.warning(
+                    f"Network error fetching full text for PMID {pmid}: {safe_error}"
+                )
                 return ""
             except Exception as e:
                 safe_error = mask_exception_message(e)
-                logger.warning(f"Unexpected error fetching full text for PMID {pmid}: {safe_error}")
+                logger.warning(
+                    f"Unexpected error fetching full text for PMID {pmid}: {safe_error}"
+                )
                 return ""
 
         if USE_FULLTEXT:

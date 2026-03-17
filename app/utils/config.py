@@ -21,12 +21,14 @@ except ImportError:
 def get_genai():
     try:
         import google.generativeai as genai
+
         return genai
     except ImportError:
         raise RuntimeError(
             "google-generativeai is not installed. "
             "Install with: pip install google-generativeai"
         )
+
 
 possible_env_paths = [
     Path(__file__).parents[1] / ".env",  # Original location
@@ -101,9 +103,7 @@ def validate_env_vars() -> bool:
         missing_vars.append("GEMINI_API_KEY")
 
     if missing_vars:
-        print(
-            f"Warning: Missing environment variables: {', '.join(missing_vars)}"
-        )
+        print(f"Warning: Missing environment variables: {', '.join(missing_vars)}")
         print("Set them in your .env file or environment.")
 
     return len(missing_vars) == 0
@@ -386,4 +386,3 @@ try:
 except Exception:
     # Fail gracefully; fall back to env-based values defined above
     pass
-

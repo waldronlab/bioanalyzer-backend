@@ -72,7 +72,13 @@ class ChunkReRanker:
         if not chunks:
             return []
 
-        chunks_to_rerank = chunks[: (evidence_k or self.evidence_k) if (evidence_k or self.evidence_k) else len(chunks)]
+        chunks_to_rerank = chunks[
+            : (
+                (evidence_k or self.evidence_k)
+                if (evidence_k or self.evidence_k)
+                else len(chunks)
+            )
+        ]
 
         if self.rerank_method == "keyword":
             ranked = await self._keyword_rerank(chunks_to_rerank, query)
@@ -118,7 +124,9 @@ class ChunkReRanker:
                     temperature=0.1,
                     timeout=GEMINI_TIMEOUT,
                 )
-                score = self._parse_score_from_response_10_scale(response.get("text", ""))
+                score = self._parse_score_from_response_10_scale(
+                    response.get("text", "")
+                )
                 reasoning = self._extract_reasoning(response.get("text", ""))
             except Exception:
                 score = (await self._calculate_keyword_score(chunk.text, query)) * 10

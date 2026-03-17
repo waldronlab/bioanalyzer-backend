@@ -49,6 +49,7 @@ def _ensure_app_importable() -> None:
     """Try importing app; if it fails, try common fallback paths."""
     try:
         import app  # noqa: F401
+
         return
     except ImportError:
         pass
@@ -58,6 +59,7 @@ def _ensure_app_importable() -> None:
             sys.path.insert(0, p)
             try:
                 import app  # noqa: F401
+
                 return
             except ImportError:
                 continue

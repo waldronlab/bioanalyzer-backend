@@ -34,7 +34,7 @@ class PerformanceLogger:
         )
         perf_handler.setFormatter(formatter)
         self.logger.addHandler(perf_handler)
-        
+
         # Initialize basic metrics tracking
         self.total_requests = 0
         self.successful_requests = 0
@@ -71,7 +71,7 @@ class PerformanceLogger:
             f"Error: {error or 'None'} | "
             f"Timestamp: {datetime.now().isoformat()}"
         )
-        
+
         # Update metrics
         self.total_requests += 1
         if success:
@@ -158,7 +158,7 @@ class PerformanceLogger:
     def get_metrics(self) -> Dict[str, Any]:
         """
         Get performance metrics summary.
-        
+
         Returns:
             Dictionary containing performance metrics
         """

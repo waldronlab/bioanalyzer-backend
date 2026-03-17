@@ -37,6 +37,7 @@ router = APIRouter(prefix="/api/v1", tags=["System"])
 _unified_qa: Optional[UnifiedQA] = None
 _pubmed_retriever: Optional[PubMedRetriever] = None
 
+
 def get_unified_qa() -> Optional[UnifiedQA]:
     """Get or initialize UnifiedQA instance."""
     global _unified_qa
@@ -295,14 +296,28 @@ async def get_system_status():
             health_dict = health_status
         else:
             overall_status = health_status.status
-            health_dict = health_status.dict() if hasattr(health_status, "dict") else health_status.model_dump()
+            health_dict = (
+                health_status.dict()
+                if hasattr(health_status, "dict")
+                else health_status.model_dump()
+            )
 
         return {
             "overall_status": overall_status,
             "uptime_hours": round(uptime_hours, 2),
             "health": health_dict,
-            "config": config.dict() if hasattr(config, "dict") else (config.model_dump() if hasattr(config, "model_dump") else config),
-            "metrics": metrics.dict() if hasattr(metrics, "dict") else (metrics.model_dump() if hasattr(metrics, "model_dump") else metrics),
+            "config": (
+                config.dict()
+                if hasattr(config, "dict")
+                else (config.model_dump() if hasattr(config, "model_dump") else config)
+            ),
+            "metrics": (
+                metrics.dict()
+                if hasattr(metrics, "dict")
+                else (
+                    metrics.model_dump() if hasattr(metrics, "model_dump") else metrics
+                )
+            ),
             "gemini_api": gemini_health,
             "timestamp": get_current_timestamp(),
         }

@@ -22,7 +22,11 @@ async def test_unified_qa_chat_without_gemini_key(monkeypatch):
     assert "confidence" in resp
     # When API key is missing, LiteLLM will attempt the request and return an error
     # The response should contain either "Model not available" or an error message
-    assert "Model not available" in resp["text"] or "Error:" in resp["text"] or "API key" in resp["text"]
+    assert (
+        "Model not available" in resp["text"]
+        or "Error:" in resp["text"]
+        or "API key" in resp["text"]
+    )
     assert resp["confidence"] == 0.0
 
 
@@ -42,7 +46,8 @@ async def test_analyze_image_without_gemini_key(monkeypatch):
     # When API key is missing or image URL is invalid, various error messages are possible
     # Check for any of the expected error indicators
     assert (
-        "Image analysis is unavailable because GEMINI_API_KEY is not configured" in result
+        "Image analysis is unavailable because GEMINI_API_KEY is not configured"
+        in result
         or "Error" in result
         or "API key" in result
         or "Unable to fetch image" in result

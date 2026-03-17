@@ -117,9 +117,7 @@ async def validation_exception_handler(
 
 
 @app.exception_handler(Exception)
-async def global_exception_handler(
-    request: Request, exc: Exception
-) -> JSONResponse:
+async def global_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     """Handle unexpected exceptions with credential masking."""
     from app.utils.credential_masking import mask_exception_message, mask_string
 
@@ -152,5 +150,5 @@ async def global_exception_handler(
 if __name__ == "__main__":
     import uvicorn
 
-    # nosec B104: binding to 0.0.0.0 is required for containerized deployment
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    # Binding to 0.0.0.0 is required for containerized deployment
+    uvicorn.run(app, host="0.0.0.0", port=8000)  # nosec B104

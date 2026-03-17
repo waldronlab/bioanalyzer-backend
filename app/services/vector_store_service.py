@@ -1,5 +1,6 @@
 """Vector store service using Paper-QA's implementations."""
 
+import asyncio
 import logging
 from pathlib import Path
 from typing import Optional
@@ -16,6 +17,17 @@ from paperqa.types import Text, Doc
 from paperqa import Docs
 
 logger = logging.getLogger(__name__)
+
+
+async def _get_embeddable_text(text: Text) -> str:
+    """Get text content for embedding; use get_embeddable_text if available else text.text."""
+    getter = getattr(text, "get_embeddable_text", None)
+    if callable(getter):
+        result = getter(with_enrichment=True)
+        if asyncio.iscoroutine(result):
+            return await result
+        return result
+    return text.text
 
 
 class VectorStoreService:
@@ -80,10 +92,10 @@ class VectorStoreService:
         texts_to_embed = [t for t in texts if t.embedding is None]
 
         if texts_to_embed:
-            # Get embeddable text
+            # Get embeddable text (use get_embeddable_text if available, else text.text)
             embeddable_texts = []
             for text in texts_to_embed:
-                embeddable_text = await text.get_embeddable_text(with_enrichment=True)
+                embeddable_text = await _get_embeddable_text(text)
                 embeddable_texts.append(embeddable_text)
 
             # Generate embeddings

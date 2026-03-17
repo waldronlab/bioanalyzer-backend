@@ -93,10 +93,7 @@ class AdvancedTextProcessor:
             # minimal padding to make tensor valid
             pad_id = self.pad_token_id
 
-        encoded = [
-            seq + [pad_id] * (max_len - len(seq))
-            for seq in encoded
-        ]
+        encoded = [seq + [pad_id] * (max_len - len(seq)) for seq in encoded]
 
         return torch.tensor(encoded, dtype=torch.long)
 

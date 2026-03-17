@@ -25,9 +25,7 @@ def large_chunk_set():
     """Create a large set of chunks for performance testing."""
     # Create a minimal Doc object for all chunks
     test_doc = Doc(
-        docname="test_paper",
-        dockey="test_key",
-        citation="Test Paper Citation"
+        docname="test_paper", dockey="test_key", citation="Test Paper Citation"
     )
     chunks = []
     for i in range(50):

@@ -16,13 +16,11 @@ from paperqa.types import Text
 def sample_chunks():
     """Create sample text chunks for testing."""
     from paperqa.types import Doc
-    
+
     test_doc = Doc(
-        docname="test_paper",
-        dockey="test_key",
-        citation="Test Paper Citation"
+        docname="test_paper", dockey="test_key", citation="Test Paper Citation"
     )
-    
+
     return [
         Text(
             text="This study examined the gut microbiome in human participants with inflammatory bowel disease.",
@@ -70,6 +68,7 @@ class TestRankedChunk:
     def test_ranked_chunk_creation(self):
         """Test creating a RankedChunk."""
         from paperqa.types import Doc
+
         test_doc = Doc(docname="test", dockey="test_key", citation="Test")
         chunk = Text(text="Test chunk", name="chunk_1", doc=test_doc)
         ranked = RankedChunk(
@@ -84,6 +83,7 @@ class TestRankedChunk:
     def test_ranked_chunk_without_reasoning(self):
         """Test RankedChunk without reasoning."""
         from paperqa.types import Doc
+
         test_doc = Doc(docname="test", dockey="test_key", citation="Test")
         chunk = Text(text="Test chunk", name="chunk_1", doc=test_doc)
         ranked = RankedChunk(chunk=chunk, relevance_score=0.5, rank=2)
@@ -247,7 +247,9 @@ class TestChunkReRanker:
         with patch("app.services.chunk_reranking.LLMProviderManager") as mock_manager:
             mock_manager.return_value = mock_llm_provider
             # Use 0-1 scale for easier testing
-            reranker = ChunkReRanker(rerank_method="hybrid", llm_provider="gemini", use_10_scale=False)
+            reranker = ChunkReRanker(
+                rerank_method="hybrid", llm_provider="gemini", use_10_scale=False
+            )
             reranker.llm_manager = mock_llm_provider
 
             query = "What is the host species?"

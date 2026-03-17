@@ -17,11 +17,9 @@ from paperqa.types import Text
 def sample_texts():
     """Create sample Text objects for testing."""
     from paperqa.types import Doc
-    
+
     test_doc = Doc(
-        docname="test_paper",
-        dockey="test_key",
-        citation="Test Paper Citation"
+        docname="test_paper", dockey="test_key", citation="Test Paper Citation"
     )
     return [
         Text(
@@ -170,6 +168,7 @@ class TestVectorStoreService:
 
             # Mock search results
             from paperqa.types import Doc
+
             test_doc = Doc(docname="test", dockey="test_key", citation="Test")
             result_texts = [Text(text="Result 1", name="r1", doc=test_doc)]
             result_scores = [0.85]
@@ -198,6 +197,7 @@ class TestVectorStoreService:
             mock_numpy.return_value = mock_vector_store
 
             from paperqa.types import Doc
+
             test_doc = Doc(docname="test", dockey="test_key", citation="Test")
             result_texts = [Text(text="Result 1", name="r1", doc=test_doc)]
             result_scores = [0.85]
@@ -215,8 +215,10 @@ class TestVectorStoreService:
             assert mock_vector_store.max_marginal_relevance_search.called
 
     @pytest.mark.asyncio
-    async def test_embedding_generation(self, sample_texts, mock_embedding_model, mock_vector_store):
-        """Test embedding generation for texts."""
+    async def test_embedding_generation(
+        self, sample_texts, mock_embedding_model, mock_vector_store
+    ):
+        """Test embedding generation for texts (uses text.text when get_embeddable_text is not available)."""
         with patch(
             "app.services.vector_store_service.embedding_model_factory"
         ) as mock_factory, patch(
@@ -230,13 +232,9 @@ class TestVectorStoreService:
             service.vector_store = mock_vector_store
             service.embedding_model = mock_embedding_model
 
-            # Mock get_embeddable_text
-            for text in sample_texts:
-                text.get_embeddable_text = AsyncMock(return_value=text.text)
-
             await service.add_texts(sample_texts)
 
-            # Should generate embeddings
+            # Should generate embeddings (service uses text.text for paperqa Text without get_embeddable_text)
             assert mock_embedding_model.embed_documents.called
             call_args = mock_embedding_model.embed_documents.call_args
             assert len(call_args[0][0]) == len(sample_texts)

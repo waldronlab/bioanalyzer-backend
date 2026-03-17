@@ -28,13 +28,11 @@ def temp_cache_dir():
 def sample_chunks():
     """Create sample text chunks for testing."""
     from paperqa.types import Doc
-    
+
     test_doc = Doc(
-        docname="test_paper",
-        dockey="test_key",
-        citation="Test Paper Citation"
+        docname="test_paper", dockey="test_key", citation="Test Paper Citation"
     )
-    
+
     return [
         Text(
             text="This study examined the gut microbiome in 100 human participants with inflammatory bowel disease. The analysis used 16S rRNA sequencing at the genus level.",
