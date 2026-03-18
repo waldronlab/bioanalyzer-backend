@@ -22,11 +22,11 @@ docker run --rm \
         
         # Run Black to fix formatting
         echo 'Running Black to fix formatting...' && \
-        black app/ tests/ cli.py main.py && \
+        black app/ tests/ scripts/cli.py scripts/main.py && \
         
         # Fix trailing whitespace using sed
         echo 'Fixing trailing whitespace...' && \
-        find app tests cli.py main.py -name '*.py' -type f -exec sed -i 's/[[:space:]]*$//' {} \; && \
+        find app tests scripts/cli.py scripts/main.py -name '*.py' -type f -exec sed -i 's/[[:space:]]*$//' {} \; && \
         
         echo '✓ Formatting fixes complete!'
     "

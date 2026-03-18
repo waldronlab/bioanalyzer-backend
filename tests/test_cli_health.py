@@ -2,7 +2,7 @@ import types
 
 import pytest
 
-from cli import BioAnalyzerCLI
+from scripts.cli import BioAnalyzerCLI
 
 
 class DummyResponse:

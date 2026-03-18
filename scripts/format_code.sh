@@ -18,7 +18,7 @@ if [ "$1" == "--check" ]; then
         bash -c "
             apt-get update -qq && apt-get install -y -qq gcc > /dev/null 2>&1 && \
             pip install --quiet --no-cache-dir black>=23.0.0 && \
-            black --check app/ tests/ cli.py main.py
+            black --check app/ tests/ scripts/cli.py scripts/main.py
         "
     echo "✓ All files are properly formatted!"
 else
@@ -30,7 +30,7 @@ else
         bash -c "
             apt-get update -qq && apt-get install -y -qq gcc > /dev/null 2>&1 && \
             pip install --quiet --no-cache-dir black>=23.0.0 && \
-            black app/ tests/ cli.py main.py
+            black app/ tests/ scripts/cli.py scripts/main.py
         "
     echo "✓ Code formatted successfully!"
 fi

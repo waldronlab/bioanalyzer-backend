@@ -33,7 +33,7 @@ def find_bioanalyzer_backend():
     ]
     
     for path in possible_paths:
-        cli_path = path / "cli.py"
+        cli_path = path / "scripts" / "cli.py"
         if cli_path.exists():
             return path
     
@@ -98,7 +98,7 @@ For help, visit: https://github.com/your-repo/bioanalyzer-backend
     
     # Import and run the CLI
     try:
-        from cli import main as cli_main
+        from scripts.cli import main as cli_main
         cli_main()
     except ImportError as e:
         print(f"""

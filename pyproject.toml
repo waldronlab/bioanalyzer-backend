@@ -112,8 +112,8 @@ Repository = "https://github.com/your-repo/bioanalyzer-backend"
 "Bug Reports" = "https://github.com/your-repo/bioanalyzer-backend/issues"
 
 [project.scripts]
-bioanalyzer = "cli:main"
-bioanalyzer-cli = "cli:main"
+bioanalyzer = "scripts.cli:main"
+bioanalyzer-cli = "scripts.cli:main"
 
 [tool.setuptools]
 packages = {find = {}}
