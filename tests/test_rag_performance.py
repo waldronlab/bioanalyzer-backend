@@ -99,11 +99,12 @@ class TestRAGPerformance:
     @pytest.mark.asyncio
     async def test_rag_pipeline_performance(self, large_chunk_set, mock_fast_llm):
         """Test complete RAG pipeline performance."""
-        with patch(
-            "app.services.contextual_summarization.LLMProviderManager"
-        ) as mock_summary, patch(
-            "app.services.chunk_reranking.LLMProviderManager"
-        ) as mock_rerank:
+        with (
+            patch(
+                "app.services.contextual_summarization.LLMProviderManager"
+            ) as mock_summary,
+            patch("app.services.chunk_reranking.LLMProviderManager") as mock_rerank,
+        ):
             mock_summary.return_value = mock_fast_llm
             mock_rerank.return_value = mock_fast_llm
 
@@ -166,11 +167,12 @@ class TestRAGPerformance:
     @pytest.mark.asyncio
     async def test_top_k_performance_impact(self, large_chunk_set, mock_fast_llm):
         """Test that smaller top_k improves performance."""
-        with patch(
-            "app.services.contextual_summarization.LLMProviderManager"
-        ) as mock_summary, patch(
-            "app.services.chunk_reranking.LLMProviderManager"
-        ) as mock_rerank:
+        with (
+            patch(
+                "app.services.contextual_summarization.LLMProviderManager"
+            ) as mock_summary,
+            patch("app.services.chunk_reranking.LLMProviderManager") as mock_rerank,
+        ):
             mock_summary.return_value = mock_fast_llm
             mock_rerank.return_value = mock_fast_llm
 

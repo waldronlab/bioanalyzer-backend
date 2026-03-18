@@ -70,11 +70,12 @@ class TestVectorStoreService:
 
     def test_initialization_numpy(self, mock_embedding_model):
         """Test initialization with numpy vector store."""
-        with patch(
-            "app.services.vector_store_service.embedding_model_factory"
-        ) as mock_factory, patch(
-            "app.services.vector_store_service.NumpyVectorStore"
-        ) as mock_numpy:
+        with (
+            patch(
+                "app.services.vector_store_service.embedding_model_factory"
+            ) as mock_factory,
+            patch("app.services.vector_store_service.NumpyVectorStore") as mock_numpy,
+        ):
             mock_factory.return_value = mock_embedding_model
             mock_numpy.return_value = Mock()
 
@@ -87,11 +88,12 @@ class TestVectorStoreService:
 
     def test_initialization_qdrant(self, mock_embedding_model):
         """Test initialization with Qdrant vector store."""
-        with patch(
-            "app.services.vector_store_service.embedding_model_factory"
-        ) as mock_factory, patch(
-            "app.services.vector_store_service.QdrantVectorStore"
-        ) as mock_qdrant:
+        with (
+            patch(
+                "app.services.vector_store_service.embedding_model_factory"
+            ) as mock_factory,
+            patch("app.services.vector_store_service.QdrantVectorStore") as mock_qdrant,
+        ):
             mock_factory.return_value = mock_embedding_model
             mock_qdrant.return_value = Mock()
 
@@ -108,11 +110,12 @@ class TestVectorStoreService:
         self, sample_texts, mock_embedding_model, mock_vector_store
     ):
         """Test adding texts to vector store."""
-        with patch(
-            "app.services.vector_store_service.embedding_model_factory"
-        ) as mock_factory, patch(
-            "app.services.vector_store_service.NumpyVectorStore"
-        ) as mock_numpy:
+        with (
+            patch(
+                "app.services.vector_store_service.embedding_model_factory"
+            ) as mock_factory,
+            patch("app.services.vector_store_service.NumpyVectorStore") as mock_numpy,
+        ):
             mock_factory.return_value = mock_embedding_model
             mock_numpy.return_value = mock_vector_store
 
@@ -136,11 +139,12 @@ class TestVectorStoreService:
         for text in sample_texts:
             text.embedding = np.random.rand(768).tolist()
 
-        with patch(
-            "app.services.vector_store_service.embedding_model_factory"
-        ) as mock_factory, patch(
-            "app.services.vector_store_service.NumpyVectorStore"
-        ) as mock_numpy:
+        with (
+            patch(
+                "app.services.vector_store_service.embedding_model_factory"
+            ) as mock_factory,
+            patch("app.services.vector_store_service.NumpyVectorStore") as mock_numpy,
+        ):
             mock_factory.return_value = Mock()
             mock_numpy.return_value = mock_vector_store
 
@@ -158,11 +162,12 @@ class TestVectorStoreService:
     @pytest.mark.asyncio
     async def test_similarity_search(self, mock_embedding_model, mock_vector_store):
         """Test similarity search."""
-        with patch(
-            "app.services.vector_store_service.embedding_model_factory"
-        ) as mock_factory, patch(
-            "app.services.vector_store_service.NumpyVectorStore"
-        ) as mock_numpy:
+        with (
+            patch(
+                "app.services.vector_store_service.embedding_model_factory"
+            ) as mock_factory,
+            patch("app.services.vector_store_service.NumpyVectorStore") as mock_numpy,
+        ):
             mock_factory.return_value = mock_embedding_model
             mock_numpy.return_value = mock_vector_store
 
@@ -188,11 +193,12 @@ class TestVectorStoreService:
     @pytest.mark.asyncio
     async def test_mmr_search(self, mock_embedding_model, mock_vector_store):
         """Test MMR (Maximal Marginal Relevance) search."""
-        with patch(
-            "app.services.vector_store_service.embedding_model_factory"
-        ) as mock_factory, patch(
-            "app.services.vector_store_service.NumpyVectorStore"
-        ) as mock_numpy:
+        with (
+            patch(
+                "app.services.vector_store_service.embedding_model_factory"
+            ) as mock_factory,
+            patch("app.services.vector_store_service.NumpyVectorStore") as mock_numpy,
+        ):
             mock_factory.return_value = mock_embedding_model
             mock_numpy.return_value = mock_vector_store
 
@@ -219,11 +225,12 @@ class TestVectorStoreService:
         self, sample_texts, mock_embedding_model, mock_vector_store
     ):
         """Test embedding generation for texts (uses text.text when get_embeddable_text is not available)."""
-        with patch(
-            "app.services.vector_store_service.embedding_model_factory"
-        ) as mock_factory, patch(
-            "app.services.vector_store_service.NumpyVectorStore"
-        ) as mock_numpy:
+        with (
+            patch(
+                "app.services.vector_store_service.embedding_model_factory"
+            ) as mock_factory,
+            patch("app.services.vector_store_service.NumpyVectorStore") as mock_numpy,
+        ):
             mock_factory.return_value = mock_embedding_model
             mock_numpy.return_value = mock_vector_store
             mock_vector_store.add_texts_and_embeddings = AsyncMock(return_value=None)
@@ -242,11 +249,12 @@ class TestVectorStoreService:
     @pytest.mark.asyncio
     async def test_empty_texts(self, mock_vector_store):
         """Test handling of empty text list."""
-        with patch(
-            "app.services.vector_store_service.embedding_model_factory"
-        ) as mock_factory, patch(
-            "app.services.vector_store_service.NumpyVectorStore"
-        ) as mock_numpy:
+        with (
+            patch(
+                "app.services.vector_store_service.embedding_model_factory"
+            ) as mock_factory,
+            patch("app.services.vector_store_service.NumpyVectorStore") as mock_numpy,
+        ):
             mock_factory.return_value = Mock()
             mock_numpy.return_value = mock_vector_store
 

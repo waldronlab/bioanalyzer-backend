@@ -126,7 +126,7 @@ jobs:
 
       - name: Run Black (check)
         run: |
-          black --check --diff app/ tests/ cli.py main.py
+          black --check --diff --target-version py311 app/ tests/ cli.py main.py
 
       - name: Run Flake8
         run: |

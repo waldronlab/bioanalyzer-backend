@@ -77,11 +77,12 @@ def mock_llm_provider():
 @pytest.fixture
 def rag_service(temp_cache_dir, mock_llm_provider):
     """Create an AdvancedRAGService with mocked dependencies."""
-    with patch(
-        "app.services.contextual_summarization.LLMProviderManager"
-    ) as mock_summary, patch(
-        "app.services.chunk_reranking.LLMProviderManager"
-    ) as mock_rerank:
+    with (
+        patch(
+            "app.services.contextual_summarization.LLMProviderManager"
+        ) as mock_summary,
+        patch("app.services.chunk_reranking.LLMProviderManager") as mock_rerank,
+    ):
         mock_summary.return_value = mock_llm_provider
         mock_rerank.return_value = mock_llm_provider
 
@@ -159,11 +160,12 @@ class TestAdvancedRAGService:
     ):
         """Test RAG service with different re-ranking methods."""
         for method in ["keyword", "llm", "hybrid"]:
-            with patch(
-                "app.services.contextual_summarization.LLMProviderManager"
-            ) as mock_summary, patch(
-                "app.services.chunk_reranking.LLMProviderManager"
-            ) as mock_rerank:
+            with (
+                patch(
+                    "app.services.contextual_summarization.LLMProviderManager"
+                ) as mock_summary,
+                patch("app.services.chunk_reranking.LLMProviderManager") as mock_rerank,
+            ):
                 mock_summary.return_value = mock_llm_provider
                 mock_rerank.return_value = mock_llm_provider
 
