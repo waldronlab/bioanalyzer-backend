@@ -74,6 +74,7 @@ def validate_gemini_key() -> bool:
     if not GEMINI_API_KEY:
         return False
     try:
+        genai = get_genai()
         genai.configure(api_key=GEMINI_API_KEY)
         return True
     except (ValueError, AttributeError) as e:
