@@ -1,227 +1,246 @@
-name: CI/CD Pipeline
+# CI/CD Pipeline — tests, lint, type-check, security, Docker build
+# Runs on push/PR to main and develop; path filters avoid runs for docs-only changes.
+
+name: CI
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [main, develop]
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+      - ".gitignore"
+      - "renovate.json"
   pull_request:
-    branches: [ main, develop ]
+    branches: [main, develop]
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+      - ".gitignore"
+      - "renovate.json"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   PYTHON_DEFAULT_VERSION: "3.11"
 
 jobs:
   test:
-    name: Test Python 3.11
+    name: Test (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
-    # TODO: Add support for Python 3.8, 3.9, 3.10 when dependencies are compatible
-    # Use matrix strategy: python-version: ["3.8", "3.9", "3.10", "3.11"]
-    
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11"]
+
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-    
-    - name: Set up Python 3.11
-      uses: actions/setup-python@v5
-      with:
-        python-version: "3.11"
-        cache: 'pip'
-    
-    - name: Install system dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y gcc g++ curl git
-    
-    - name: Upgrade pip, setuptools, and wheel
-      run: |
-        python -m pip install --upgrade pip setuptools wheel build
-    
-    - name: Install PyTorch CPU versions
-      run: |
-        pip install --no-cache-dir \
-          --extra-index-url https://download.pytorch.org/whl/cpu \
-          torch==2.1.0+cpu \
-          torchvision==0.16.0+cpu \
-          torchaudio==2.1.0+cpu
-    
-    - name: Install package and dependencies
-      run: |
-        pip install --no-cache-dir -e .
-    
-    - name: Install test dependencies
-      run: |
-        pip install --no-cache-dir -e ".[dev]"
-        pip install pytest-asyncio
-    
-    - name: Verify installation
-      env:
-        PYTHONPATH: ${{ github.workspace }}
-      run: |
-        export PYTHONPATH=${{ github.workspace }}:$PYTHONPATH
-        python -c "import sys; print('Python version:', sys.version)"
-        python -c "import app; print('✓ App imported successfully')" || (echo "✗ App import failed" && exit 1)
-    
-    - name: Run tests
-      env:
-        PYTHONPATH: ${{ github.workspace }}
-        GEMINI_API_KEY: "test_key_1234567890abcdef"
-        NCBI_API_KEY: ${{ secrets.NCBI_API_KEY }}
-        EMAIL: "test@example.com"
-      run: |
-        export PYTHONPATH=${{ github.workspace }}:$PYTHONPATH
-        export NCBI_API_KEY="${NCBI_API_KEY:-test-key}"
-        pytest tests/ -v --tb=short --maxfail=10 --cov=app --cov-report=xml --cov-report=term-missing
-    
-    - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v4
-      with:
-        file: ./coverage.xml
-        flags: unittests
-        name: codecov-umbrella
-        fail_ci_if_error: false
-      continue-on-error: true
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: "pip"
+          cache-dependency-path: "pyproject.toml"
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq gcc g++ curl git
+
+      - name: Upgrade pip and build tools
+        run: |
+          python -m pip install --upgrade pip setuptools wheel build
+
+      - name: Install PyTorch CPU
+        run: |
+          pip install --no-cache-dir \
+            --extra-index-url https://download.pytorch.org/whl/cpu \
+            "torch==2.1.0+cpu" \
+            "torchvision==0.16.0+cpu" \
+            "torchaudio==2.1.0+cpu"
+
+      - name: Install package and dev dependencies
+        run: |
+          pip install --no-cache-dir -e ".[dev]"
+          pip install pytest-asyncio
+
+      - name: Verify installation
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          export PYTHONPATH=${{ github.workspace }}:$PYTHONPATH
+          python -c "import sys; print('Python', sys.version)"
+          python -c "import app; print('✓ App imported')" || (echo "✗ App import failed" && exit 1)
+
+      - name: Run tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+          GEMINI_API_KEY: "test_key_1234567890abcdef"
+          NCBI_API_KEY: ${{ secrets.NCBI_API_KEY }}
+          EMAIL: "test@example.com"
+        run: |
+          export PYTHONPATH=${{ github.workspace }}:$PYTHONPATH
+          export NCBI_API_KEY="${NCBI_API_KEY:-test-key}"
+          pytest tests/ -v --tb=short --maxfail=10 \
+            --cov=app --cov-report=xml --cov-report=term-missing \
+            --junitxml=junit-${{ matrix.python-version }}.xml
+
+      - name: Upload JUnit test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: junit-py${{ matrix.python-version }}
+          path: junit-${{ matrix.python-version }}.xml
+
+      - name: Upload coverage to Codecov
+        if: (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'))
+        uses: codecov/codecov-action@v4
+        with:
+          file: ./coverage.xml
+          flags: unittests
+          name: codecov-umbrella
+          fail_ci_if_error: true
 
   lint:
-    name: Code Quality Checks
+    name: Lint (Black & Flake8)
     runs-on: ubuntu-latest
-    
+
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-    
-    - name: Lint with Black and flake8 using Docker
-      continue-on-error: false
-      run: |
-        docker run --rm \
-          -v ${{ github.workspace }}:/workspace \
-          -w /workspace \
-          python:3.11-slim \
-          bash -c "
-            set -e
-            apt-get update -qq && apt-get install -y -qq gcc > /dev/null 2>&1 && \
-            pip install --quiet --no-cache-dir black>=23.0.0 flake8>=6.0.0 && \
-            echo '=== Running Black (check mode) ===' && \
-            black --check --diff app/ tests/ cli.py main.py && \
-            echo '=== Running flake8 (warnings only, non-blocking) ===' && \
-            flake8 app/ tests/ cli.py main.py \
-              --max-line-length=120 \
-              --extend-ignore=E203,W503,E501,F401,F403,F811,F841,W291,W293,E402,E722,F541 \
-              --exclude=__pycache__,*.pyc \
-              --count --statistics || echo '⚠ Flake8 found some warnings (non-blocking)'
-          "
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_DEFAULT_VERSION }}
+          cache: "pip"
+
+      - name: Install lint dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install black==24.2.0 flake8>=6.0.0
+
+      - name: Run Black (check)
+        run: |
+          black --check --diff --target-version py311 app/ tests/ cli.py main.py
+
+      - name: Run Flake8
+        run: |
+          flake8 app/ tests/ cli.py main.py \
+            --max-line-length=120 \
+            --extend-ignore=E203,W503,E501,F401,F403,F811,F841,W291,W293,E402,E722,F541 \
+            --exclude=__pycache__,*.pyc \
+            --count --statistics
 
   type-check:
-    name: Type Check
+    name: Type check (MyPy)
     runs-on: ubuntu-latest
-    
+
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-    
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: ${{ env.PYTHON_DEFAULT_VERSION }}
-        cache: 'pip'
-    
-    - name: Install type checking dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install mypy>=1.5.0 types-requests types-PyYAML
-    
-    - name: Run mypy
-      run: |
-        mypy app/ --ignore-missing-imports --no-strict-optional --show-error-codes || true
-      continue-on-error: true
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_DEFAULT_VERSION }}
+          cache: "pip"
+
+      - name: Install package and type-check dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+          pip install "mypy>=1.5.0" types-requests types-PyYAML
+
+      - name: Run mypy
+        run: |
+          mypy -p app --ignore-missing-imports --no-strict-optional --show-error-codes || true
+        continue-on-error: true
 
   security:
-    name: Security Scan
+    name: Security (Bandit & Safety)
     runs-on: ubuntu-latest
-    
+
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-    
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: ${{ env.PYTHON_DEFAULT_VERSION }}
-        cache: 'pip'
-    
-    - name: Install security scanning tools
-      run: |
-        python -m pip install --upgrade pip
-        pip install bandit safety
-    
-    - name: Run Bandit security scan
-      run: |
-        bandit -r app/ -f json -o bandit-report.json || true
-        bandit -r app/ -ll || true
-      continue-on-error: true
-    
-    - name: Check dependencies with Safety
-      run: |
-        pip install -e ".[dev]"
-        safety check --json || true
-        safety check || true
-      continue-on-error: true
-    
-    - name: Upload Bandit results
-      uses: actions/upload-artifact@v4
-      if: always()
-      with:
-        name: bandit-report
-        path: bandit-report.json
-      continue-on-error: true
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_DEFAULT_VERSION }}
+          cache: "pip"
+
+      - name: Install security tools and project
+        run: |
+          python -m pip install --upgrade pip
+          pip install bandit safety
+          pip install --no-cache-dir -e ".[dev]"
+
+      - name: Run Bandit
+        run: |
+          bandit -r app/ -f json -o bandit-report.json || true
+          bandit -r app/ -ll
+
+      - name: Run Safety
+        run: |
+          safety check --json || true
+          safety check || true
+
+      - name: Upload Bandit report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bandit-report
+          path: bandit-report.json
 
   docker-build:
-    name: Docker Build Test
+    name: Docker build & smoke
     runs-on: ubuntu-latest
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-    
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
-    
-    - name: Build Docker image
-      uses: docker/build-push-action@v5
-      with:
-        context: .
-        file: ./Dockerfile
-        push: false
-        load: true
-        tags: bioanalyzer-package:test
-        cache-from: type=gha
-        cache-to: type=gha,mode=max
-    
-    - name: Test Docker image
-      run: |
-        docker run --rm bioanalyzer-package:test python -c "import app; print('Docker image works!')"
-        docker run --rm bioanalyzer-package:test python --version
-        docker run --rm bioanalyzer-package:test pip list | grep -i bioanalyzer
 
-  all-checks:
-    name: All Checks Summary
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: false
+          load: true
+          tags: bioanalyzer-package:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Smoke test image
+        run: |
+          docker run --rm bioanalyzer-package:test python -c "import app; print('Docker image OK')"
+          docker run --rm bioanalyzer-package:test python --version
+          docker run --rm bioanalyzer-package:test pip list | grep -i bioanalyzer
+
+  summary:
+    name: CI summary
     runs-on: ubuntu-latest
     needs: [test, lint, type-check, security, docker-build]
     if: always()
-    
+
     steps:
-    - name: Check job status
-      run: |
-        echo "## CI/CD Pipeline Results" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "| Job | Status |" >> $GITHUB_STEP_SUMMARY
-        echo "|-----|--------|" >> $GITHUB_STEP_SUMMARY
-        echo "| Tests (Python 3.11) | ${{ needs.test.result }} |" >> $GITHUB_STEP_SUMMARY
-        echo "| Linting (Black, Flake8) | ${{ needs.lint.result }} |" >> $GITHUB_STEP_SUMMARY
-        echo "| Type Checking (MyPy) | ${{ needs.type-check.result }} |" >> $GITHUB_STEP_SUMMARY
-        echo "| Security Scanning | ${{ needs.security.result }} |" >> $GITHUB_STEP_SUMMARY
-        echo "| Docker Build | ${{ needs.docker-build.result }} |" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "Test job: ${{ needs.test.result }}" >> $GITHUB_STEP_SUMMARY
-        echo "Lint job: ${{ needs.lint.result }}" >> $GITHUB_STEP_SUMMARY
-        echo "Type-check job: ${{ needs.type-check.result }}" >> $GITHUB_STEP_SUMMARY
-        echo "Security job: ${{ needs.security.result }}" >> $GITHUB_STEP_SUMMARY
-        echo "Docker-build job: ${{ needs.docker-build.result }}" >> $GITHUB_STEP_SUMMARY
+      - name: Write summary
+        run: |
+          echo "## CI Pipeline Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Job | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Tests | ${{ needs.test.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Lint | ${{ needs.lint.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Type check | ${{ needs.type-check.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Security | ${{ needs.security.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Docker build | ${{ needs.docker-build.result }} |" >> $GITHUB_STEP_SUMMARY

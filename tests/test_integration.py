@@ -51,7 +51,9 @@ class TestAnalysisWorkflow:
 
         mock_qa = MagicMock()
         mock_qa.chat = AsyncMock(
-            return_value={"text": '{"value": "Human", "status": "PRESENT", "confidence": 0.95, "reason_if_missing": null}'}
+            return_value={
+                "text": '{"value": "Human", "status": "PRESENT", "confidence": 0.95, "reason_if_missing": null}'
+            }
         )
         mock_qa_class.return_value = mock_qa
 

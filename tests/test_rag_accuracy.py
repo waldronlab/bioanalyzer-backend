@@ -25,9 +25,7 @@ def accuracy_test_chunks():
     """Create chunks with known relevance for accuracy testing."""
     # Create a minimal Doc object to avoid None metadata issues
     test_doc = Doc(
-        docname="test_paper",
-        dockey="test_key",
-        citation="Test Paper Citation"
+        docname="test_paper", dockey="test_key", citation="Test Paper Citation"
     )
     return [
         Text(
@@ -190,11 +188,12 @@ class TestRAGAccuracy:
     @pytest.mark.asyncio
     async def test_rag_pipeline_accuracy(self, accuracy_test_chunks, mock_accurate_llm):
         """Test that complete RAG pipeline produces accurate context."""
-        with patch(
-            "app.services.contextual_summarization.LLMProviderManager"
-        ) as mock_summary, patch(
-            "app.services.chunk_reranking.LLMProviderManager"
-        ) as mock_rerank:
+        with (
+            patch(
+                "app.services.contextual_summarization.LLMProviderManager"
+            ) as mock_summary,
+            patch("app.services.chunk_reranking.LLMProviderManager") as mock_rerank,
+        ):
             mock_summary.return_value = mock_accurate_llm
             mock_rerank.return_value = mock_accurate_llm
 

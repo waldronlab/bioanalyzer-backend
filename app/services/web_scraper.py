@@ -51,23 +51,23 @@ class WebScraperService:
     def _ensure_writable_directory(self, download_dir: str) -> Path:
         """
         Ensure the download directory exists and is writable.
-        
+
         If the specified directory cannot be created or is not writable,
         falls back to a temporary directory.
-        
+
         Args:
             download_dir: Desired download directory path
-            
+
         Returns:
             Path to a writable download directory
         """
         download_path = Path(download_dir)
-        
+
         try:
             # Try to create the directory if it doesn't exist
             if not download_path.exists():
                 download_path.mkdir(parents=True, exist_ok=True)
-            
+
             # Check if the directory is writable by trying to create a test file
             test_file = download_path / ".write_test"
             try:
@@ -85,7 +85,7 @@ class WebScraperService:
                 f"Cannot create download directory '{download_path}': {e}. "
                 f"Falling back to temporary directory."
             )
-        
+
         # Fall back to a temporary directory
         temp_dir = Path(tempfile.gettempdir()) / "bioanalyzer_downloads"
         try:
@@ -104,7 +104,7 @@ class WebScraperService:
         """Scrape URL and convert to markdown."""
         try:
             # Remove URL fragment (everything after #) as it's not needed for scraping
-            clean_url = url.split('#')[0]
+            clean_url = url.split("#")[0]
             logger.info(f"Scraping URL: {clean_url}")
 
             html_content = await self._fetch_html(clean_url)
@@ -152,18 +152,24 @@ class WebScraperService:
             "Connection": "keep-alive",
             "Upgrade-Insecure-Requests": "1",
         }
-        
+
         try:
             async with aiohttp.ClientSession(headers=headers) as session:
-                async with session.get(url, timeout=aiohttp.ClientTimeout(total=self.timeout)) as response:
+                async with session.get(
+                    url, timeout=aiohttp.ClientTimeout(total=self.timeout)
+                ) as response:
                     response.raise_for_status()
                     return await response.text()
         except asyncio.TimeoutError:
-            raise TimeoutError(f"Request to {url} timed out after {self.timeout} seconds")
+            raise TimeoutError(
+                f"Request to {url} timed out after {self.timeout} seconds"
+            )
         except aiohttp.ClientError as e:
             raise ConnectionError(f"Failed to fetch {url}: {str(e)}")
         except Exception as e:
-            raise RuntimeError(f"Error fetching {url}: {str(e) if str(e) else type(e).__name__}")
+            raise RuntimeError(
+                f"Error fetching {url}: {str(e) if str(e) else type(e).__name__}"
+            )
 
     def _extract_links(self, soup: BeautifulSoup, base_url: str) -> list[str]:
         """Extract all links from HTML."""
@@ -241,7 +247,9 @@ class WebScraperService:
     ) -> Optional[dict]:
         """Download a single file."""
         try:
-            async with session.get(url, timeout=aiohttp.ClientTimeout(total=self.timeout)) as response:
+            async with session.get(
+                url, timeout=aiohttp.ClientTimeout(total=self.timeout)
+            ) as response:
                 response.raise_for_status()
 
                 # Check file size
@@ -300,10 +308,10 @@ class WebScraperService:
         filename = Path(path).name
 
         if not filename or "." not in filename:
-            # Use hash of URL as filename
+            # Use hash of URL as filename (non-cryptographic)
             import hashlib
 
-            url_hash = hashlib.md5(url.encode()).hexdigest()[:8]
+            url_hash = hashlib.sha256(url.encode()).hexdigest()[:8]
             filename = f"file_{url_hash}.bin"
 
         # Sanitize filename
@@ -338,6 +346,10 @@ class WebScraperService:
                 for file_path in self.download_dir.iterdir():
                     if file_path.is_file():
                         file_path.unlink()
-                logger.info(f"Cleaned up files in download directory: {self.download_dir}")
+                logger.info(
+                    f"Cleaned up files in download directory: {self.download_dir}"
+                )
         except (OSError, PermissionError) as e:
-            logger.warning(f"Could not clean up download directory {self.download_dir}: {e}")
+            logger.warning(
+                f"Could not clean up download directory {self.download_dir}: {e}"
+            )

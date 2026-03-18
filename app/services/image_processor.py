@@ -79,7 +79,8 @@ class ImageProcessorService:
 
                     import hashlib
 
-                    url_hash = hashlib.md5(image_url.encode()).hexdigest()[:16]
+                    # Use SHA-256 for non-cryptographic filename hashing
+                    url_hash = hashlib.sha256(image_url.encode()).hexdigest()[:16]
                     mime_type = response.headers.get("content-type", "").lower()
                     extension = self._get_image_extension(image_url, mime_type)
 

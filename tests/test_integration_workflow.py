@@ -29,6 +29,7 @@ except ImportError:
 # Check if sentence_transformers is available (required for some embedding models)
 try:
     import sentence_transformers
+
     SENTENCE_TRANSFORMERS_AVAILABLE = True
 except ImportError:
     SENTENCE_TRANSFORMERS_AVAILABLE = False
@@ -36,7 +37,9 @@ except ImportError:
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(not FASTAPI_AVAILABLE, reason="FastAPI not available")
-@pytest.mark.skipif(not SENTENCE_TRANSFORMERS_AVAILABLE, reason="sentence_transformers not available")
+@pytest.mark.skipif(
+    not SENTENCE_TRANSFORMERS_AVAILABLE, reason="sentence_transformers not available"
+)
 async def test_complete_workflow():
     """Test the complete workflow from URL to vector storage."""
 

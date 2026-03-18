@@ -1,20 +1,17 @@
-name: Dependency Review (Python)
+# Dependency Review — comments on PRs when lock/dependency files change.
+# Fails on high/critical vulnerabilities in new dependencies.
+
+name: Dependency Review
 
 on:
   pull_request:
-    branches:
-      - main
-      - develop
-      - "feature/**"
-      - "chore/**"
+    branches: [main, develop]
     paths:
-      - "requirements*.txt"
+      - "config/requirements.txt"
       - "pyproject.toml"
-      - "poetry.lock"
-      - "Pipfile"
-      - "Pipfile.lock"
-      - "setup.cfg"
+      - "**/requirements*.txt"
       - "setup.py"
+      - "setup.cfg"
 
 permissions:
   contents: read
@@ -22,18 +19,14 @@ permissions:
 
 jobs:
   dependency-review:
-    name: Dependency Review (Python)
+    name: Review dependencies
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Dependency Review
-        id: dependency-review
         uses: actions/dependency-review-action@v4
         with:
           fail-on-severity: high
           comment-summary-in-pr: always
-
-          warn-only: false

@@ -37,6 +37,7 @@ router = APIRouter(prefix="/api/v1", tags=["System"])
 _unified_qa: Optional[UnifiedQA] = None
 _pubmed_retriever: Optional[PubMedRetriever] = None
 
+
 def get_unified_qa() -> Optional[UnifiedQA]:
     """Get or initialize UnifiedQA instance."""
     global _unified_qa
@@ -132,10 +133,9 @@ async def gemini_health_check():
     Returns Gemini API health status and response time.
     """
     try:
-        # Use module-level unified_qa if available, otherwise get it
-        if unified_qa is None:
-            unified_qa = get_unified_qa()
-        if unified_qa is None:
+        # Use a local variable to avoid scope issues / flake8 warnings
+        qa_instance = unified_qa if unified_qa is not None else get_unified_qa()
+        if qa_instance is None:
             return {
                 "status": "unhealthy",
                 "api_key_configured": bool(GEMINI_API_KEY),
@@ -146,7 +146,7 @@ async def gemini_health_check():
         start_time = datetime.now()
 
         # Test Gemini API with a simple request
-        test_response = await unified_qa.ask_question("Test question for health check")
+        test_response = await qa_instance.ask_question("Test question for health check")
 
         response_time = (datetime.now() - start_time).total_seconds()
 
@@ -294,14 +294,28 @@ async def get_system_status():
             health_dict = health_status
         else:
             overall_status = health_status.status
-            health_dict = health_status.dict() if hasattr(health_status, "dict") else health_status.model_dump()
+            health_dict = (
+                health_status.dict()
+                if hasattr(health_status, "dict")
+                else health_status.model_dump()
+            )
 
         return {
             "overall_status": overall_status,
             "uptime_hours": round(uptime_hours, 2),
             "health": health_dict,
-            "config": config.dict() if hasattr(config, "dict") else (config.model_dump() if hasattr(config, "model_dump") else config),
-            "metrics": metrics.dict() if hasattr(metrics, "dict") else (metrics.model_dump() if hasattr(metrics, "model_dump") else metrics),
+            "config": (
+                config.dict()
+                if hasattr(config, "dict")
+                else (config.model_dump() if hasattr(config, "model_dump") else config)
+            ),
+            "metrics": (
+                metrics.dict()
+                if hasattr(metrics, "dict")
+                else (
+                    metrics.model_dump() if hasattr(metrics, "model_dump") else metrics
+                )
+            ),
             "gemini_api": gemini_health,
             "timestamp": get_current_timestamp(),
         }

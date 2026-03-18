@@ -99,7 +99,9 @@ def mask_string(text: str, show_last: int = 4) -> str:
     return masked
 
 
-def mask_dict(data: Dict[str, Any], keys_to_mask: Optional[Iterable[str]] = None) -> Dict[str, Any]:
+def mask_dict(
+    data: Dict[str, Any], keys_to_mask: Optional[Iterable[str]] = None
+) -> Dict[str, Any]:
     """
     Recursively mask sensitive values in dictionaries.
     """

@@ -22,8 +22,9 @@ _pqa_base_directory = [str(_pqa_temp_dir.absolute())]  # Pre-set with temp dir
 
 try:
     import paperqa.utils
+
     _original_pqa_directory = paperqa.utils.pqa_directory
-    
+
     def _patched_pqa_directory(subdir: str = ""):
         """Patched version that uses our configured directory."""
         if _pqa_base_directory[0] is not None:
@@ -38,7 +39,7 @@ try:
         else:
             # Fallback to original (shouldn't happen, but safety)
             return _original_pqa_directory(subdir)
-    
+
     # Patch it immediately
     paperqa.utils.pqa_directory = _patched_pqa_directory
 except (ImportError, AttributeError):
@@ -91,14 +92,14 @@ class AgentOrchestrator:
                 paper_dir.mkdir(parents=True, exist_ok=True)
             except (OSError, PermissionError) as e2:
                 logger.error(f"Could not create paper directory {paper_dir}: {e2}")
-                # Last resort: use /tmp which should always be writable
-                paper_dir = Path("/tmp") / "bioanalyzer_paperqa"
+                # Last resort: use system temp directory which should always be writable
+                paper_dir = Path(tempfile.gettempdir()) / "bioanalyzer_paperqa"
                 paper_dir.mkdir(parents=True, exist_ok=True)
 
         logger.info(f"Using Paper-QA directory: {paper_dir.absolute()}")
 
         paper_dir_str = str(paper_dir.absolute())
-        
+
         # Create the indexes subdirectory that AgentSettings will try to use
         indexes_dir = paper_dir / "indexes"
         indexes_dir.mkdir(parents=True, exist_ok=True)
@@ -116,6 +117,7 @@ class AgentOrchestrator:
         # Also patch directly as a fallback
         try:
             import paperqa.utils
+
             def patched_pqa_directory(subdir: str = ""):
                 """Patched version that uses our paper directory."""
                 base_dir = Path(paper_dir_str)
@@ -125,6 +127,7 @@ class AgentOrchestrator:
                     result_dir = base_dir
                 result_dir.mkdir(parents=True, exist_ok=True)
                 return result_dir
+
             paperqa.utils.pqa_directory = patched_pqa_directory
             logger.info("Patched pqa_directory function directly")
         except Exception as e:
@@ -148,7 +151,7 @@ class AgentOrchestrator:
                     agent_type="simple",
                 )
                 # Try to set indexes after creation
-                if hasattr(agent_settings, 'indexes'):
+                if hasattr(agent_settings, "indexes"):
                     agent_settings.indexes = str(indexes_dir)
                     logger.info("Set indexes on AgentSettings after creation")
             except Exception as e2:

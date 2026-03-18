@@ -11,7 +11,7 @@ import requests
 import time
 import logging
 from typing import Dict, Any, Optional, List
-from xml.etree import ElementTree
+from defusedxml import ElementTree
 
 logger = logging.getLogger(__name__)
 

@@ -272,19 +272,19 @@ class BioAnalyzerCLI:
 
     def load_pmids_from_file(self, file_path: str) -> List[str]:
         """Load PMIDs from a file, supporting txt, csv, xls, and xlsx formats.
-        
+
         For Excel files, uses Docker to read them since pandas is only available in Docker.
         """
         file_path_obj = Path(file_path)
         file_ext = file_path_obj.suffix.lower()
-        
+
         pmids = []
-        
+
         try:
-            if file_ext in ['.xls', '.xlsx']:
+            if file_ext in [".xls", ".xlsx"]:
                 # Use Docker to read Excel files since pandas is only available in Docker
                 pmids = self._read_excel_via_docker(file_path)
-            elif file_ext == '.csv':
+            elif file_ext == ".csv":
                 # Read CSV using standard library (no pandas needed)
                 with open(file_path, "r", encoding="utf-8") as f:
                     reader = csv.reader(f)
@@ -299,10 +299,12 @@ class BioAnalyzerCLI:
                         if line:
                             # Handle comma-separated PMIDs in text files
                             if "," in line:
-                                pmids.extend([p.strip() for p in line.split(",") if p.strip()])
+                                pmids.extend(
+                                    [p.strip() for p in line.split(",") if p.strip()]
+                                )
                             else:
                                 pmids.append(line)
-            
+
             return pmids
         except Exception as e:
             raise Exception(f"Error reading file '{file_path}': {e}")
@@ -312,18 +314,20 @@ class BioAnalyzerCLI:
         file_path_obj = Path(file_path).resolve()
         file_dir = file_path_obj.parent
         file_name = file_path_obj.name
-        
+
         # Check if Docker is available
         if not self.check_docker():
-            raise Exception("Docker is required to read Excel files but Docker is not available")
-        
+            raise Exception(
+                "Docker is required to read Excel files but Docker is not available"
+            )
+
         # Check if Docker image exists
         if not self.check_image():
             raise Exception(
                 f"Docker image '{self.image_name}' not found. "
                 "Please run 'BioAnalyzer build' first."
             )
-        
+
         # Create a Python script to read the Excel file
         script = f"""
 import pandas as pd
@@ -343,27 +347,33 @@ except Exception as e:
     print('ERROR: ' + str(e), file=sys.stderr)
     sys.exit(1)
 """
-        
+
         try:
             # Run the script in Docker
             result = subprocess.run(
                 [
-                    "docker", "run", "--rm",
-                    "-v", f"{file_dir}:/workspace",
-                    "-w", "/workspace",
+                    "docker",
+                    "run",
+                    "--rm",
+                    "-v",
+                    f"{file_dir}:/workspace",
+                    "-w",
+                    "/workspace",
                     self.image_name,
-                    "python", "-c", script
+                    "python",
+                    "-c",
+                    script,
                 ],
                 capture_output=True,
                 text=True,
                 check=True,
-                cwd=file_dir
+                cwd=file_dir,
             )
-            
+
             # Parse the JSON output
             pmids = json.loads(result.stdout.strip())
             return pmids
-            
+
         except subprocess.CalledProcessError as e:
             error_msg = e.stderr.strip() if e.stderr else "Unknown error"
             raise Exception(f"Failed to read Excel file via Docker: {error_msg}")
@@ -454,7 +464,9 @@ except Exception as e:
                 test_file.unlink()
             except OSError:
                 print(f"❌ Directory not writable by current user: {path}")
-                print("   The package container needs to write here (e.g. performance.log).")
+                print(
+                    "   The package container needs to write here (e.g. performance.log)."
+                )
                 print("   Fix with:")
                 print(f"   sudo chown -R $USER:$USER {path}")
                 return False
@@ -501,7 +513,8 @@ except Exception as e:
             if containers_running and not self.check_backend_health():
                 print("🧹 Cleaning up existing containers...")
                 cleanup_result = subprocess.run(
-                    compose_cmd + ["-p", COMPOSE_PROJECT_NAME, "down", "--remove-orphans"],
+                    compose_cmd
+                    + ["-p", COMPOSE_PROJECT_NAME, "down", "--remove-orphans"],
                     cwd=str(project_root),
                     capture_output=True,
                     text=True,
@@ -535,7 +548,13 @@ except Exception as e:
                 env["GID"] = str(os.getgid())
             # Only force-recreate when recovering from a bad state; normal start is faster without it
             force_recreate = containers_running and not self.check_backend_health()
-            up_cmd = compose_cmd + ["-p", COMPOSE_PROJECT_NAME, "up", "-d", "--remove-orphans"]
+            up_cmd = compose_cmd + [
+                "-p",
+                COMPOSE_PROJECT_NAME,
+                "up",
+                "-d",
+                "--remove-orphans",
+            ]
             if force_recreate:
                 up_cmd.append("--force-recreate")
 
@@ -549,7 +568,9 @@ except Exception as e:
             )
 
             if result.returncode != 0:
-                print("❌ Error starting containers. Check the output above for details.")
+                print(
+                    "❌ Error starting containers. Check the output above for details."
+                )
                 return False
             if self._wait_for_backend_health(timeout=60, interval=2):
                 print("✅ API is running at http://localhost:8000")
@@ -605,7 +626,8 @@ except Exception as e:
 
                 # Stop using compose (project name used by CLI start)
                 result = subprocess.run(
-                    compose_cmd + ["-p", COMPOSE_PROJECT_NAME, "down", "--remove-orphans"],
+                    compose_cmd
+                    + ["-p", COMPOSE_PROJECT_NAME, "down", "--remove-orphans"],
                     cwd=str(project_root),
                     capture_output=True,
                     text=True,
@@ -616,7 +638,8 @@ except Exception as e:
                 if self._is_package_container_running():
                     default_project = project_root.name
                     subprocess.run(
-                        compose_cmd + ["-p", default_project, "down", "--remove-orphans"],
+                        compose_cmd
+                        + ["-p", default_project, "down", "--remove-orphans"],
                         cwd=str(project_root),
                         capture_output=True,
                         text=True,
@@ -786,7 +809,9 @@ except Exception as e:
             if not backend_running:
                 print("")
                 print("💡 To get healthy: run  BioAnalyzer start")
-                print("   If the package exits with permission errors, fix volume dirs:")
+                print(
+                    "   If the package exits with permission errors, fix volume dirs:"
+                )
                 print("   sudo chown -R $USER:$USER cache logs results")
 
     def handle_settings_command(self, args):
@@ -2139,12 +2164,18 @@ Examples:
 
     # Run command (optional components)
     run_parser = subparsers.add_parser("run", help="Run optional components")
-    run_subparsers = run_parser.add_subparsers(dest="run_command", help="Component to run")
+    run_subparsers = run_parser.add_subparsers(
+        dest="run_command", help="Component to run"
+    )
     run_table_parser = run_subparsers.add_parser(
         "table", help="Run curator table (sortable/searchable predictions)"
     )
     run_table_parser.add_argument(
-        "--port", "-p", type=int, default=8501, help="Port for Streamlit (default: 8501)"
+        "--port",
+        "-p",
+        type=int,
+        default=8501,
+        help="Port for Streamlit (default: 8501)",
     )
 
     # Status command

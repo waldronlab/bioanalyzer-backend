@@ -1,14 +1,33 @@
 """Vector store service using Paper-QA's implementations."""
 
+import asyncio
 import logging
 from pathlib import Path
 from typing import Optional
 
-from paperqa.llms import NumpyVectorStore, QdrantVectorStore, embedding_model_factory
+from paperqa.llms import NumpyVectorStore, embedding_model_factory
+
+try:
+    # Optional in some paper-qa versions; tests patch this symbol directly.
+    from paperqa.llms import QdrantVectorStore  # type: ignore[attr-defined]
+except Exception:  # pragma: no cover - handled via runtime fallback
+    QdrantVectorStore = None  # type: ignore[assignment]
+
 from paperqa.types import Text, Doc
 from paperqa import Docs
 
 logger = logging.getLogger(__name__)
+
+
+async def _get_embeddable_text(text: Text) -> str:
+    """Get text content for embedding; use get_embeddable_text if available else text.text."""
+    getter = getattr(text, "get_embeddable_text", None)
+    if callable(getter):
+        result = getter(with_enrichment=True)
+        if asyncio.iscoroutine(result):
+            return await result
+        return result
+    return text.text
 
 
 class VectorStoreService:
@@ -33,23 +52,30 @@ class VectorStoreService:
             self.vector_store = NumpyVectorStore()
             logger.info("Using NumpyVectorStore (in-memory)")
         elif self.store_type == "qdrant":
-            try:
-                from qdrant_client import AsyncQdrantClient
-
-                if qdrant_path:
-                    client = AsyncQdrantClient(path=qdrant_path)
-                else:
-                    client = AsyncQdrantClient(location=":memory:")
-
-                self.vector_store = QdrantVectorStore(
-                    client=client, collection_name=collection_name
-                )
-                logger.info(f"Using QdrantVectorStore: {collection_name}")
-            except ImportError:
+            if QdrantVectorStore is None:
                 logger.warning(
-                    "qdrant-client not installed, falling back to NumpyVectorStore"
+                    "QdrantVectorStore not available in this paper-qa version; "
+                    "falling back to NumpyVectorStore"
                 )
                 self.vector_store = NumpyVectorStore()
+            else:
+                try:
+                    from qdrant_client import AsyncQdrantClient
+
+                    if qdrant_path:
+                        client = AsyncQdrantClient(path=qdrant_path)
+                    else:
+                        client = AsyncQdrantClient(location=":memory:")
+
+                    self.vector_store = QdrantVectorStore(
+                        client=client, collection_name=collection_name
+                    )
+                    logger.info(f"Using QdrantVectorStore: {collection_name}")
+                except ImportError:
+                    logger.warning(
+                        "qdrant-client not installed, falling back to NumpyVectorStore"
+                    )
+                    self.vector_store = NumpyVectorStore()
         else:
             raise ValueError(f"Unknown store_type: {store_type}")
 
@@ -66,10 +92,10 @@ class VectorStoreService:
         texts_to_embed = [t for t in texts if t.embedding is None]
 
         if texts_to_embed:
-            # Get embeddable text
+            # Get embeddable text (use get_embeddable_text if available, else text.text)
             embeddable_texts = []
             for text in texts_to_embed:
-                embeddable_text = await text.get_embeddable_text(with_enrichment=True)
+                embeddable_text = await _get_embeddable_text(text)
                 embeddable_texts.append(embeddable_text)
 
             # Generate embeddings

@@ -28,13 +28,11 @@ def temp_cache_dir():
 def sample_chunks():
     """Create sample text chunks for testing."""
     from paperqa.types import Doc
-    
+
     test_doc = Doc(
-        docname="test_paper",
-        dockey="test_key",
-        citation="Test Paper Citation"
+        docname="test_paper", dockey="test_key", citation="Test Paper Citation"
     )
-    
+
     return [
         Text(
             text="This study examined the gut microbiome in 100 human participants with inflammatory bowel disease. The analysis used 16S rRNA sequencing at the genus level.",
@@ -79,11 +77,12 @@ def mock_llm_provider():
 @pytest.fixture
 def rag_service(temp_cache_dir, mock_llm_provider):
     """Create an AdvancedRAGService with mocked dependencies."""
-    with patch(
-        "app.services.contextual_summarization.LLMProviderManager"
-    ) as mock_summary, patch(
-        "app.services.chunk_reranking.LLMProviderManager"
-    ) as mock_rerank:
+    with (
+        patch(
+            "app.services.contextual_summarization.LLMProviderManager"
+        ) as mock_summary,
+        patch("app.services.chunk_reranking.LLMProviderManager") as mock_rerank,
+    ):
         mock_summary.return_value = mock_llm_provider
         mock_rerank.return_value = mock_llm_provider
 
@@ -161,11 +160,12 @@ class TestAdvancedRAGService:
     ):
         """Test RAG service with different re-ranking methods."""
         for method in ["keyword", "llm", "hybrid"]:
-            with patch(
-                "app.services.contextual_summarization.LLMProviderManager"
-            ) as mock_summary, patch(
-                "app.services.chunk_reranking.LLMProviderManager"
-            ) as mock_rerank:
+            with (
+                patch(
+                    "app.services.contextual_summarization.LLMProviderManager"
+                ) as mock_summary,
+                patch("app.services.chunk_reranking.LLMProviderManager") as mock_rerank,
+            ):
                 mock_summary.return_value = mock_llm_provider
                 mock_rerank.return_value = mock_llm_provider
 
