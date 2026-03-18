@@ -133,10 +133,9 @@ async def gemini_health_check():
     Returns Gemini API health status and response time.
     """
     try:
-        # Use module-level unified_qa if available, otherwise get it
-        if unified_qa is None:
-            unified_qa = get_unified_qa()
-        if unified_qa is None:
+        # Use a local variable to avoid scope issues / flake8 warnings
+        qa_instance = unified_qa if unified_qa is not None else get_unified_qa()
+        if qa_instance is None:
             return {
                 "status": "unhealthy",
                 "api_key_configured": bool(GEMINI_API_KEY),
@@ -147,7 +146,7 @@ async def gemini_health_check():
         start_time = datetime.now()
 
         # Test Gemini API with a simple request
-        test_response = await unified_qa.ask_question("Test question for health check")
+        test_response = await qa_instance.ask_question("Test question for health check")
 
         response_time = (datetime.now() - start_time).total_seconds()
 
