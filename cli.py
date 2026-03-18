@@ -64,9 +64,11 @@ class BioAnalyzerCLI:
         self.image_name = "bioanalyzer-package"
         self.network_name = "bioanalyzer-network"
         self.verbose = False
-        self.api_base_url = os.getenv(
-            "BIOANALYZER_API_URL", "http://localhost:8000/api/v1"
-        )
+        # Single source of truth for API URL.
+        # Accepts either:
+        # - http(s)://host:port
+        # - http(s)://host:port/api/v1
+        self.api_base_url = os.getenv("BIOANALYZER_API_URL", "http://localhost:8000")
         self.required_env_vars = [
             "GEMINI_API_KEY",
             "NCBI_API_KEY",
@@ -113,10 +115,24 @@ class BioAnalyzerCLI:
         return flags
 
     def _build_api_url(self, path: str) -> str:
-        """Construct a BioAnalyzer API URL relative to the configured base."""
-        base = self.api_base_url.rstrip("/")
+        """Construct a BioAnalyzer v1 API URL relative to the configured base."""
+        base = self._api_v1_base_url().rstrip("/")
         suffix = path.lstrip("/")
         return f"{base}/{suffix}" if suffix else base
+
+    def _api_root_url(self) -> str:
+        """Return the root URL (no /api/v1 suffix)."""
+        base = self.api_base_url.rstrip("/")
+        if base.endswith("/api/v1"):
+            return base[: -len("/api/v1")]
+        return base
+
+    def _api_v1_base_url(self) -> str:
+        """Return the /api/v1 base URL."""
+        base = self.api_base_url.rstrip("/")
+        if base.endswith("/api/v1"):
+            return base
+        return f"{base}/api/v1"
 
     def _validate_environment(self) -> None:
         """Warn about missing critical env vars before starting containers."""
@@ -175,8 +191,9 @@ class BioAnalyzerCLI:
     def print_help(self):
         """Print comprehensive help information."""
         self.print_banner()
+        api_root = self._api_root_url()
         print(
-            """
+            f"""
 📋 AVAILABLE COMMANDS:
 =====================
 
@@ -239,8 +256,8 @@ class BioAnalyzerCLI:
    BioAnalyzer stop
 
 🔧 API:
-   Once started: http://localhost:8000
-   API Documentation: http://localhost:8000/docs
+   Once started: {api_root}
+   API Documentation: {api_root}/docs
 
 ❓ Need Help?
    BioAnalyzer help                    Show this help
@@ -493,7 +510,7 @@ except Exception as e:
             if not self._ensure_volume_directories():
                 return False
             if self.check_backend_health():
-                print("✅ API is already available at http://localhost:8000")
+                print(f"✅ API is already available at {self._api_root_url()}")
                 return True
             compose_cmd = ["docker-compose"]
             check_compose = subprocess.run(
@@ -573,15 +590,15 @@ except Exception as e:
                 )
                 return False
             if self._wait_for_backend_health(timeout=60, interval=2):
-                print("✅ API is running at http://localhost:8000")
+                print(f"✅ API is running at {self._api_root_url()}")
             else:
                 print(
                     "⚠️  Package container started but /health did not report healthy within 60s"
                 )
 
             print("\n🎉 BioAnalyzer backend is now running!")
-            print("🔧 API: http://localhost:8000")
-            print("📖 API Documentation: http://localhost:8000/docs")
+            print(f"🔧 API: {self._api_root_url()}")
+            print(f"📖 API Documentation: {self._api_root_url()}/docs")
             print("💡 Use 'BioAnalyzer status' to check system status")
 
             return True
@@ -745,7 +762,7 @@ except Exception as e:
         try:
             import requests
 
-            response = requests.get("http://localhost:8000/health", timeout=5)
+            response = requests.get(f"{self._api_root_url()}/health", timeout=5)
             return response.status_code == 200
         except Exception:
             return False
@@ -802,8 +819,8 @@ except Exception as e:
             print("Package Container: ❌ Not Running")
         if self.check_backend_health():
             print("API Health: ✅ Healthy")
-            print("🔧 API: http://localhost:8000")
-            print("📖 API Documentation: http://localhost:8000/docs")
+            print(f"🔧 API: {self._api_root_url()}")
+            print(f"📖 API Documentation: {self._api_root_url()}/docs")
         else:
             print("API Health: ❌ Not Responding")
             if not backend_running:
@@ -1041,7 +1058,7 @@ except Exception as e:
                 try:
                     # Use API instead of direct import
                     response = requests.get(
-                        f"http://localhost:8000/api/v1/analyze/{pmid}", timeout=60
+                        self._build_api_url(f"/analyze/{pmid}"), timeout=60
                     )
 
                     if response.status_code == 200:
@@ -1112,7 +1129,7 @@ except Exception as e:
                 try:
                     # Use API instead of direct import
                     response = requests.get(
-                        f"http://localhost:8000/api/v1/analyze/{pmid}", timeout=60
+                        self._build_api_url(f"/analyze/{pmid}"), timeout=60
                     )
 
                     if response.status_code == 200:
@@ -1641,7 +1658,7 @@ except Exception as e:
 
         api_available = False
         try:
-            response = requests.get("http://localhost:8000/health", timeout=2)
+            response = requests.get(f"{self._api_root_url()}/health", timeout=2)
             if response.status_code == 200:
                 api_available = True
         except:
@@ -1687,7 +1704,7 @@ except Exception as e:
                 try:
                     # Use API endpoint for Q&A (if available) or fallback to direct call
                     api_response = requests.post(
-                        "http://localhost:8000/api/v1/qa",
+                        self._build_api_url("/qa"),
                         json={"question": user_input},
                         timeout=60,
                     )
@@ -1749,7 +1766,7 @@ except Exception as e:
 
         api_available = False
         try:
-            response = requests.get("http://localhost:8000/health", timeout=2)
+            response = requests.get(f"{self._api_root_url()}/health", timeout=2)
             if response.status_code == 200:
                 api_available = True
         except:
@@ -1764,7 +1781,7 @@ except Exception as e:
             print("🤔 Thinking...")
             # Use API endpoint for Q&A
             api_response = requests.post(
-                "http://localhost:8000/api/v1/qa",
+                self._build_api_url("/qa"),
                 json={"question": question},
                 timeout=60,
             )

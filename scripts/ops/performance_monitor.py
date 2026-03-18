@@ -8,6 +8,7 @@ API bottlenecks. Moved to scripts/archive/ to indicate it's a dev/ops
 utility and not part of the core backend runtime.
 """
 
+import os
 import requests
 import time
 import json
@@ -15,8 +16,14 @@ from datetime import datetime
 import argparse
 
 
-def test_pmid_query(pmid, base_url="http://localhost:8000"):
+def _api_root_url(base_url: str) -> str:
+    base = (base_url or "").rstrip("/")
+    return base[: -len("/api/v1")] if base.endswith("/api/v1") else base
+
+
+def test_pmid_query(pmid, base_url: str):
     """Test a single PMID query and measure performance."""
+    base_url = _api_root_url(base_url)
     print(f"Testing PMID: {pmid}")
 
     start_time = time.time()
@@ -70,8 +77,9 @@ def test_pmid_query(pmid, base_url="http://localhost:8000"):
         return False
 
 
-def test_multiple_pmids(pmids, base_url="http://localhost:8000"):
+def test_multiple_pmids(pmids, base_url: str):
     """Test multiple PMIDs and provide performance summary."""
+    base_url = _api_root_url(base_url)
     print(f"Testing {len(pmids)} PMIDs...")
     print("=" * 50)
 
@@ -141,7 +149,9 @@ def main():
     parser.add_argument("--pmids", nargs="+", help="Multiple PMIDs to test")
     parser.add_argument("--file", help="File containing PMIDs (one per line)")
     parser.add_argument(
-        "--url", default="http://localhost:8000", help="Base URL of the API"
+        "--url",
+        default=os.getenv("BIOANALYZER_API_URL", "http://localhost:8000"),
+        help="Base URL of the API (or set BIOANALYZER_API_URL)",
     )
 
     args = parser.parse_args()
@@ -168,4 +178,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

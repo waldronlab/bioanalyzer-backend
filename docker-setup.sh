@@ -112,9 +112,13 @@ if [[ $REPLY =~ ^[Yy]$ ]]; then
     if [ $? -eq 0 ]; then
         print_success "API server started successfully!"
         echo ""
-        echo "🌐 API available at: http://localhost:8000"
-        echo "📚 Documentation: http://localhost:8000/docs"
-        echo "🔍 Health check: http://localhost:8000/health"
+        API_URL="${BIOANALYZER_API_URL:-http://localhost:8000}"
+        # If user set BIOANALYZER_API_URL to include /api/v1, strip it for root endpoints.
+        API_ROOT="${API_URL%/}"
+        API_ROOT="${API_ROOT%/api/v1}"
+        echo "🌐 API available at: ${API_ROOT}"
+        echo "📚 Documentation: ${API_ROOT}/docs"
+        echo "🔍 Health check: ${API_ROOT}/health"
         echo ""
         echo "To view logs: docker logs bioanalyzer-api"
         echo "To stop: docker stop bioanalyzer-api"
