@@ -96,15 +96,6 @@ jobs:
           name: junit-py${{ matrix.python-version }}
           path: junit-${{ matrix.python-version }}.xml
 
-      - name: Upload coverage to Codecov
-        if: (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'))
-        uses: codecov/codecov-action@v4
-        with:
-          file: ./coverage.xml
-          flags: unittests
-          name: codecov-umbrella
-          fail_ci_if_error: true
-
   lint:
     name: Lint (Black & Flake8)
     runs-on: ubuntu-latest
