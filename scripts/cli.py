@@ -42,7 +42,8 @@ except ImportError:  # pragma: no cover - safety net for bare installs
     dotenv_values = None  # type: ignore
 
 # Add the project root to Python path
-project_root = Path(__file__).parent
+# (this file lives in scripts/, so the repo root is one level up)
+project_root = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(project_root))
 
 # Configure logging

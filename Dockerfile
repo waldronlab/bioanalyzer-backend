@@ -28,11 +28,11 @@ RUN pip install --no-cache-dir streamlit pyarrow
 
 RUN mkdir -p cache logs results
 
-RUN chmod +x cli.py || true
+RUN chmod +x scripts/cli.py || true
 RUN chmod +x scripts/*.py || true
 
 EXPOSE 8000
 
 HEALTHCHECK CMD curl -f http://localhost:8000/health || exit 1
 
-CMD ["python", "main.py", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["python", "scripts/main.py", "--host", "0.0.0.0", "--port", "8000"]

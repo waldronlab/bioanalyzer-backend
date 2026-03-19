@@ -74,8 +74,8 @@ setup(
     },
     entry_points={
         "console_scripts": [
-            "bioanalyzer=cli:main",
-            "bioanalyzer-cli=cli:main",
+            "bioanalyzer=scripts.cli:main",
+            "bioanalyzer-cli=scripts.cli:main",
         ],
     },
     include_package_data=True,
