@@ -1,0 +1,40 @@
+sequenceDiagram
+    autonumber
+    participant U as User
+    participant CLI as BioAnalyzer CLI
+    participant ENV as .env / settings
+    participant DC as Docker Compose
+    participant API as FastAPI backend
+    participant ORCH as Agent Orchestrator
+    participant RET as Retrieval Services
+    participant RAG as RAG + Vector Store
+    participant LLM as LLM Provider
+    participant OUT as Output Formatter
+
+    U->>CLI: BioAnalyzer start
+    CLI->>ENV: Load environment and config
+    CLI->>DC: Start required services
+    DC->>API: Launch backend container
+    CLI->>API: GET /health
+    API-->>CLI: Healthy
+
+    U->>CLI: BioAnalyzer analyze --file "curatable papers.xls" --format csv --output results.csv
+    CLI->>CLI: Parse PMIDs from file
+    CLI->>API: Request analysis for each PMID
+
+    loop For each PMID
+        API->>ORCH: Start analysis workflow
+        ORCH->>RET: Fetch paper metadata and text
+        RET-->>ORCH: Return source content
+        ORCH->>RAG: Build/query context chunks
+        RAG->>LLM: Prompt for structured extraction
+        LLM-->>RAG: Model response
+        RAG-->>ORCH: Ranked evidence + extracted values
+        ORCH->>ORCH: Validate 6 BugSigDB fields
+        ORCH-->>API: Final per-paper result
+        API-->>CLI: Result payload
+    end
+
+    CLI->>OUT: Convert results to CSV
+    OUT-->>CLI: results.csv content
+    CLI-->>U: Save file and print completion summary
