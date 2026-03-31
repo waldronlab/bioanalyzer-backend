@@ -1,0 +1,53 @@
+flowchart TD
+    A["Step 1: Get the code"]
+    A1["Command: git clone <repo-url>"]
+    A2["Command: cd BioAnalyzer-Backend"]
+
+    B["Step 2: Install CLI command"]
+    B1["Command: ./install.sh"]
+
+    C["Step 3: Build Docker image"]
+    C1["Command: BioAnalyzer build"]
+
+    D["Step 4: Start backend services"]
+    D1["Command: BioAnalyzer start"]
+
+    E["Step 5: Check system health"]
+    E1["Command: BioAnalyzer status"]
+
+    F["Step 6A: Analyze single PMID"]
+    F1["Command: BioAnalyzer analyze 12345678 --format csv --output results.csv"]
+
+    G["Step 6B: Analyze multiple PMIDs"]
+    G1["Command: BioAnalyzer analyze 12345678,87654321 --format csv --output results.csv"]
+
+    H["Step 6C: Analyze PMIDs from file"]
+    H1["Command: BioAnalyzer analyze --file \"curatable papers.xls\" --format csv --output results.csv"]
+
+    I["Step 7: Retrieve paper content only"]
+    I1["Command: BioAnalyzer retrieve 12345678"]
+    I2["Command: BioAnalyzer retrieve --file pmids.txt --format json --output retrieved.json"]
+
+    J["Step 8: Analyze study URL"]
+    J1["Command: BioAnalyzer analyze-url https://example.com/study --format json --output url_results.json"]
+
+    K["Step 9: Optional Q and A mode"]
+    K1["Command: BioAnalyzer qa \"What is 16S sequencing?\""]
+    K2["Command: BioAnalyzer qa --interactive"]
+
+    L["Step 10: Stop services when done"]
+    L1["Command: BioAnalyzer stop"]
+
+    A --> A1 --> A2 --> B --> B1 --> C --> C1 --> D --> D1 --> E --> E1
+    E --> F --> F1
+    E --> G --> G1
+    E --> H --> H1
+    E --> I --> I1 --> I2
+    E --> J --> J1
+    E --> K --> K1 --> K2
+    F1 --> L --> L1
+    G1 --> L
+    H1 --> L
+    I2 --> L
+    J1 --> L
+    K2 --> L
