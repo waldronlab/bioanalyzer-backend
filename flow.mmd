@@ -1,0 +1,56 @@
+flowchart TD
+    %% =========================
+    %% BioAnalyzer System Guide
+    %% =========================
+
+    U[User / Curator]
+    CLI[BioAnalyzer CLI<br/>scripts/cli.py]
+    FILES[Input Files<br/>txt/csv/xls/xlsx]
+    API[FastAPI Backend<br/>app/api]
+    ORCH[Agent Orchestrator<br/>app/services/agent_orchestrator.py]
+    RET[Data Retrieval<br/>PubMed + Web Scraper]
+    RAG[RAG + Embeddings<br/>Vector Store Service]
+    LLM[LLM Inference<br/>Gemini/OpenAI via config]
+    VAL[Field Extraction + Validation<br/>6 BugSigDB fields]
+    OUT[Results Formatter<br/>table/json/csv/xml]
+    RES[results.csv / JSON / terminal output]
+    DOCKER[Docker Compose<br/>bioanalyzer-package + redis]
+    ENV[.env + Settings]
+    HEALTH[/health + status checks]
+
+    %% User interaction
+    U -->|BioAnalyzer build/start/status/stop| CLI
+    U -->|BioAnalyzer analyze --file ...| CLI
+    U -->|BioAnalyzer analyze <pmid>| CLI
+    U -->|BioAnalyzer analyze-url <url>| CLI
+    U -->|BioAnalyzer retrieve <pmid>| CLI
+    U -->|BioAnalyzer qa ...| CLI
+
+    %% Runtime setup
+    CLI -->|loads| ENV
+    CLI -->|starts/checks| DOCKER
+    DOCKER --> API
+    CLI --> HEALTH
+    HEALTH --> API
+
+    %% Analysis pipeline
+    CLI -->|submit request| API
+    CLI -->|read PMIDs from| FILES
+    FILES --> CLI
+
+    API --> ORCH
+    ORCH --> RET
+    RET -->|paper text + metadata| ORCH
+
+    ORCH --> RAG
+    RAG --> LLM
+    LLM --> RAG
+    RAG --> ORCH
+
+    ORCH --> VAL
+    VAL -->|host_species, body_site, condition,<br/>sequencing_type, taxa_level, sample_size| API
+
+    API --> OUT
+    OUT --> CLI
+    CLI --> RES
+    RES --> U
