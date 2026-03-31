@@ -334,15 +334,63 @@ class BioAnalyzerCLI:
 import pandas as pd
 import sys
 import json
+import re
 
 try:
-    # Read Excel file - PMIDs should be in the first column
+    # Read Excel file and auto-detect the best PMID column
     df = pd.read_excel('/workspace/{file_name}')
-    # Get the first column
-    first_col = df.iloc[:, 0]
-    # Extract PMIDs (convert to string and strip whitespace)
-    pmids = [str(val).strip() for val in first_col if pd.notna(val) and str(val).strip()]
+
+    def normalize_pmid(value):
+        if pd.isna(value):
+            return None
+        # Excel numeric cells often come through as floats (e.g. 12345678.0)
+        if isinstance(value, (int, float)):
+            if float(value).is_integer():
+                return str(int(value))
+            return None
+        raw = str(value).strip()
+        if not raw:
+            return None
+        # Handle strings that look like "12345678.0"
+        if re.fullmatch(r'\\d+\\.0+', raw):
+            return raw.split('.', 1)[0]
+        if re.fullmatch(r'\\d+', raw):
+            return raw
+        return None
+
+    def score_column(series):
+        normalized = [normalize_pmid(v) for v in series]
+        # Prefer likely PMIDs (6+ digits) to avoid selecting year columns (e.g., 2019)
+        likely_pmids = [p for p in normalized if p and len(p) >= 6]
+        return likely_pmids
+
+    best_pmids = []
+    best_score = -1
+
+    for col in df.columns:
+        pmids = score_column(df[col])
+        # Strongly prefer a column explicitly named like PMID
+        name_bonus = 100000 if 'pmid' in str(col).lower() else 0
+        score = len(pmids) + name_bonus
+        if score > best_score:
+            best_score = score
+            best_pmids = pmids
+
+    if not best_pmids:
+        raise ValueError(
+            'No valid PMIDs found in Excel file. Ensure a column contains numeric PMIDs.'
+        )
+
+    # De-duplicate while preserving order
+    seen = set()
+    deduped = []
+    for p in best_pmids:
+        if p not in seen:
+            seen.add(p)
+            deduped.append(p)
+
     # Output as JSON for easy parsing
+    pmids = deduped
     print(json.dumps(pmids))
 except Exception as e:
     print('ERROR: ' + str(e), file=sys.stderr)
