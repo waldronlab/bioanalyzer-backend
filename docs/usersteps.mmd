@@ -1,53 +1,42 @@
 flowchart TD
-    A["Step 1: Get the code"]
-    A1["Command: git clone <repo-url>"]
-    A2["Command: cd BioAnalyzer-Backend"]
+    A[Step 1 Get code]
+    A1[git clone REPO_URL]
+    A2[cd BioAnalyzer-Backend]
 
-    B["Step 2: Install CLI command"]
-    B1["Command: ./install.sh"]
+    B[Step 2 Install CLI]
+    B1[./install.sh]
 
-    C["Step 3: Build Docker image"]
-    C1["Command: BioAnalyzer build"]
+    C[Step 3 Build image]
+    C1[BioAnalyzer build]
 
-    D["Step 4: Start backend services"]
-    D1["Command: BioAnalyzer start"]
+    D[Step 4 Start services]
+    D1[BioAnalyzer start]
 
-    E["Step 5: Check system health"]
-    E1["Command: BioAnalyzer status"]
+    E[Step 5 Check status]
+    E1[BioAnalyzer status]
 
-    F["Step 6A: Analyze single PMID"]
-    F1["Command: BioAnalyzer analyze 12345678 --format csv --output results.csv"]
+    F[Step 6 Analyze one PMID]
+    F1[BioAnalyzer analyze 12345678 --format csv --output results.csv]
 
-    G["Step 6B: Analyze multiple PMIDs"]
-    G1["Command: BioAnalyzer analyze 12345678,87654321 --format csv --output results.csv"]
+    G[Step 7 Analyze from Excel file]
+    G1[BioAnalyzer analyze --file curatable_papers.xls --format csv --output results.csv]
 
-    H["Step 6C: Analyze PMIDs from file"]
-    H1["Command: BioAnalyzer analyze --file \"curatable papers.xls\" --format csv --output results.csv"]
+    H[Step 8 Retrieve paper text]
+    H1[BioAnalyzer retrieve 12345678]
 
-    I["Step 7: Retrieve paper content only"]
-    I1["Command: BioAnalyzer retrieve 12345678"]
-    I2["Command: BioAnalyzer retrieve --file pmids.txt --format json --output retrieved.json"]
+    I[Step 9 Analyze URL]
+    I1[BioAnalyzer analyze-url https://example.com/study --format json --output url_results.json]
 
-    J["Step 8: Analyze study URL"]
-    J1["Command: BioAnalyzer analyze-url https://example.com/study --format json --output url_results.json"]
+    J[Step 10 QA mode]
+    J1[BioAnalyzer qa What is 16S sequencing]
+    J2[BioAnalyzer qa --interactive]
 
-    K["Step 9: Optional Q and A mode"]
-    K1["Command: BioAnalyzer qa \"What is 16S sequencing?\""]
-    K2["Command: BioAnalyzer qa --interactive"]
-
-    L["Step 10: Stop services when done"]
-    L1["Command: BioAnalyzer stop"]
+    K[Step 11 Stop services]
+    K1[BioAnalyzer stop]
 
     A --> A1 --> A2 --> B --> B1 --> C --> C1 --> D --> D1 --> E --> E1
-    E --> F --> F1
-    E --> G --> G1
-    E --> H --> H1
-    E --> I --> I1 --> I2
-    E --> J --> J1
-    E --> K --> K1 --> K2
-    F1 --> L --> L1
-    G1 --> L
-    H1 --> L
-    I2 --> L
-    J1 --> L
-    K2 --> L
+    E --> F --> F1 --> K --> K1
+    E --> G --> G1 --> K
+    E --> H --> H1 --> K
+    E --> I --> I1 --> K
+    E --> J --> J1 --> J2 --> K
