@@ -1,42 +1,71 @@
 flowchart TD
     A[Step 1 Get code]
-    A1[git clone REPO_URL]
-    A2[cd BioAnalyzer-Backend]
+    A1["git clone REPO_URL"]
+    A2["cd BioAnalyzer-Backend"]
 
     B[Step 2 Install CLI]
-    B1[./install.sh]
+    B1["./install.sh"]
 
     C[Step 3 Build image]
-    C1[BioAnalyzer build]
+    C1["BioAnalyzer build"]
 
     D[Step 4 Start services]
-    D1[BioAnalyzer start]
+    D1["BioAnalyzer start"]
 
     E[Step 5 Check status]
-    E1[BioAnalyzer status]
+    E1["BioAnalyzer status"]
 
     F[Step 6 Analyze one PMID]
-    F1[BioAnalyzer analyze 12345678 --format csv --output results.csv]
+    F1["BioAnalyzer analyze 12345678 --format csv --output results.csv"]
 
     G[Step 7 Analyze from Excel file]
-    G1[BioAnalyzer analyze --file curatable_papers.xls --format csv --output results.csv]
+    G1["BioAnalyzer analyze --file curatable_papers.xls --format csv --output results.csv"]
 
     H[Step 8 Retrieve paper text]
-    H1[BioAnalyzer retrieve 12345678]
+    H1["BioAnalyzer retrieve 12345678"]
 
     I[Step 9 Analyze URL]
-    I1[BioAnalyzer analyze-url https://example.com/study --format json --output url_results.json]
+    I1["BioAnalyzer analyze-url https://example.com/study --format json --output url_results.json"]
 
     J[Step 10 QA mode]
-    J1[BioAnalyzer qa What is 16S sequencing]
-    J2[BioAnalyzer qa --interactive]
+    J1["BioAnalyzer qa What is 16S sequencing"]
+    J2["BioAnalyzer qa --interactive"]
 
     K[Step 11 Stop services]
-    K1[BioAnalyzer stop]
+    K1["BioAnalyzer stop"]
 
-    A --> A1 --> A2 --> B --> B1 --> C --> C1 --> D --> D1 --> E --> E1
-    E --> F --> F1 --> K --> K1
-    E --> G --> G1 --> K
-    E --> H --> H1 --> K
-    E --> I --> I1 --> K
-    E --> J --> J1 --> J2 --> K
+    %% Broken up connections for GitHub stability
+    A --> A1
+    A1 --> A2
+    A2 --> B
+    B --> B1
+    B1 --> C
+    C --> C1
+    C1 --> D
+    D --> D1
+    D1 --> E
+    E --> E1
+    
+    %% Branching from Step 5
+    E1 --> F
+    F --> F1
+    F1 --> K1
+    
+    E1 --> G
+    G --> G1
+    G1 --> K1
+    
+    E1 --> H
+    H --> H1
+    H1 --> K1
+    
+    E1 --> I
+    I --> I1
+    I1 --> K1
+    
+    E1 --> J
+    J --> J1
+    J1 --> J2
+    J2 --> K1
+    
+    K1 --> K
