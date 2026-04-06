@@ -63,7 +63,7 @@ fi
 
 # Execute the command
 echo "🐳 Running BioAnalyzer CLI in Docker..."
-echo "Command: python cli.py $*"
+echo "Command: python scripts/cli.py $*"
 echo ""
 
-$DOCKER_CMD $IMAGE_NAME python cli.py "$@"
+$DOCKER_CMD $IMAGE_NAME python scripts/cli.py "$@"

@@ -23,8 +23,16 @@ from pathlib import Path
 # Find the BioAnalyzer backend directory
 def find_bioanalyzer_backend():
     """Find the BioAnalyzer backend directory."""
+    # Highest priority: explicit environment override
+    env_path = os.getenv("BIOANALYZER_PATH")
+    if env_path:
+        resolved = Path(env_path).expanduser().resolve()
+        if (resolved / "scripts" / "cli.py").exists():
+            return resolved
+
     # Try different possible locations
     possible_paths = [
+        Path.cwd(),  # Current working directory
         Path(__file__).parent,  # Current directory
         Path(__file__).parent / "BioAnalyzer-Backend",  # Adjacent directory
         Path.home() / "Desktop" / "BioAnalyzer-Backend",  # Desktop
@@ -33,7 +41,7 @@ def find_bioanalyzer_backend():
     ]
     
     for path in possible_paths:
-        cli_path = path / "cli.py"
+        cli_path = path / "scripts" / "cli.py"
         if cli_path.exists():
             return path
     
@@ -98,7 +106,7 @@ For help, visit: https://github.com/your-repo/bioanalyzer-backend
     
     # Import and run the CLI
     try:
-        from cli import main as cli_main
+        from scripts.cli import main as cli_main
         cli_main()
     except ImportError as e:
         print(f"""

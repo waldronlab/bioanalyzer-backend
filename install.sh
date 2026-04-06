@@ -49,7 +49,7 @@ CURRENT_DIR=$(pwd)
 print_status "BioAnalyzer package directory: $CURRENT_DIR"
 
 # Check if we're in the right directory
-if [[ ! -f "cli.py" ]] || [[ ! -f "BioAnalyzer" ]]; then
+if [[ ! -f "scripts/cli.py" ]] || [[ ! -f "BioAnalyzer" ]]; then
     print_error "Please run this script from the BioAnalyzer-Backend directory"
     exit 1
 fi

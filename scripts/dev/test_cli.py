@@ -11,7 +11,7 @@ def test_cli_structure():
     # Test CLI file exists
     import os
 
-    cli_path = "cli.py"
+    cli_path = "scripts/cli.py"
     if os.path.exists(cli_path):
         print("✅ CLI file exists")
     else:
@@ -19,7 +19,7 @@ def test_cli_structure():
         return False
 
     # Test main.py exists
-    main_path = "main.py"
+    main_path = "scripts/main.py"
     if os.path.exists(main_path):
         print("✅ Main.py file exists")
     else:
@@ -117,8 +117,8 @@ if __name__ == "__main__":
         print("\n✅ Package CLI structure is correct!")
         print("📝 To use the CLI, install dependencies:")
         print("   pip install -r config/requirements.txt")
-        print("   python3 cli.py fields")
-        print("   python3 cli.py analyze 12345678")
+        print("   python3 scripts/cli.py fields")
+        print("   python3 scripts/cli.py analyze 12345678")
     else:
         print("\n❌ Package CLI structure has issues!")
 
