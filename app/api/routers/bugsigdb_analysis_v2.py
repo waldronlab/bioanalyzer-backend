@@ -68,7 +68,7 @@ async def analyze_paper(
     ),
 ) -> PaperAnalysisResultV2:
     """
-    Analyze a single paper for the 6 essential BugSigDB fields with RAG support (GET variant).
+    Analyze a single paper for the essential BugSigDB fields with RAG support (GET variant).
 
     **RAG Features:**
     - Contextual summarization of relevant chunks
@@ -129,7 +129,7 @@ async def analyze_paper(
 @router.post("/analyze")
 async def analyze_paper_post(request: AnalysisRequestV2) -> PaperAnalysisResultV2:
     """
-    Analyze a single paper for the 6 essential BugSigDB fields with RAG support (POST variant).
+    Analyze a single paper for the essential BugSigDB fields with RAG support (POST variant).
 
     **Request Body:**
     ```json
@@ -258,7 +258,7 @@ async def get_rag_config() -> RAGConfigResponse:
 
 @router.get("/fields")
 async def get_essential_fields():
-    """Get information about the 6 essential BugSigDB fields."""
+    """Get information about the configured essential BugSigDB fields."""
     from app.api.utils.field_helpers import get_fields_response
 
     return get_fields_response("v2")
