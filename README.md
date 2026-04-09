@@ -46,7 +46,21 @@ BioAnalyzer start
 BioAnalyzer status   # confirm running
 ```
 
-API docs at http://localhost:8000/docs when the API is running.
+API docs at `http://localhost:8000/docs` when the API is running.
+
+#### Custom API host/port (no hardcoded localhost)
+
+The CLI and dev/ops scripts read the API URL from `BIOANALYZER_API_URL`.
+
+You can set it to either the **root URL** (recommended) or the **`/api/v1` base**:
+
+```bash
+# Root URL
+export BIOANALYZER_API_URL="http://127.0.0.1:8001"
+
+# Or /api/v1 base
+export BIOANALYZER_API_URL="http://127.0.0.1:8001/api/v1"
+```
 
 ### Local Install
 
