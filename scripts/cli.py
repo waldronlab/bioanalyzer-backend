@@ -1106,7 +1106,9 @@ except Exception as e:
 
                 try:
                     # Use API instead of direct import
-                    response = requests.get(self._build_api_url(f"/analyze/{pmid}"), timeout=60)
+                    response = requests.get(
+                        self._build_api_url(f"/analyze/{pmid}"), timeout=60
+                    )
 
                     if response.status_code == 200:
                         result = response.json()
@@ -1175,7 +1177,9 @@ except Exception as e:
 
                 try:
                     # Use API instead of direct import
-                    response = requests.get(self._build_api_url(f"/analyze/{pmid}"), timeout=60)
+                    response = requests.get(
+                        self._build_api_url(f"/analyze/{pmid}"), timeout=60
+                    )
 
                     if response.status_code == 200:
                         result = response.json()
