@@ -71,7 +71,11 @@ class UnifiedQA:
         self.qa_system = None
         self.llm_manager = None
         api_key_candidate = None
-        if gemini_api_key and isinstance(gemini_api_key, str) and gemini_api_key.strip():
+        if (
+            gemini_api_key
+            and isinstance(gemini_api_key, str)
+            and gemini_api_key.strip()
+        ):
             api_key_candidate = gemini_api_key.strip()
         else:
             env_key = os.getenv("GEMINI_API_KEY", "")
