@@ -13,6 +13,7 @@ Usage:
     BioAnalyzer run table               # Run curator table (Streamlit)
     BioAnalyzer analyze <pmid>          # Analyze a single paper
     BioAnalyzer analyze <pmid1,pmid2>   # Analyze multiple papers
+    BioAnalyzer analyze --file PMID.xls --format csv --output results.csv
     BioAnalyzer status                  # Check system status
     BioAnalyzer stop                    # Stop the application
 """
@@ -65,11 +66,9 @@ class BioAnalyzerCLI:
         self.image_name = "bioanalyzer-package"
         self.network_name = "bioanalyzer-network"
         self.verbose = False
-        # Single source of truth for API URL.
-        # Accepts either:
-        # - http(s)://host:port
-        # - http(s)://host:port/api/v1
-        self.api_base_url = os.getenv("BIOANALYZER_API_URL", "http://localhost:8000")
+        self.api_base_url = os.getenv(
+            "BIOANALYZER_API_URL", "http://localhost:8000/api/v1"
+        )
         self.required_env_vars = [
             "GEMINI_API_KEY",
             "NCBI_API_KEY",
@@ -116,24 +115,10 @@ class BioAnalyzerCLI:
         return flags
 
     def _build_api_url(self, path: str) -> str:
-        """Construct a BioAnalyzer v1 API URL relative to the configured base."""
-        base = self._api_v1_base_url().rstrip("/")
+        """Construct a BioAnalyzer API URL relative to the configured base."""
+        base = self.api_base_url.rstrip("/")
         suffix = path.lstrip("/")
         return f"{base}/{suffix}" if suffix else base
-
-    def _api_root_url(self) -> str:
-        """Return the root URL (no /api/v1 suffix)."""
-        base = self.api_base_url.rstrip("/")
-        if base.endswith("/api/v1"):
-            return base[: -len("/api/v1")]
-        return base
-
-    def _api_v1_base_url(self) -> str:
-        """Return the /api/v1 base URL."""
-        base = self.api_base_url.rstrip("/")
-        if base.endswith("/api/v1"):
-            return base
-        return f"{base}/api/v1"
 
     def _validate_environment(self) -> None:
         """Warn about missing critical env vars before starting containers."""
@@ -192,9 +177,8 @@ class BioAnalyzerCLI:
     def print_help(self):
         """Print comprehensive help information."""
         self.print_banner()
-        api_root = self._api_root_url()
         print(
-            f"""
+            """
 📋 AVAILABLE COMMANDS:
 =====================
 
@@ -209,7 +193,7 @@ class BioAnalyzerCLI:
 🔬 Analysis Commands:
    BioAnalyzer analyze <pmid>           Analyze a single paper
    BioAnalyzer analyze <pmid1,pmid2>    Analyze multiple papers
-   BioAnalyzer analyze --file <file>    Analyze papers from file
+   BioAnalyzer analyze --file <file>    Analyze from .txt, .csv, .xls, or .xlsx
    BioAnalyzer analyze-url <url>        Analyze study from URL
    BioAnalyzer analyze-url --file <file> Analyze studies from file
    BioAnalyzer fields                   Show field information
@@ -232,8 +216,8 @@ class BioAnalyzerCLI:
    BioAnalyzer settings migrate --file <f> Migrate old settings format
 
 📊 Output Options:
-   --format json|csv|table             Output format (default: table)
-   --output <file>                     Save results to file
+   --format json|csv|table|xml       Output format (default: table)
+   --output <file>                     Save results to file (use with --format csv for reusable CSV)
    --verbose                           Verbose output
 
 📖 Examples:
@@ -243,6 +227,7 @@ class BioAnalyzerCLI:
    BioAnalyzer analyze 12345678
    BioAnalyzer analyze 12345678,87654321
    BioAnalyzer analyze --file pmids.txt --format json
+   BioAnalyzer analyze --file PMID.xls --format csv --output pmid_analysis.csv
    BioAnalyzer analyze-url https://example.com/study
    BioAnalyzer analyze-url --file urls.txt --format json
    BioAnalyzer retrieve 12345678
@@ -257,8 +242,8 @@ class BioAnalyzerCLI:
    BioAnalyzer stop
 
 🔧 API:
-   Once started: {api_root}
-   API Documentation: {api_root}/docs
+   Once started: http://localhost:8000
+   API Documentation: http://localhost:8000/docs
 
 ❓ Need Help?
    BioAnalyzer help                    Show this help
@@ -559,7 +544,7 @@ except Exception as e:
             if not self._ensure_volume_directories():
                 return False
             if self.check_backend_health():
-                print(f"✅ API is already available at {self._api_root_url()}")
+                print("✅ API is already available at http://localhost:8000")
                 return True
             compose_cmd = ["docker-compose"]
             check_compose = subprocess.run(
@@ -639,15 +624,15 @@ except Exception as e:
                 )
                 return False
             if self._wait_for_backend_health(timeout=60, interval=2):
-                print(f"✅ API is running at {self._api_root_url()}")
+                print("✅ API is running at http://localhost:8000")
             else:
                 print(
                     "⚠️  Package container started but /health did not report healthy within 60s"
                 )
 
             print("\n🎉 BioAnalyzer backend is now running!")
-            print(f"🔧 API: {self._api_root_url()}")
-            print(f"📖 API Documentation: {self._api_root_url()}/docs")
+            print("🔧 API: http://localhost:8000")
+            print("📖 API Documentation: http://localhost:8000/docs")
             print("💡 Use 'BioAnalyzer status' to check system status")
 
             return True
@@ -811,7 +796,7 @@ except Exception as e:
         try:
             import requests
 
-            response = requests.get(f"{self._api_root_url()}/health", timeout=5)
+            response = requests.get("http://localhost:8000/health", timeout=5)
             return response.status_code == 200
         except Exception:
             return False
@@ -868,8 +853,8 @@ except Exception as e:
             print("Package Container: ❌ Not Running")
         if self.check_backend_health():
             print("API Health: ✅ Healthy")
-            print(f"🔧 API: {self._api_root_url()}")
-            print(f"📖 API Documentation: {self._api_root_url()}/docs")
+            print("🔧 API: http://localhost:8000")
+            print("📖 API Documentation: http://localhost:8000/docs")
         else:
             print("API Health: ❌ Not Responding")
             if not backend_running:
@@ -1107,7 +1092,7 @@ except Exception as e:
                 try:
                     # Use API instead of direct import
                     response = requests.get(
-                        self._build_api_url(f"/analyze/{pmid}"), timeout=60
+                        f"http://localhost:8000/api/v1/analyze/{pmid}", timeout=60
                     )
 
                     if response.status_code == 200:
@@ -1178,7 +1163,7 @@ except Exception as e:
                 try:
                     # Use API instead of direct import
                     response = requests.get(
-                        self._build_api_url(f"/analyze/{pmid}"), timeout=60
+                        f"http://localhost:8000/api/v1/analyze/{pmid}", timeout=60
                     )
 
                     if response.status_code == 200:
@@ -1707,7 +1692,7 @@ except Exception as e:
 
         api_available = False
         try:
-            response = requests.get(f"{self._api_root_url()}/health", timeout=2)
+            response = requests.get("http://localhost:8000/health", timeout=2)
             if response.status_code == 200:
                 api_available = True
         except:
@@ -1753,7 +1738,7 @@ except Exception as e:
                 try:
                     # Use API endpoint for Q&A (if available) or fallback to direct call
                     api_response = requests.post(
-                        self._build_api_url("/qa"),
+                        "http://localhost:8000/api/v1/qa",
                         json={"question": user_input},
                         timeout=60,
                     )
@@ -1815,7 +1800,7 @@ except Exception as e:
 
         api_available = False
         try:
-            response = requests.get(f"{self._api_root_url()}/health", timeout=2)
+            response = requests.get("http://localhost:8000/health", timeout=2)
             if response.status_code == 200:
                 api_available = True
         except:
@@ -1830,7 +1815,7 @@ except Exception as e:
             print("🤔 Thinking...")
             # Use API endpoint for Q&A
             api_response = requests.post(
-                self._build_api_url("/qa"),
+                "http://localhost:8000/api/v1/qa",
                 json={"question": question},
                 timeout=60,
             )
@@ -2198,6 +2183,7 @@ Examples:
   BioAnalyzer run table               # Run curator table (Streamlit)
   BioAnalyzer analyze 12345678        # Analyze single paper
   BioAnalyzer analyze 12345678,87654321  # Analyze multiple papers
+  BioAnalyzer analyze --file PMID.xls --format csv -o results.csv  # Excel PMIDs → CSV
   BioAnalyzer retrieve 12345678       # Retrieve single paper
   BioAnalyzer retrieve 12345678,87654321 --save  # Retrieve multiple papers and save
   BioAnalyzer fields                  # Show field information
@@ -2250,7 +2236,11 @@ Examples:
     # Analyze command
     analyze_parser = subparsers.add_parser("analyze", help="Analyze papers")
     analyze_parser.add_argument("pmids", nargs="*", help="PubMed IDs to analyze")
-    analyze_parser.add_argument("--file", "-f", help="File containing PMIDs")
+    analyze_parser.add_argument(
+        "--file",
+        "-f",
+        help="File with PMIDs: .txt (lines or comma-separated), .csv (first column), .xls/.xlsx (auto-detect PMID column; requires Docker image from build)",
+    )
     analyze_parser.add_argument(
         "--format",
         choices=["table", "json", "csv", "xml"],
