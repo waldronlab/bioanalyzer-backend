@@ -1,4 +1,4 @@
-"""Extracts six BugSigDB fields from papers using LLMs.
+"""Extracts five core BugSigDB curation fields from papers using LLMs.
 
 This is the main analysis service. It orchestrates paper retrieval, text preparation,
 and field extraction. Results are cached to avoid redundant API calls.
@@ -74,7 +74,6 @@ ESSENTIAL_FIELDS: Dict[str, str] = {
     "body_site": "What body site or anatomical location was sampled for microbiome analysis?",
     "condition": "What disease, treatment, or condition is being studied?",
     "sequencing_type": "What sequencing method or molecular technique was used?",
-    "taxa_level": "What taxonomic level was analyzed (phylum, genus, species, etc.)?",
     "sample_size": "How many samples or participants were included in the study?",
 }
 
@@ -142,7 +141,7 @@ async def analyze_paper_simple(pmid: str) -> Optional[Dict[str, Any]]:
                 )
                 chunks = None
 
-        # Analyze each of the 6 essential fields
+        # Analyze each essential field configured in ESSENTIAL_FIELDS
         field_results = {}
         for field_name, question in ESSENTIAL_FIELDS.items():
             try:

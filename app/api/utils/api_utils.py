@@ -59,8 +59,8 @@ def create_default_field_structure(field_name: str) -> Dict[str, Any]:
             "status": "ABSENT",
             "value": None,
             "confidence": 0.0,
-            "reason_if_missing": "No taxonomic level information found in the paper",
-            "suggestions": "Look for mentions of phylum, genus, species, or other taxonomic levels",
+            "reason_if_missing": "No taxa level information found in the paper",
+            "suggestions": "Look for taxonomic ranks such as phylum, genus, or species",
         },
         "sample_size": {
             "status": "ABSENT",
