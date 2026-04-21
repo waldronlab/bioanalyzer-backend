@@ -5,9 +5,10 @@ and field extraction. Results are cached to avoid redundant API calls.
 """
 
 import logging
-from typing import Dict, Optional, List, Any
+from typing import Dict, Optional, List, Any, Tuple
 import asyncio
 import json
+import re
 
 from app.models.unified_qa import UnifiedQA
 from app.services.cache_manager import CacheManager
@@ -126,6 +127,8 @@ async def analyze_paper_simple(pmid: str) -> Optional[Dict[str, Any]]:
             logger.warning(f"No analyzable text found for PMID: {pmid}")
             return None
 
+        has_diff_abund, diff_abund_conf = detect_differential_abundance(analysis_text)
+
         chunks = None
         if full_text and len(full_text) > 1000:
             try:
@@ -160,6 +163,8 @@ async def analyze_paper_simple(pmid: str) -> Optional[Dict[str, Any]]:
             "authors": texts.get("authors", []),
             "journal": texts.get("journal", ""),
             "publication_date": texts.get("publication_date", ""),
+            "has_differential_abundance": has_diff_abund,
+            "differential_abundance_confidence": diff_abund_conf,
             "fields": field_results,
             "analysis_timestamp": get_current_timestamp(),
             "model_used": DEFAULT_MODEL,
@@ -252,6 +257,8 @@ async def analyze_paper_with_rag(
             logger.warning(f"No analyzable text found for PMID: {pmid}")
             return None
 
+        has_diff_abund, diff_abund_conf = detect_differential_abundance(analysis_text)
+
         chunks = None
         if use_rag_final and full_text and len(full_text) > 1000:
             try:
@@ -292,6 +299,8 @@ async def analyze_paper_with_rag(
             "authors": texts.get("authors", []),
             "journal": texts.get("journal", ""),
             "publication_date": texts.get("publication_date", ""),
+            "has_differential_abundance": has_diff_abund,
+            "differential_abundance_confidence": diff_abund_conf,
             "fields": field_results,
             "analysis_timestamp": get_current_timestamp(),
             "model_used": DEFAULT_MODEL,
@@ -605,3 +614,66 @@ def create_empty_field_result(field_name: str) -> Dict:
         "confidence": 0.0,
         "reason_if_missing": "Analysis failed or timed out",
     }
+
+
+def detect_differential_abundance(text: str) -> Tuple[bool, float]:
+    """Heuristic differential abundance detector.
+
+    curator-desk uses this as a triage filter. We keep it lightweight (no extra LLM call).
+    Returns:
+      (has_differential_abundance, confidence[0..1])
+    """
+    if not text or not str(text).strip():
+        return False, 0.0
+
+    t = str(text).lower()
+
+    # Strong signals (explicit)
+    strong_patterns = [
+        r"\bdifferential(?:ly)? abundant\b",
+        r"\bdifferential abundance\b",
+        r"\bsignificant(?:ly)? (?:different|difference)\b",
+        r"\benriched\b",
+        r"\bdepleted\b",
+        r"\bup-?regulated\b",
+        r"\bdown-?regulated\b",
+        r"\bfdr\b",
+        r"\badjusted p(?:-|\s*)value\b",
+    ]
+
+    # Medium signals (comparison language)
+    medium_patterns = [
+        r"\bcompared to\b",
+        r"\bversus\b|\bvs\.\b|\bvs\b",
+        r"\bdifference(?:s)? in\b",
+        r"\bassociated with\b",
+        r"\bincrease(?:d)?\b|\bdecrease(?:d)?\b",
+    ]
+
+    # Weak signals (general analysis language)
+    weak_patterns = [
+        r"\b(relative )?abundance\b",
+        r"\bcomposition\b",
+        r"\bdysbiosis\b",
+        r"\b(beta|alpha) diversity\b",
+        r"\bcommunity structure\b",
+    ]
+
+    def _count_any(patterns: List[str]) -> int:
+        return sum(1 for p in patterns if re.search(p, t, flags=re.IGNORECASE))
+
+    strong = _count_any(strong_patterns)
+    medium = _count_any(medium_patterns)
+    weak = _count_any(weak_patterns)
+
+    # Score in [0, 1]. Strong evidence dominates; medium/weak nudge confidence upward.
+    score = 0.0
+    if strong:
+        score = 0.75 + min(0.25, 0.08 * (strong - 1) + 0.05 * medium + 0.03 * weak)
+    elif medium:
+        score = 0.45 + min(0.35, 0.08 * (medium - 1) + 0.05 * weak)
+    elif weak:
+        score = min(0.35, 0.10 + 0.08 * weak)
+
+    score = max(0.0, min(1.0, score))
+    return score >= 0.6, float(score)
