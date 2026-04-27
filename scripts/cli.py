@@ -14,6 +14,7 @@ Usage:
     BioAnalyzer analyze <pmid>          # Analyze a single paper
     BioAnalyzer analyze <pmid1,pmid2>   # Analyze multiple papers
     BioAnalyzer analyze --file PMID.xls --format csv --output results.csv
+    BioAnalyzer analyze --file PMID.xls --format curator_desk_csv --output curator_desk.csv
     BioAnalyzer status                  # Check system status
     BioAnalyzer stop                    # Stop the application
 """
@@ -28,6 +29,7 @@ import os
 import subprocess
 import time
 import csv
+import re
 from pathlib import Path
 from typing import List, Optional, Dict, Any, TYPE_CHECKING
 import logging
@@ -216,7 +218,7 @@ class BioAnalyzerCLI:
    BioAnalyzer settings migrate --file <f> Migrate old settings format
 
 📊 Output Options:
-   --format json|csv|table|xml       Output format (default: table)
+   --format json|csv|curator_desk_csv|table|xml       Output format (default: table)
    --output <file>                     Save results to file (use with --format csv for reusable CSV)
    --verbose                           Verbose output
 
@@ -228,6 +230,7 @@ class BioAnalyzerCLI:
    BioAnalyzer analyze 12345678,87654321
    BioAnalyzer analyze --file pmids.txt --format json
    BioAnalyzer analyze --file PMID.xls --format csv --output pmid_analysis.csv
+   BioAnalyzer analyze --file PMID.xls --format curator_desk_csv --output curator_desk.csv
    BioAnalyzer analyze-url https://example.com/study
    BioAnalyzer analyze-url --file urls.txt --format json
    BioAnalyzer retrieve 12345678
@@ -1209,6 +1212,8 @@ except Exception as e:
             print(json.dumps(results, indent=2, ensure_ascii=False))
         elif output_format == "csv":
             self.display_csv_results(results)
+        elif output_format == "curator_desk_csv":
+            self.display_curator_desk_csv_results(results)
         elif output_format == "xml":
             self.display_xml_results(results)
         else:
@@ -1268,6 +1273,13 @@ except Exception as e:
             print("No results to display.")
             return
         print(self.get_csv_content(results))
+
+    def display_curator_desk_csv_results(self, results: List[Dict[str, Any]]):
+        """Display curator-desk compatible CSV format (Levi spec)."""
+        if not results:
+            print("No results to display.")
+            return
+        print(self.get_curator_desk_csv_content(results))
 
     def display_xml_results(self, results: List[Dict[str, Any]]):
         """Display results in XML format."""
@@ -1520,6 +1532,8 @@ except Exception as e:
             content = json.dumps(results, indent=2, ensure_ascii=False)
         elif output_format == "csv":
             content = self.get_csv_content(results)
+        elif output_format == "curator_desk_csv":
+            content = self.get_curator_desk_csv_content(results)
         elif output_format == "xml":
             content = self.get_xml_content(results)
         else:
@@ -1580,6 +1594,96 @@ except Exception as e:
                 fields.get("sample_size", {}).get("status", ""),
                 result.get("curation_summary", ""),
                 result.get("processing_time", 0),
+            ]
+            writer.writerow(row)
+
+        return output.getvalue()
+
+    def _extract_year(self, publication_date: Any) -> str:
+        """Extract a 4-digit publication year from a publication date-like string."""
+        if publication_date is None:
+            return ""
+        s = str(publication_date).strip()
+        if not s:
+            return ""
+        m = re.search(r"\b(19|20)\d{2}\b", s)
+        return m.group(0) if m else ""
+
+    def _ols_search_url(self, ontology: str, query: str) -> str:
+        """Build an OLS4 search URL (future ontology mapping support)."""
+        q = (query or "").strip()
+        if not q:
+            return ""
+        return (
+            "https://www.ebi.ac.uk/ols4/search"
+            f"?q={requests.utils.quote(q)}&ontology={requests.utils.quote(ontology)}"
+        )
+
+    def _ncbi_taxonomy_search_url(self, query: str) -> str:
+        q = (query or "").strip()
+        if not q:
+            return ""
+        return f"https://www.ncbi.nlm.nih.gov/taxonomy/?term={requests.utils.quote(q)}"
+
+    def get_curator_desk_csv_content(self, results: List[Dict[str, Any]]) -> str:
+        """Get curator-desk compatible CSV content (aligned to Levi spec)."""
+        import io
+
+        output = io.StringIO()
+        writer = csv.writer(output)
+
+        headers = [
+            "PMID",
+            "Title",
+            "Journal",
+            "Year",
+            "Host Species",
+            "Host Species Status",
+            "Body Site",
+            "Body Site Status",
+            "Condition",
+            "Condition Status",
+            "Sequencing Type",
+            "Sequencing Type Status",
+            "Sample Size",
+            "Sample Size Status",
+            "has_differential_abundance",
+            "differential_abundance_confidence",
+            # Optional helper columns (safe for curator-desk to ignore)
+            "Host Species Ontology Search",
+            "Body Site Ontology Search",
+            "Condition Ontology Search",
+        ]
+        writer.writerow(headers)
+
+        for result in results:
+            fields = result.get("fields", {}) or {}
+            year = self._extract_year(result.get("publication_date", ""))
+
+            host_val = fields.get("host_species", {}).get("value", "") or ""
+            body_val = fields.get("body_site", {}).get("value", "") or ""
+            cond_val = fields.get("condition", {}).get("value", "") or ""
+
+            row = [
+                result.get("pmid", ""),
+                result.get("title", ""),
+                result.get("journal", ""),
+                year,
+                host_val,
+                fields.get("host_species", {}).get("status", "") or "",
+                body_val,
+                fields.get("body_site", {}).get("status", "") or "",
+                cond_val,
+                fields.get("condition", {}).get("status", "") or "",
+                fields.get("sequencing_type", {}).get("value", "") or "",
+                fields.get("sequencing_type", {}).get("status", "") or "",
+                fields.get("sample_size", {}).get("value", "") or "",
+                fields.get("sample_size", {}).get("status", "") or "",
+                bool(result.get("has_differential_abundance", False)),
+                result.get("differential_abundance_confidence", ""),
+                self._ncbi_taxonomy_search_url(str(host_val)),
+                self._ols_search_url("uberon", str(body_val)),
+                self._ols_search_url("efo", str(cond_val)),
             ]
             writer.writerow(row)
 
@@ -2243,7 +2347,7 @@ Examples:
     )
     analyze_parser.add_argument(
         "--format",
-        choices=["table", "json", "csv", "xml"],
+        choices=["table", "json", "csv", "curator_desk_csv", "xml"],
         default="table",
         help="Output format",
     )
