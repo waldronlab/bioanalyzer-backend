@@ -105,4 +105,3 @@ def normalize_sample_size(raw_value: Any) -> Tuple[str, str]:
         return str(int(match.group(1).replace(",", ""))), "PRESENT"
 
     return value, "PARTIALLY_PRESENT"
-

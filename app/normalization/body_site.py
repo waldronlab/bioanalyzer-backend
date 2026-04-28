@@ -81,4 +81,3 @@ def normalize_body_site(raw_text: str) -> Tuple[str, str]:
         pass
 
     return raw_text.strip(), "PARTIALLY_PRESENT"
-

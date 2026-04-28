@@ -59,4 +59,3 @@ def is_in_bugsigdb(pmid: Union[int, str]) -> bool:
     except (ValueError, TypeError):
         return False
     return pmid_int in get_bugsigdb_pmids()
-

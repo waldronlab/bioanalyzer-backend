@@ -113,4 +113,3 @@ def normalize_condition(raw_text: str) -> Tuple[str, str]:
         pass
 
     return raw_text.strip(), "PARTIALLY_PRESENT"
-

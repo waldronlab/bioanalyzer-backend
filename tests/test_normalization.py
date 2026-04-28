@@ -40,7 +40,10 @@ def test_condition_normalization_variants():
 
 def test_sequencing_type_normalization_variants():
     assert normalize_sequencing_type("16S rRNA gene sequencing") == ("16S", "PRESENT")
-    assert normalize_sequencing_type("whole metagenome shotgun sequencing") == ("shotgun", "PRESENT")
+    assert normalize_sequencing_type("whole metagenome shotgun sequencing") == (
+        "shotgun",
+        "PRESENT",
+    )
     assert normalize_sequencing_type("ITS1 sequencing") == ("ITS", "PRESENT")
     assert normalize_sequencing_type("RNA-seq metatranscriptomics") == (
         "RNA-seq",
@@ -57,4 +60,3 @@ def test_sample_size_normalization_variants():
     assert normalize_sample_size("about 65 volunteers") == ("65", "PRESENT")
     assert normalize_sample_size(None) == ("", "ABSENT")
     assert normalize_sample_size("unknown sample count")[1] == "PARTIALLY_PRESENT"
-

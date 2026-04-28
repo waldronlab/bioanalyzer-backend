@@ -1653,8 +1653,12 @@ except Exception as e:
         ]
 
         def _status_or_absent(value: Any) -> str:
-            status = (str(value).strip().upper() if value is not None else "")
-            return status if status in {"PRESENT", "PARTIALLY_PRESENT", "ABSENT"} else "ABSENT"
+            status = str(value).strip().upper() if value is not None else ""
+            return (
+                status
+                if status in {"PRESENT", "PARTIALLY_PRESENT", "ABSENT"}
+                else "ABSENT"
+            )
 
         def _text_or_empty(value: Any) -> str:
             return "" if value is None else str(value).strip()
@@ -1663,7 +1667,9 @@ except Exception as e:
             return "TRUE" if bool(value) else "FALSE"
 
         output = io.StringIO()
-        writer = csv.DictWriter(output, fieldnames=output_columns, extrasaction="ignore")
+        writer = csv.DictWriter(
+            output, fieldnames=output_columns, extrasaction="ignore"
+        )
         writer.writeheader()
 
         seen_pmids = set()
@@ -1688,15 +1694,21 @@ except Exception as e:
                 "Title": _text_or_empty(result.get("title", "")),
                 "Journal": _text_or_empty(result.get("journal", "")),
                 "Year": _text_or_empty(year),
-                "Host Species": _text_or_empty(fields.get("host_species", {}).get("value", "")),
+                "Host Species": _text_or_empty(
+                    fields.get("host_species", {}).get("value", "")
+                ),
                 "Host Species Status": _status_or_absent(
                     fields.get("host_species", {}).get("status", "ABSENT")
                 ),
-                "Body Site": _text_or_empty(fields.get("body_site", {}).get("value", "")),
+                "Body Site": _text_or_empty(
+                    fields.get("body_site", {}).get("value", "")
+                ),
                 "Body Site Status": _status_or_absent(
                     fields.get("body_site", {}).get("status", "ABSENT")
                 ),
-                "Condition": _text_or_empty(fields.get("condition", {}).get("value", "")),
+                "Condition": _text_or_empty(
+                    fields.get("condition", {}).get("value", "")
+                ),
                 "Condition Status": _status_or_absent(
                     fields.get("condition", {}).get("status", "ABSENT")
                 ),
@@ -1706,7 +1718,9 @@ except Exception as e:
                 "Sequencing Type Status": _status_or_absent(
                     fields.get("sequencing_type", {}).get("status", "ABSENT")
                 ),
-                "Sample Size": _text_or_empty(fields.get("sample_size", {}).get("value", "")),
+                "Sample Size": _text_or_empty(
+                    fields.get("sample_size", {}).get("value", "")
+                ),
                 "Sample Size Status": _status_or_absent(
                     fields.get("sample_size", {}).get("status", "ABSENT")
                 ),

@@ -54,10 +54,11 @@ def normalize_sequencing_type(raw_text: str) -> Tuple[str, str]:
             matched_len = len(key)
 
     if matched:
-        found_types = {value for key, value in SEQUENCING_LOOKUP.items() if key in lowered}
+        found_types = {
+            value for key, value in SEQUENCING_LOOKUP.items() if key in lowered
+        }
         if len(found_types) > 1:
             return matched, "PARTIALLY_PRESENT"
         return matched, "PRESENT"
 
     return raw_text.strip(), "PARTIALLY_PRESENT"
-

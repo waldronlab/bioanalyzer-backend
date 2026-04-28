@@ -110,4 +110,3 @@ def normalize_host_species(raw_text: str) -> Tuple[str, str]:
         pass
 
     return raw_text.strip(), "PARTIALLY_PRESENT"
-

@@ -126,12 +126,16 @@ def extract_year(pub_date_text: Any) -> int | None:
     return int(match.group(0)) if match else None
 
 
-def _build_field_result(value: Any, status: str, confidence: float = 1.0) -> Dict[str, Any]:
+def _build_field_result(
+    value: Any, status: str, confidence: float = 1.0
+) -> Dict[str, Any]:
     return {
         "value": "" if status == "ABSENT" else ("" if value is None else str(value)),
         "status": status,
         "confidence": float(confidence),
-        "reason_if_missing": "" if status != "ABSENT" else "Information not found in the paper",
+        "reason_if_missing": (
+            "" if status != "ABSENT" else "Information not found in the paper"
+        ),
     }
 
 
@@ -165,12 +169,18 @@ async def _extract_structured_metadata(
         year=year if year is not None else "",
     )
     chat_call = unified_qa.chat(prompt)
-    response = await asyncio.wait_for(chat_call, timeout=ANALYSIS_TIMEOUT) if asyncio.iscoroutine(chat_call) else chat_call
+    response = (
+        await asyncio.wait_for(chat_call, timeout=ANALYSIS_TIMEOUT)
+        if asyncio.iscoroutine(chat_call)
+        else chat_call
+    )
     answer = response.get("text", "")
     return _parse_json_object(answer)
 
 
-def _field_results_from_unified_payload(payload: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+def _field_results_from_unified_payload(
+    payload: Dict[str, Any]
+) -> Dict[str, Dict[str, Any]]:
     """Map unified prompt JSON payload to internal field structure."""
     host_val, host_status = normalize_host_species(payload.get("host_species_raw"))
     body_val, body_status = normalize_body_site(payload.get("body_site_raw"))
@@ -189,7 +199,9 @@ def _field_results_from_unified_payload(payload: Dict[str, Any]) -> Dict[str, Di
     }
 
 
-def _normalize_extracted_fields(field_results: Dict[str, Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+def _normalize_extracted_fields(
+    field_results: Dict[str, Dict[str, Any]]
+) -> Dict[str, Dict[str, Any]]:
     """Normalize raw extracted values to curator-desk canonical forms."""
     normalized = dict(field_results or {})
 
@@ -413,16 +425,30 @@ async def analyze_paper_with_rag(
                         if rag_config_dict
                         else "hybrid"
                     ),
-                    evidence_k=(rag_config_dict.get("evidence_k") if rag_config_dict else None),
-                    max_sources=(rag_config_dict.get("max_sources") if rag_config_dict else None),
-                    use_10_scale=(rag_config_dict.get("use_10_scale", True) if rag_config_dict else True),
+                    evidence_k=(
+                        rag_config_dict.get("evidence_k") if rag_config_dict else None
+                    ),
+                    max_sources=(
+                        rag_config_dict.get("max_sources") if rag_config_dict else None
+                    ),
+                    use_10_scale=(
+                        rag_config_dict.get("use_10_scale", True)
+                        if rag_config_dict
+                        else True
+                    ),
                 )
                 context_for_prompt = await rag_service.get_contextual_context(
                     chunks=chunks,
                     query="Extract host species, body site, condition, sequencing type, sample size and differential abundance metadata.",
-                    top_k=(rag_config_dict.get("top_k_chunks") if rag_config_dict else None),
-                    evidence_k=(rag_config_dict.get("evidence_k") if rag_config_dict else None),
-                    max_sources=(rag_config_dict.get("max_sources") if rag_config_dict else None),
+                    top_k=(
+                        rag_config_dict.get("top_k_chunks") if rag_config_dict else None
+                    ),
+                    evidence_k=(
+                        rag_config_dict.get("evidence_k") if rag_config_dict else None
+                    ),
+                    max_sources=(
+                        rag_config_dict.get("max_sources") if rag_config_dict else None
+                    ),
                 )
             except Exception as rag_error:
                 logger.warning("Unified prompt RAG context fallback: %s", rag_error)
@@ -436,9 +462,13 @@ async def analyze_paper_with_rag(
         field_results = _field_results_from_unified_payload(payload)
         try:
             has_diff_abund = bool(payload.get("has_differential_abundance", False))
-            diff_abund_conf = float(payload.get("differential_abundance_confidence", 0.0))
+            diff_abund_conf = float(
+                payload.get("differential_abundance_confidence", 0.0)
+            )
         except (TypeError, ValueError):
-            has_diff_abund, diff_abund_conf = detect_differential_abundance(analysis_text)
+            has_diff_abund, diff_abund_conf = detect_differential_abundance(
+                analysis_text
+            )
 
         result = {
             "pmid": pmid,
