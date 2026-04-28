@@ -12,6 +12,7 @@ def test_curator_desk_csv_header_and_core_fields():
                 "publication_date": "2021-05-02",
                 "has_differential_abundance": True,
                 "differential_abundance_confidence": 0.92,
+                "in_bugsigdb": True,
                 "fields": {
                     "host_species": {"value": "Homo sapiens", "status": "PRESENT"},
                     "body_site": {"value": "feces", "status": "PRESENT"},
@@ -29,7 +30,7 @@ def test_curator_desk_csv_header_and_core_fields():
     assert len(lines) == 2
 
     header = lines[0].split(",")
-    assert header[:16] == [
+    assert header == [
         "PMID",
         "Title",
         "Journal",
@@ -46,6 +47,7 @@ def test_curator_desk_csv_header_and_core_fields():
         "Sample Size Status",
         "has_differential_abundance",
         "differential_abundance_confidence",
+        "in_bugsigdb",
     ]
 
     row = lines[1].split(",")
@@ -63,4 +65,6 @@ def test_curator_desk_csv_header_and_core_fields():
     assert row[11] == "PRESENT"
     assert row[12] == "98"
     assert row[13] == "PRESENT"
-    assert row[14] == "True"
+    assert row[14] == "TRUE"
+    assert row[15] == "0.92"
+    assert row[16] == "TRUE"

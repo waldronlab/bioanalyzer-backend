@@ -10,7 +10,13 @@ import asyncio
 import json
 import re
 
+from app.normalization.body_site import normalize_body_site
+from app.normalization.condition import normalize_condition
+from app.normalization.host_species import normalize_host_species
+from app.normalization.sample_size import normalize_sample_size
+from app.normalization.sequencing_type import normalize_sequencing_type
 from app.models.unified_qa import UnifiedQA
+from app.services.bugsigdb_check import is_in_bugsigdb
 from app.services.cache_manager import CacheManager
 from app.services.data_retrieval import PubMedRetriever
 from app.utils.config import (
@@ -78,6 +84,150 @@ ESSENTIAL_FIELDS: Dict[str, str] = {
     "sample_size": "How many samples or participants were included in the study?",
 }
 
+EXTRACTION_PROMPT = """
+You are a biomedical literature analyst specializing in microbiome research.
+Analyze the following PubMed abstract and extract structured metadata.
+Return ONLY a valid JSON object with no markdown, no explanation, no extra text.
+
+ABSTRACT:
+{abstract}
+
+METADATA:
+Title: {title}
+Journal: {journal}
+Year: {year}
+
+Extract the following fields and return as JSON:
+
+{{
+  "host_species_raw": "<species mentioned, e.g. 'Homo sapiens' or 'mice and rats'>",
+  "body_site_raw": "<anatomical location of sample collection, e.g. 'feces' or 'gut and oral cavity'>",
+  "condition_raw": "<disease or condition studied, e.g. 'Parkinson disease' or 'healthy volunteers'>",
+  "sequencing_type_raw": "<sequencing method used, e.g. '16S rRNA gene sequencing' or 'shotgun metagenomics'>",
+  "sample_size_raw": <integer total number of participants/samples, or null if not mentioned>,
+  "has_differential_abundance": <true if paper reports taxa/features significantly more/less abundant between groups, else false>,
+  "differential_abundance_confidence": <float 0.0-1.0 confidence in the above assessment>
+}}
+
+Rules:
+- For host_species_raw: give the species name(s) as mentioned. If multiple species, list all separated by " and ".
+- For body_site_raw: give the anatomical site(s) as mentioned. If multiple, list all separated by " and ".
+- For condition_raw: give only the disease/condition name, stripped of clinical context words like "patients with" or "diagnosed with". If the study compares diseased vs healthy, give the disease name only.
+- For sequencing_type_raw: give only the sequencing method name.
+- For sample_size_raw: give ONLY an integer. If stated as words (e.g. "forty-two"), convert to number. If a range, give the total or larger number.
+- For has_differential_abundance: true ONLY if the abstract explicitly states that specific microbial taxa or features differ statistically between groups.
+- For differential_abundance_confidence: 1.0 if clearly stated, 0.7 if strongly implied, 0.5 if ambiguous, 0.2 if unlikely, 0.0 if clearly absent.
+"""
+
+
+def extract_year(pub_date_text: Any) -> int | None:
+    """Extract year from publication date strings like MedlineDate values."""
+    match = re.search(r"\b(19|20)\d{2}\b", str(pub_date_text))
+    return int(match.group(0)) if match else None
+
+
+def _build_field_result(
+    value: Any, status: str, confidence: float = 1.0
+) -> Dict[str, Any]:
+    return {
+        "value": "" if status == "ABSENT" else ("" if value is None else str(value)),
+        "status": status,
+        "confidence": float(confidence),
+        "reason_if_missing": (
+            "" if status != "ABSENT" else "Information not found in the paper"
+        ),
+    }
+
+
+def _parse_json_object(raw_text: str) -> Dict[str, Any]:
+    if not raw_text:
+        return {}
+    try:
+        return json.loads(raw_text)
+    except Exception:
+        start = raw_text.find("{")
+        end = raw_text.rfind("}") + 1
+        if start != -1 and end > start:
+            try:
+                return json.loads(raw_text[start:end])
+            except Exception:
+                return {}
+    return {}
+
+
+async def _extract_structured_metadata(
+    *, context_text: str, title: str, journal: str, year: Any
+) -> Dict[str, Any]:
+    """Run one unified extraction call and return parsed JSON dict."""
+    unified_qa = get_unified_qa()
+    if unified_qa is None:
+        return {}
+    prompt = EXTRACTION_PROMPT.format(
+        abstract=context_text or "",
+        title=title or "",
+        journal=journal or "",
+        year=year if year is not None else "",
+    )
+    chat_call = unified_qa.chat(prompt)
+    response = (
+        await asyncio.wait_for(chat_call, timeout=ANALYSIS_TIMEOUT)
+        if asyncio.iscoroutine(chat_call)
+        else chat_call
+    )
+    answer = response.get("text", "")
+    return _parse_json_object(answer)
+
+
+def _field_results_from_unified_payload(
+    payload: Dict[str, Any]
+) -> Dict[str, Dict[str, Any]]:
+    """Map unified prompt JSON payload to internal field structure."""
+    host_val, host_status = normalize_host_species(payload.get("host_species_raw"))
+    body_val, body_status = normalize_body_site(payload.get("body_site_raw"))
+    cond_val, cond_status = normalize_condition(payload.get("condition_raw"))
+    seq_val, seq_status = normalize_sequencing_type(payload.get("sequencing_type_raw"))
+    sample_val, sample_status = normalize_sample_size(payload.get("sample_size_raw"))
+
+    return {
+        "host_species": _build_field_result(host_val, host_status),
+        "body_site": _build_field_result(body_val, body_status),
+        "condition": _build_field_result(cond_val, cond_status),
+        "sequencing_type": _build_field_result(seq_val, seq_status),
+        "sample_size": _build_field_result(sample_val, sample_status),
+        # Keep existing field for backward compatibility with API consumers.
+        "taxa_level": create_empty_field_result("taxa_level"),
+    }
+
+
+def _normalize_extracted_fields(
+    field_results: Dict[str, Dict[str, Any]]
+) -> Dict[str, Dict[str, Any]]:
+    """Normalize raw extracted values to curator-desk canonical forms."""
+    normalized = dict(field_results or {})
+
+    def _field_value(name: str) -> Any:
+        return (normalized.get(name) or {}).get("value")
+
+    mappings = {
+        "host_species": normalize_host_species,
+        "body_site": normalize_body_site,
+        "condition": normalize_condition,
+        "sequencing_type": normalize_sequencing_type,
+        "sample_size": normalize_sample_size,
+    }
+
+    for key, normalizer in mappings.items():
+        current = dict(normalized.get(key) or {})
+        value, status = normalizer(_field_value(key))
+        current["value"] = value
+        current["status"] = status
+        current["confidence"] = float(current.get("confidence", 0.0) or 0.0)
+        if status == "ABSENT":
+            current["value"] = ""
+        normalized[key] = current
+
+    return normalized
+
 
 async def analyze_paper_simple(pmid: str) -> Optional[Dict[str, Any]]:
     """Extract BugSigDB fields from a paper.
@@ -126,35 +276,23 @@ async def analyze_paper_simple(pmid: str) -> Optional[Dict[str, Any]]:
             logger.warning(f"No analyzable text found for PMID: {pmid}")
             return None
 
-        has_diff_abund, diff_abund_conf = detect_differential_abundance(analysis_text)
-
-        chunks = None
-        if full_text and len(full_text) > 1000:
-            try:
-                from app.utils.chunking import ChunkingService
-
-                chunker = ChunkingService(chunk_chars=3000, overlap=100)
-                chunks = await chunker.chunk_markdown(
-                    markdown=full_text, doc_name=f"PMID_{pmid}", doc_key=pmid
-                )
-                logger.info(f"Created {len(chunks)} chunks for advanced RAG")
-            except Exception as chunk_error:
-                logger.warning(
-                    f"Failed to create chunks for advanced RAG: {chunk_error}"
-                )
-                chunks = None
-
-        # Analyze each essential field configured in ESSENTIAL_FIELDS
-        field_results = {}
-        for field_name, question in ESSENTIAL_FIELDS.items():
-            try:
-                field_result = await analyze_single_field(
-                    analysis_text, field_name, question, pmid, chunks=chunks
-                )
-                field_results[field_name] = field_result
-            except Exception as e:
-                logger.error(f"Error analyzing field {field_name} for PMID {pmid}: {e}")
-                field_results[field_name] = create_empty_field_result(field_name)
+        year = extract_year(texts.get("publication_date", ""))
+        payload = await _extract_structured_metadata(
+            context_text=analysis_text,
+            title=title,
+            journal=texts.get("journal", ""),
+            year=year if year is not None else "",
+        )
+        field_results = _field_results_from_unified_payload(payload)
+        try:
+            has_diff_abund = bool(payload.get("has_differential_abundance", False))
+            diff_abund_conf = float(
+                payload.get("differential_abundance_confidence", 0.0)
+            )
+        except (TypeError, ValueError):
+            has_diff_abund, diff_abund_conf = detect_differential_abundance(
+                analysis_text
+            )
 
         result = {
             "pmid": pmid,
@@ -162,8 +300,10 @@ async def analyze_paper_simple(pmid: str) -> Optional[Dict[str, Any]]:
             "authors": texts.get("authors", []),
             "journal": texts.get("journal", ""),
             "publication_date": texts.get("publication_date", ""),
+            "year": year if year is not None else "",
             "has_differential_abundance": has_diff_abund,
             "differential_abundance_confidence": diff_abund_conf,
+            "in_bugsigdb": is_in_bugsigdb(pmid),
             "fields": field_results,
             "analysis_timestamp": get_current_timestamp(),
             "model_used": DEFAULT_MODEL,
@@ -256,8 +396,6 @@ async def analyze_paper_with_rag(
             logger.warning(f"No analyzable text found for PMID: {pmid}")
             return None
 
-        has_diff_abund, diff_abund_conf = detect_differential_abundance(analysis_text)
-
         chunks = None
         if use_rag_final and full_text and len(full_text) > 1000:
             try:
@@ -274,32 +412,74 @@ async def analyze_paper_with_rag(
                 )
                 chunks = None
 
-        # Analyze each of the 6 essential fields
-        field_results = {}
-        for field_name, question in ESSENTIAL_FIELDS.items():
-            try:
-                field_result = await analyze_single_field(
-                    analysis_text,
-                    field_name,
-                    question,
-                    pmid,
-                    chunks=chunks if use_rag_final else None,
-                    rag_config=rag_config_dict if use_rag_final else None,
-                )
-                field_results[field_name] = field_result
-            except Exception as e:
-                logger.error(f"Error analyzing field {field_name} for PMID {pmid}: {e}")
-                field_results[field_name] = create_empty_field_result(field_name)
-
         processing_time = time.time() - start_time
+        year = extract_year(texts.get("publication_date", ""))
+        context_for_prompt = analysis_text
+        if use_rag_final and chunks:
+            try:
+                from app.services.advanced_rag import AdvancedRAGService
+
+                rag_service = AdvancedRAGService(
+                    rerank_method=(
+                        rag_config_dict.get("rerank_method", "hybrid")
+                        if rag_config_dict
+                        else "hybrid"
+                    ),
+                    evidence_k=(
+                        rag_config_dict.get("evidence_k") if rag_config_dict else None
+                    ),
+                    max_sources=(
+                        rag_config_dict.get("max_sources") if rag_config_dict else None
+                    ),
+                    use_10_scale=(
+                        rag_config_dict.get("use_10_scale", True)
+                        if rag_config_dict
+                        else True
+                    ),
+                )
+                context_for_prompt = await rag_service.get_contextual_context(
+                    chunks=chunks,
+                    query="Extract host species, body site, condition, sequencing type, sample size and differential abundance metadata.",
+                    top_k=(
+                        rag_config_dict.get("top_k_chunks") if rag_config_dict else None
+                    ),
+                    evidence_k=(
+                        rag_config_dict.get("evidence_k") if rag_config_dict else None
+                    ),
+                    max_sources=(
+                        rag_config_dict.get("max_sources") if rag_config_dict else None
+                    ),
+                )
+            except Exception as rag_error:
+                logger.warning("Unified prompt RAG context fallback: %s", rag_error)
+
+        payload = await _extract_structured_metadata(
+            context_text=context_for_prompt,
+            title=title,
+            journal=texts.get("journal", ""),
+            year=year if year is not None else "",
+        )
+        field_results = _field_results_from_unified_payload(payload)
+        try:
+            has_diff_abund = bool(payload.get("has_differential_abundance", False))
+            diff_abund_conf = float(
+                payload.get("differential_abundance_confidence", 0.0)
+            )
+        except (TypeError, ValueError):
+            has_diff_abund, diff_abund_conf = detect_differential_abundance(
+                analysis_text
+            )
+
         result = {
             "pmid": pmid,
             "title": title,
             "authors": texts.get("authors", []),
             "journal": texts.get("journal", ""),
             "publication_date": texts.get("publication_date", ""),
+            "year": year if year is not None else "",
             "has_differential_abundance": has_diff_abund,
             "differential_abundance_confidence": diff_abund_conf,
+            "in_bugsigdb": is_in_bugsigdb(pmid),
             "fields": field_results,
             "analysis_timestamp": get_current_timestamp(),
             "model_used": DEFAULT_MODEL,

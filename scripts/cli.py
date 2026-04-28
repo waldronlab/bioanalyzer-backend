@@ -1154,11 +1154,14 @@ except Exception as e:
         """Analyze papers and return results."""
         try:
             import requests
+            from app.services.bugsigdb_check import get_bugsigdb_pmids
 
             results = []
             total = len(pmids)
 
             print(f"🔬 Analyzing {total} paper(s)...")
+            # Warm BugSigDB PMID cache once per run; failures gracefully default to empty set.
+            get_bugsigdb_pmids()
 
             for i, pmid in enumerate(pmids, 1):
                 print(f"[{i}/{total}] Analyzing PMID: {pmid}")
@@ -1629,10 +1632,7 @@ except Exception as e:
         """Get curator-desk compatible CSV content (aligned to Levi spec)."""
         import io
 
-        output = io.StringIO()
-        writer = csv.writer(output)
-
-        headers = [
+        output_columns = [
             "PMID",
             "Title",
             "Journal",
@@ -1649,42 +1649,87 @@ except Exception as e:
             "Sample Size Status",
             "has_differential_abundance",
             "differential_abundance_confidence",
-            # Optional helper columns (safe for curator-desk to ignore)
-            "Host Species Ontology Search",
-            "Body Site Ontology Search",
-            "Condition Ontology Search",
+            "in_bugsigdb",
         ]
-        writer.writerow(headers)
 
+        def _status_or_absent(value: Any) -> str:
+            status = str(value).strip().upper() if value is not None else ""
+            return (
+                status
+                if status in {"PRESENT", "PARTIALLY_PRESENT", "ABSENT"}
+                else "ABSENT"
+            )
+
+        def _text_or_empty(value: Any) -> str:
+            return "" if value is None else str(value).strip()
+
+        def _bool_upper(value: Any) -> str:
+            return "TRUE" if bool(value) else "FALSE"
+
+        output = io.StringIO()
+        writer = csv.DictWriter(
+            output, fieldnames=output_columns, extrasaction="ignore"
+        )
+        writer.writeheader()
+
+        seen_pmids = set()
         for result in results:
             fields = result.get("fields", {}) or {}
-            year = self._extract_year(result.get("publication_date", ""))
+            pmid = _text_or_empty(result.get("pmid", ""))
+            if pmid in seen_pmids:
+                continue
+            seen_pmids.add(pmid)
 
-            host_val = fields.get("host_species", {}).get("value", "") or ""
-            body_val = fields.get("body_site", {}).get("value", "") or ""
-            cond_val = fields.get("condition", {}).get("value", "") or ""
+            year = self._extract_year(
+                result.get("year") or result.get("publication_date", "")
+            )
+            confidence = result.get("differential_abundance_confidence", 0.0)
+            try:
+                confidence_str = f"{float(confidence):.2f}"
+            except (TypeError, ValueError):
+                confidence_str = "0.00"
 
-            row = [
-                result.get("pmid", ""),
-                result.get("title", ""),
-                result.get("journal", ""),
-                year,
-                host_val,
-                fields.get("host_species", {}).get("status", "") or "",
-                body_val,
-                fields.get("body_site", {}).get("status", "") or "",
-                cond_val,
-                fields.get("condition", {}).get("status", "") or "",
-                fields.get("sequencing_type", {}).get("value", "") or "",
-                fields.get("sequencing_type", {}).get("status", "") or "",
-                fields.get("sample_size", {}).get("value", "") or "",
-                fields.get("sample_size", {}).get("status", "") or "",
-                bool(result.get("has_differential_abundance", False)),
-                result.get("differential_abundance_confidence", ""),
-                self._ncbi_taxonomy_search_url(str(host_val)),
-                self._ols_search_url("uberon", str(body_val)),
-                self._ols_search_url("efo", str(cond_val)),
-            ]
+            row = {
+                "PMID": pmid,
+                "Title": _text_or_empty(result.get("title", "")),
+                "Journal": _text_or_empty(result.get("journal", "")),
+                "Year": _text_or_empty(year),
+                "Host Species": _text_or_empty(
+                    fields.get("host_species", {}).get("value", "")
+                ),
+                "Host Species Status": _status_or_absent(
+                    fields.get("host_species", {}).get("status", "ABSENT")
+                ),
+                "Body Site": _text_or_empty(
+                    fields.get("body_site", {}).get("value", "")
+                ),
+                "Body Site Status": _status_or_absent(
+                    fields.get("body_site", {}).get("status", "ABSENT")
+                ),
+                "Condition": _text_or_empty(
+                    fields.get("condition", {}).get("value", "")
+                ),
+                "Condition Status": _status_or_absent(
+                    fields.get("condition", {}).get("status", "ABSENT")
+                ),
+                "Sequencing Type": _text_or_empty(
+                    fields.get("sequencing_type", {}).get("value", "")
+                ),
+                "Sequencing Type Status": _status_or_absent(
+                    fields.get("sequencing_type", {}).get("status", "ABSENT")
+                ),
+                "Sample Size": _text_or_empty(
+                    fields.get("sample_size", {}).get("value", "")
+                ),
+                "Sample Size Status": _status_or_absent(
+                    fields.get("sample_size", {}).get("status", "ABSENT")
+                ),
+                "has_differential_abundance": _bool_upper(
+                    result.get("has_differential_abundance", False)
+                ),
+                "differential_abundance_confidence": confidence_str,
+                "in_bugsigdb": _bool_upper(result.get("in_bugsigdb", False)),
+            }
             writer.writerow(row)
 
         return output.getvalue()
