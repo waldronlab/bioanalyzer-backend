@@ -126,47 +126,6 @@ def extract_year(pub_date_text: Any) -> int | None:
     match = re.search(r"\b(19|20)\d{2}\b", str(pub_date_text))
     return int(match.group(0)) if match else None
 
-EXTRACTION_PROMPT = """
-You are a biomedical literature analyst specializing in microbiome research.
-Analyze the following PubMed abstract and extract structured metadata.
-Return ONLY a valid JSON object with no markdown, no explanation, no extra text.
-
-ABSTRACT:
-{abstract}
-
-METADATA:
-Title: {title}
-Journal: {journal}
-Year: {year}
-
-Extract the following fields and return as JSON:
-
-{{
-  "host_species_raw": "<species mentioned, e.g. 'Homo sapiens' or 'mice and rats'>",
-  "body_site_raw": "<anatomical location of sample collection, e.g. 'feces' or 'gut and oral cavity'>",
-  "condition_raw": "<disease or condition studied, e.g. 'Parkinson disease' or 'healthy volunteers'>",
-  "sequencing_type_raw": "<sequencing method used, e.g. '16S rRNA gene sequencing' or 'shotgun metagenomics'>",
-  "sample_size_raw": <integer total number of participants/samples, or null if not mentioned>,
-  "has_differential_abundance": <true if paper reports taxa/features significantly more/less abundant between groups, else false>,
-  "differential_abundance_confidence": <float 0.0-1.0 confidence in the above assessment>
-}}
-
-Rules:
-- For host_species_raw: give the species name(s) as mentioned. If multiple species, list all separated by " and ".
-- For body_site_raw: give the anatomical site(s) as mentioned. If multiple, list all separated by " and ".
-- For condition_raw: give only the disease/condition name, stripped of clinical context words like "patients with" or "diagnosed with". If the study compares diseased vs healthy, give the disease name only.
-- For sequencing_type_raw: give only the sequencing method name.
-- For sample_size_raw: give ONLY an integer. If stated as words (e.g. "forty-two"), convert to number. If a range, give the total or larger number.
-- For has_differential_abundance: true ONLY if the abstract explicitly states that specific microbial taxa or features differ statistically between groups.
-- For differential_abundance_confidence: 1.0 if clearly stated, 0.7 if strongly implied, 0.5 if ambiguous, 0.2 if unlikely, 0.0 if clearly absent.
-"""
-
-
-def extract_year(pub_date_text: Any) -> int | None:
-    """Extract year from publication date strings like MedlineDate values."""
-    match = re.search(r"\b(19|20)\d{2}\b", str(pub_date_text))
-    return int(match.group(0)) if match else None
-
 
 def _build_field_result(value: Any, status: str, confidence: float = 1.0) -> Dict[str, Any]:
     return {
@@ -257,73 +216,6 @@ def _normalize_extracted_fields(field_results: Dict[str, Dict[str, Any]]) -> Dic
         normalized[key] = current
 
     return normalized
-
-
-def _build_field_result(value: Any, status: str, confidence: float = 1.0) -> Dict[str, Any]:
-    return {
-        "value": "" if status == "ABSENT" else ("" if value is None else str(value)),
-        "status": status,
-        "confidence": float(confidence),
-        "reason_if_missing": "" if status != "ABSENT" else "Information not found in the paper",
-    }
-
-
-def _parse_json_object(raw_text: str) -> Dict[str, Any]:
-    if not raw_text:
-        return {}
-    try:
-        return json.loads(raw_text)
-    except Exception:
-        start = raw_text.find("{")
-        end = raw_text.rfind("}") + 1
-        if start != -1 and end > start:
-            try:
-                return json.loads(raw_text[start:end])
-            except Exception:
-                return {}
-    return {}
-
-
-async def _extract_structured_metadata(
-    *, context_text: str, title: str, journal: str, year: Any
-) -> Dict[str, Any]:
-    """Run one unified extraction call and return parsed JSON dict."""
-    unified_qa = get_unified_qa()
-    if unified_qa is None:
-        return {}
-
-    prompt = EXTRACTION_PROMPT.format(
-        abstract=context_text or "",
-        title=title or "",
-        journal=journal or "",
-        year=year if year is not None else "",
-    )
-    chat_call = unified_qa.chat(prompt)
-    response = (
-        await asyncio.wait_for(chat_call, timeout=ANALYSIS_TIMEOUT)
-        if asyncio.iscoroutine(chat_call)
-        else chat_call
-    )
-    return _parse_json_object(response.get("text", ""))
-
-
-def _field_results_from_unified_payload(payload: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
-    """Map unified prompt JSON payload to internal field structure."""
-    host_val, host_status = normalize_host_species(payload.get("host_species_raw"))
-    body_val, body_status = normalize_body_site(payload.get("body_site_raw"))
-    cond_val, cond_status = normalize_condition(payload.get("condition_raw"))
-    seq_val, seq_status = normalize_sequencing_type(payload.get("sequencing_type_raw"))
-    sample_val, sample_status = normalize_sample_size(payload.get("sample_size_raw"))
-
-    return {
-        "host_species": _build_field_result(host_val, host_status),
-        "body_site": _build_field_result(body_val, body_status),
-        "condition": _build_field_result(cond_val, cond_status),
-        "sequencing_type": _build_field_result(seq_val, seq_status),
-        "sample_size": _build_field_result(sample_val, sample_status),
-        # Keep existing field for backward compatibility with API consumers.
-        "taxa_level": create_empty_field_result("taxa_level"),
-    }
 
 
 async def analyze_paper_simple(pmid: str) -> Optional[Dict[str, Any]]:
