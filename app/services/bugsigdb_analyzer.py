@@ -1,4 +1,4 @@
-"""Extracts six BugSigDB fields from papers using LLMs.
+"""Extracts five core BugSigDB curation fields from papers using LLMs.
 
 This is the main analysis service. It orchestrates paper retrieval, text preparation,
 and field extraction. Results are cached to avoid redundant API calls.
@@ -81,7 +81,6 @@ ESSENTIAL_FIELDS: Dict[str, str] = {
     "body_site": "What body site or anatomical location was sampled for microbiome analysis?",
     "condition": "What disease, treatment, or condition is being studied?",
     "sequencing_type": "What sequencing method or molecular technique was used?",
-    "taxa_level": "What taxonomic level was analyzed (phylum, genus, species, etc.)?",
     "sample_size": "How many samples or participants were included in the study?",
 }
 
@@ -275,9 +274,13 @@ async def analyze_paper_simple(pmid: str) -> Optional[Dict[str, Any]]:
         field_results = _field_results_from_unified_payload(payload)
         try:
             has_diff_abund = bool(payload.get("has_differential_abundance", False))
-            diff_abund_conf = float(payload.get("differential_abundance_confidence", 0.0))
+            diff_abund_conf = float(
+                payload.get("differential_abundance_confidence", 0.0)
+            )
         except (TypeError, ValueError):
-            has_diff_abund, diff_abund_conf = detect_differential_abundance(analysis_text)
+            has_diff_abund, diff_abund_conf = detect_differential_abundance(
+                analysis_text
+            )
 
         result = {
             "pmid": pmid,

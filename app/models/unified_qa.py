@@ -68,7 +68,34 @@ class UnifiedQA:
         self.model = model
         self.use_paperqa = bool(use_paperqa) and PAPERQA_AVAILABLE
 
+        self.qa_system = None
         self.llm_manager = None
+        api_key_candidate = None
+        if (
+            gemini_api_key
+            and isinstance(gemini_api_key, str)
+            and gemini_api_key.strip()
+        ):
+            api_key_candidate = gemini_api_key.strip()
+        else:
+            env_key = os.getenv("GEMINI_API_KEY", "")
+            if env_key and env_key.strip():
+                api_key_candidate = env_key.strip()
+
+        # Prefer Paper-QA first when explicitly enabled.
+        if self.use_paperqa and api_key_candidate:
+            try:
+                self.qa_system = PaperQAAgent(api_key=api_key_candidate)
+                logger.info(
+                    "UnifiedQA: PaperQAAgent initialized successfully (primary)."
+                )
+            except Exception as paperqa_error:
+                logger.warning(
+                    f"UnifiedQA: Paper-QA initialization failed: {paperqa_error}"
+                )
+                logger.info("UnifiedQA: Will fall back to non-Paper-QA providers")
+                self.use_paperqa = False
+
         if LITELLM_AVAILABLE and LLMProviderManager:
             try:
                 self.llm_manager = LLMProviderManager(provider=provider, model=model)
@@ -79,72 +106,44 @@ class UnifiedQA:
                 logger.warning(f"UnifiedQA: Failed to initialize LiteLLM: {e}")
                 self.llm_manager = None
 
-        if self.llm_manager is None:
-            api_key_candidate = None
-            if (
-                gemini_api_key
-                and isinstance(gemini_api_key, str)
-                and gemini_api_key.strip()
-            ):
-                api_key_candidate = gemini_api_key.strip()
-            else:
-                env_key = os.getenv("GEMINI_API_KEY", "")
-                if env_key and env_key.strip():
-                    api_key_candidate = env_key.strip()
-
+        if self.qa_system is None:
             if api_key_candidate:
                 try:
-                    if self.use_paperqa:
-                        try:
-                            self.qa_system = PaperQAAgent(api_key=api_key_candidate)
-                            logger.info(
-                                "UnifiedQA: PaperQAAgent initialized successfully (fallback)."
-                            )
-                        except Exception as paperqa_error:
-                            logger.warning(
-                                f"UnifiedQA: Paper-QA initialization failed: {paperqa_error}"
-                            )
-                            logger.info(
-                                "UnifiedQA: Falling back to GeminiQA due to Paper-QA issues"
-                            )
-                            from .gemini_qa import GeminiQA
+                    from .gemini_qa import GeminiQA
 
-                            self.qa_system = GeminiQA(api_key=api_key_candidate)
-                            self.use_paperqa = False
-                            logger.info(
-                                "UnifiedQA: GeminiQA initialized successfully (Paper-QA unavailable)."
-                            )
-                    else:
-                        from .gemini_qa import GeminiQA
-
-                        self.qa_system = GeminiQA(api_key=api_key_candidate)
-                        logger.info(
-                            "UnifiedQA: GeminiQA initialized successfully (Paper-QA not used)."
-                        )
+                    self.qa_system = GeminiQA(api_key=api_key_candidate)
+                    logger.info("UnifiedQA: GeminiQA initialized successfully.")
                 except Exception as e:
-                    self.qa_system = None
                     logger.error(f"UnifiedQA: failed to initialize QA system: {e}")
-                    if self.use_paperqa:
-                        try:
-                            from .gemini_qa import GeminiQA
+            elif self.llm_manager is None:
+                logger.warning(
+                    "UnifiedQA: QA system not initialized (no API keys). Chat functionality will be limited."
+                )
 
-                            self.qa_system = GeminiQA(api_key=api_key_candidate)
-                            self.use_paperqa = False
-                            logger.info(
-                                "UnifiedQA: Fallback to GeminiQA after Paper-QA failure."
-                            )
-                        except Exception as e2:
-                            logger.error(
-                                f"UnifiedQA: Fallback to GeminiQA also failed: {e2}"
-                            )
-        else:
-            self.qa_system = None
+        if self.qa_system is None and self.llm_manager is None:
             logger.warning(
                 "UnifiedQA: QA system not initialized (no API keys). Chat functionality will be limited."
             )
 
     async def chat(self, prompt: str) -> dict:
         """Chat with the QA system. Returns dict with 'text' and 'confidence' keys."""
+        if self.use_paperqa and self.qa_system:
+            try:
+                response = await self.qa_system.chat(prompt)
+                if (
+                    response.get("text", "").startswith("Error:")
+                    or "router" in str(response.get("text", "")).lower()
+                ):
+                    logger.warning(
+                        f"Paper-QA returned error, falling back to GeminiQA: {response.get('text')}"
+                    )
+                    return await self._fallback_to_gemini(prompt)
+                return response
+            except Exception as e:
+                safe_error = mask_exception_message(e)
+                logger.error(f"UnifiedQA.chat (PaperQA) error: {safe_error}")
+                logger.info("Attempting fallback providers after Paper-QA error")
+
         if self.llm_manager:
             try:
                 response = await self.llm_manager.chat(
@@ -163,14 +162,6 @@ class UnifiedQA:
             }
         try:
             response = await self.qa_system.chat(prompt)
-            if (
-                response.get("text", "").startswith("Error:")
-                or "router" in str(response.get("text", "")).lower()
-            ):
-                logger.warning(
-                    f"Paper-QA returned error, falling back to GeminiQA: {response.get('text')}"
-                )
-                return await self._fallback_to_gemini(prompt)
             return response
         except Exception as e:
             safe_error = mask_exception_message(e)
@@ -394,7 +385,7 @@ class UnifiedQA:
         self, prompt: str
     ) -> Dict[str, Union[str, float, List[str]]]:
         """Enhanced analysis method for BugSigDB curation requirements."""
-        if self.use_gemini and self.qa_system:
+        if self.qa_system and hasattr(self.qa_system, "analyze_paper_enhanced"):
             return await self.qa_system.analyze_paper_enhanced(prompt)
         else:
             return {

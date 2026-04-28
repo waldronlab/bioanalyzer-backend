@@ -6,7 +6,7 @@
 [![Docker](https://img.shields.io/badge/Docker-20.0+-blue.svg)](https://docker.com)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-Extracts six BugSigDB fields from scientific papers using LLMs. Pulls metadata and full text from PubMed/PMC, then analyzes papers to determine if they're ready for curation.
+Extracts five core BugSigDB curation fields from scientific papers using LLMs. Pulls metadata and full text from PubMed/PMC, then analyzes papers to determine if they're ready for curation.
 
 Works on Ubuntu with Docker. Python 3.8+ for local installs.
 
@@ -19,8 +19,7 @@ Takes a PMID, fetches the paper from PubMed, and extracts:
 2. Body Site (Gut, Oral, Skin, etc.)
 3. Condition (disease/treatment being studied)
 4. Sequencing Type (16S, metagenomics, etc.)
-5. Taxa Level (phylum, genus, species, etc.)
-6. Sample Size (number of samples/participants)
+5. Sample Size (number of samples/participants)
 
 Each field gets a status: `PRESENT`, `PARTIALLY_PRESENT`, or `ABSENT`, plus a confidence score.
 
@@ -209,7 +208,7 @@ Cache is SQLite-based, stored in `cache/analysis_cache.db`. Results valid for 24
 
 BioAnalyzer includes a formal validation workflow to compare automated predictions against expert curator annotations:
 
-- **Ground truth**: Expert annotations in `feedback.csv` for the six BugSigDB fields  
+- **Ground truth**: Expert annotations in `feedback.csv` for the five core BugSigDB curation fields  
 - **Predictions**: BioAnalyzer outputs in a predictions CSV (e.g. `analysis_results.csv` or `new.csv`)  
 - **Alignment**: PMIDs are aligned with `align_pmids.py`  
 - **Evaluation**: `scripts/eval/confusion_matrix_analysis.py` computes 3-class confusion matrices (`ABSENT`, `PARTIALLY_PRESENT`, `PRESENT`) and per-field accuracy  

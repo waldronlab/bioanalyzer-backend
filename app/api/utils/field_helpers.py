@@ -21,7 +21,7 @@ def get_field_details_response(field_name: str, api_version: str = "v1") -> dict
     if normalized_name not in ESSENTIAL_FIELDS_INFO:
         raise HTTPException(
             status_code=404,
-            detail=f"Field '{field_name}' is not one of the 6 essential BugSigDB fields",
+            detail=f"Field '{field_name}' is not one of the configured essential BugSigDB fields",
         )
 
     field_details = ESSENTIAL_FIELDS_INFO[normalized_name].copy()

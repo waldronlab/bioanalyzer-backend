@@ -44,7 +44,7 @@ app = FastAPI(
     tags_metadata=[
         {
             "name": "BugSigDB Analysis",
-            "description": "Core endpoints for analyzing papers for the 6 essential BugSigDB fields.",
+            "description": "Core endpoints for analyzing papers for the essential BugSigDB curation fields.",
         },
         {
             "name": "System",
