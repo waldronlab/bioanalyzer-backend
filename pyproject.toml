@@ -43,7 +43,7 @@ dependencies = [
     "datasets>=2.14.0",
     "google-generativeai>=0.7.2",
     "tiktoken>=0.5.0",
-    "litellm>=1.50.0",
+    "litellm>=1.83.7",
     # Paper-QA agent integration
     # Note: paper-qa>=5.0.0 requires Python >=3.11
     # For Python <3.11, install paper-qa>=4.9.0,<5.0.0
@@ -58,12 +58,12 @@ dependencies = [
     "xlrd>=2.0.1",
     # Utilities
     "tqdm>=4.65.0",
-    "python-dotenv>=1.0.0",
+    "python-dotenv>=1.2.2",
     "psutil>=5.9.0",
     # WebSocket dependencies
     "fastapi>=0.104.0",
     "uvicorn[standard]>=0.23.2",
-    "aiohttp>=3.8.6",
+    "aiohttp>=3.13.4",
     "websockets>=11.0.3",
     "python-multipart>=0.0.5",
     "aiofiles>=0.7.0",
