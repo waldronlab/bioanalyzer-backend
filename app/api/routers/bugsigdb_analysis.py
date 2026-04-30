@@ -11,13 +11,13 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1", tags=["BugSigDB Analysis"])
 
 
-async def _run_analysis(pmid: str) -> Dict[str, Any]:
+async def _run_analysis(pmid: str, refresh: bool = False) -> Dict[str, Any]:
     """Run analysis with validated PMID."""
     from app.api.utils.api_utils import validate_pmid
 
     pmid = validate_pmid(pmid)
     logger.info(f"Starting analysis for PMID: {pmid}")
-    result = await analyze_paper_simple(pmid)
+    result = await analyze_paper_simple(pmid, force_refresh=refresh)
     if not result:
         raise HTTPException(status_code=404, detail=f"Analysis failed for PMID {pmid}")
     return result
@@ -31,10 +31,10 @@ def _handle_analysis_error(pmid: str, e: Exception) -> None:
 
 
 @router.get("/analyze/{pmid}")
-async def analyze_paper(pmid: str) -> Dict[str, Any]:
+async def analyze_paper(pmid: str, refresh: bool = False) -> Dict[str, Any]:
     """Analyze paper for BugSigDB fields."""
     try:
-        return await _run_analysis(pmid)
+        return await _run_analysis(pmid, refresh=refresh)
     except HTTPException:
         raise
     except Exception as e:
@@ -42,10 +42,10 @@ async def analyze_paper(pmid: str) -> Dict[str, Any]:
 
 
 @router.post("/analyze/{pmid}")
-async def analyze_paper_post(pmid: str) -> Dict[str, Any]:
+async def analyze_paper_post(pmid: str, refresh: bool = False) -> Dict[str, Any]:
     """Analyze paper for BugSigDB fields (POST method)."""
     try:
-        return await _run_analysis(pmid)
+        return await _run_analysis(pmid, refresh=refresh)
     except HTTPException:
         raise
     except Exception as e:
