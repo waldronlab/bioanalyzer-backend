@@ -1,38 +1,60 @@
 FROM python:3.11-slim
 
+# Set working directory
+
 WORKDIR /app
+
+# Ensure Python can find your app
+
 ENV PYTHONPATH="/app:/app/app"
+
+# Install system dependencies
 
 RUN apt-get update && apt-get install -y \
     gcc g++ curl git \
     && rm -rf /var/lib/apt/lists/*
 
+# Upgrade pip tools
+
+RUN pip install --upgrade pip setuptools wheel
+
+# Copy dependency files first (better Docker caching)
+COPY config/requirements.txt ./config/requirements.txt
 COPY pyproject.toml README.md ./
 
-RUN pip install --upgrade pip setuptools wheel build
+# Install dependencies from centralized requirements file
+RUN pip install --no-cache-dir -r config/requirements.txt
 
-# Install PyTorch CPU wheels
-RUN pip install --no-cache-dir --extra-index-url https://download.pytorch.org/whl/cpu \
-    torch==2.1.0+cpu torchvision==0.16.0+cpu torchaudio==2.1.0+cpu
+# Install package metadata/entrypoints without re-installing dependencies
+RUN pip install --no-cache-dir --no-deps .
+
+# Copy the rest of the application
 
 COPY . .
 
-# Install package + dependencies (including dev extras for pytest in test container)
-RUN pip install --no-cache-dir -e .[dev]
+# (Optional) Install in editable mode for dev/CLI usage
 
-# Explicit analysis deps (defensive)
-RUN pip install --no-cache-dir pandas scikit-learn matplotlib seaborn
+# You can remove this in production if not needed
 
-# Curator table (Streamlit) - also in pyproject.toml and config/requirements.txt
-RUN pip install --no-cache-dir streamlit pyarrow
+RUN pip install --no-cache-dir --no-deps -e .[dev]
+
+# Create required directories
 
 RUN mkdir -p cache logs results
+
+# Ensure scripts are executable
 
 RUN chmod +x scripts/cli.py || true
 RUN chmod +x scripts/*.py || true
 
+# Expose API port
+
 EXPOSE 8000
 
+# Healthcheck
+
 HEALTHCHECK CMD curl -f http://localhost:8000/health || exit 1
+
+# Start application
 
 CMD ["python", "scripts/main.py", "--host", "0.0.0.0", "--port", "8000"]

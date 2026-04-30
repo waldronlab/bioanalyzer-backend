@@ -107,7 +107,6 @@ For help, visit: https://github.com/your-repo/bioanalyzer-backend
     # Import and run the CLI
     try:
         from scripts.cli import main as cli_main
-        cli_main()
     except ImportError as e:
         print(f"""
 ❌ Error importing BioAnalyzer CLI: {e}
@@ -117,6 +116,23 @@ Please ensure all dependencies are installed:
 
 Or use Docker:
    ./docker-setup.sh
+        """)
+        sys.exit(1)
+
+    try:
+        cli_main()
+    except ModuleNotFoundError as e:
+        missing_module = getattr(e, "name", None) or str(e)
+        print(f"""
+❌ Missing Python dependency: {missing_module}
+
+This command requires local Python dependencies in your active environment.
+Install them with:
+   pip install -r config/requirements.txt
+
+If you prefer a clean environment:
+   python -m venv .venv && source .venv/bin/activate
+   pip install -r config/requirements.txt
         """)
         sys.exit(1)
     except Exception as e:

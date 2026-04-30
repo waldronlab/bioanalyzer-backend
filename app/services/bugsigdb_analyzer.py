@@ -1,14 +1,9 @@
-"""Extracts five core BugSigDB curation fields from papers using LLMs.
-
-This is the main analysis service. It orchestrates paper retrieval, text preparation,
-and field extraction. Results are cached to avoid redundant API calls.
-"""
-
 import logging
-from typing import Dict, Optional, List, Any, Tuple
-import asyncio
-import json
 import re
+import json
+import asyncio
+from typing import Any, Dict, List, Optional, Tuple
+from xml.etree import ElementTree
 
 from app.normalization.body_site import normalize_body_site
 from app.normalization.condition import normalize_condition
@@ -30,143 +25,576 @@ from app.api.utils.api_utils import get_current_timestamp
 
 logger = logging.getLogger(__name__)
 
+# ---------------------------------------------------------------------------
+# Singleton service instances
+# ---------------------------------------------------------------------------
+
 _unified_qa: Optional[UnifiedQA] = None
 _pubmed_retriever: Optional[PubMedRetriever] = None
 _cache_manager: Optional[CacheManager] = None
 
 
 def get_unified_qa() -> Optional[UnifiedQA]:
-    """Get or initialize UnifiedQA instance."""
     global _unified_qa
     if _unified_qa is None:
         try:
-            _unified_qa = UnifiedQA(use_gemini=True, gemini_api_key=GEMINI_API_KEY)
-            logger.info("UnifiedQA service initialized successfully")
+            # For structured field extraction, force direct model chat mode.
+            # PaperQA agent mode is powerful for retrieval QA but can introduce
+            # long tool runs/timeouts and non-JSON outputs for this endpoint.
+            _unified_qa = UnifiedQA(
+                provider="gemini",
+                model=DEFAULT_MODEL,
+                gemini_api_key=GEMINI_API_KEY,
+                use_paperqa=False,
+            )
+            logger.info("UnifiedQA initialised successfully")
         except Exception as e:
-            logger.error(f"Failed to initialize UnifiedQA: {e}")
-            # Try fallback to GeminiQA directly
+            logger.error(f"UnifiedQA init failed: {e}")
             try:
                 from app.models.gemini_qa import GeminiQA
-
                 _unified_qa = GeminiQA(api_key=GEMINI_API_KEY)
                 logger.info("Fallback to GeminiQA successful")
             except Exception as e2:
-                logger.error(f"Fallback to GeminiQA also failed: {e2}")
-                _unified_qa = None
+                logger.error(f"GeminiQA fallback also failed: {e2}")
     return _unified_qa
 
 
 def get_pubmed_retriever() -> Optional[PubMedRetriever]:
-    """Get or initialize PubMedRetriever instance."""
     global _pubmed_retriever
     if _pubmed_retriever is None:
         try:
             _pubmed_retriever = PubMedRetriever(api_key=NCBI_API_KEY)
         except Exception as e:
-            logger.error(f"Failed to initialize PubMedRetriever: {e}")
-            _pubmed_retriever = None
+            logger.error(f"PubMedRetriever init failed: {e}")
     return _pubmed_retriever
 
 
 def get_cache_manager() -> CacheManager:
-    """Get or initialize CacheManager instance."""
     global _cache_manager
     if _cache_manager is None:
         _cache_manager = CacheManager()
     return _cache_manager
 
+# ---------------------------------------------------------------------------
+# Field definitions (unchanged – kept for reference)
+# ---------------------------------------------------------------------------
 
 ESSENTIAL_FIELDS: Dict[str, str] = {
-    "host_species": "What host species is being studied in this research?",
-    "body_site": "What body site or anatomical location was sampled for microbiome analysis?",
-    "condition": "What disease, treatment, or condition is being studied?",
+    "host_species":    "What host species is being studied in this research?",
+    "body_site":       "What body site or anatomical location was sampled for microbiome analysis?",
+    "condition":       "What disease, treatment, or condition is being studied?",
     "sequencing_type": "What sequencing method or molecular technique was used?",
-    "sample_size": "How many samples or participants were included in the study?",
+    "sample_size":     "How many samples or participants were included in the study?",
 }
 
-EXTRACTION_PROMPT = """
-You are a biomedical literature analyst specializing in microbiome research.
-Analyze the following PubMed abstract and extract structured metadata.
-Return ONLY a valid JSON object with no markdown, no explanation, no extra text.
+EXTRACTION_PROMPT = """\
+You are a biomedical literature analyst specialising in microbiome research curation.
 
-ABSTRACT:
-{abstract}
+Analyse the following biomedical paper content and extract structured metadata.
+The content may include labelled sections (ABSTRACT, METHODS, RESULTS, DISCUSSION, etc.).
+When a section is present, prefer its information over unlabelled text for the
+corresponding fields as described in the Rules below.
 
-METADATA:
-Title: {title}
+Return ONLY a valid JSON object. No markdown fences, no explanation, no extra text.
+
+--- PAPER CONTENT BEGIN ---
+Title:   {title}
 Journal: {journal}
-Year: {year}
+Year:    {year}
 
-Extract the following fields and return as JSON:
+{paper_content}
+--- PAPER CONTENT END ---
+
+Extract the following fields and return as a single JSON object:
 
 {{
-  "host_species_raw": "<species mentioned, e.g. 'Homo sapiens' or 'mice and rats'>",
-  "body_site_raw": "<anatomical location of sample collection, e.g. 'feces' or 'gut and oral cavity'>",
-  "condition_raw": "<disease or condition studied, e.g. 'Parkinson disease' or 'healthy volunteers'>",
-  "sequencing_type_raw": "<sequencing method used, e.g. '16S rRNA gene sequencing' or 'shotgun metagenomics'>",
-  "sample_size_raw": <integer total number of participants/samples, or null if not mentioned>,
-  "has_differential_abundance": <true if paper reports taxa/features significantly more/less abundant between groups, else false>,
-  "differential_abundance_confidence": <float 0.0-1.0 confidence in the above assessment>
+  "host_species_raw":                "<species as written in the paper, e.g. 'Homo sapiens' or 'mice and rats'>",
+  "body_site_raw":                   "<anatomical sample site(s) as written, e.g. 'faeces' or 'gut and oral cavity'>",
+  "condition_raw":                   "<disease or condition name only, stripped of clinical preamble>",
+  "sequencing_type_raw":             "<sequencing or molecular method name only>",
+  "sample_size_raw":                 <integer total participants/samples, or null if not stated>,
+  "has_differential_abundance":      <true if specific microbial taxa are reported as statistically more/less abundant between groups>,
+  "differential_abundance_confidence": <float 0.0–1.0 confidence in the above>
 }}
 
 Rules:
-- For host_species_raw: give the species name(s) as mentioned. If multiple species, list all separated by " and ".
-- For body_site_raw: give the anatomical site(s) as mentioned. If multiple, list all separated by " and ".
-- For condition_raw: give only the disease/condition name, stripped of clinical context words like "patients with" or "diagnosed with". If the study compares diseased vs healthy, give the disease name only.
-- For sequencing_type_raw: give only the sequencing method name.
-- For sample_size_raw: give ONLY an integer. If stated as words (e.g. "forty-two"), convert to number. If a range, give the total or larger number.
-- For has_differential_abundance: true ONLY if the abstract explicitly states that specific microbial taxa or features differ statistically between groups.
-- For differential_abundance_confidence: 1.0 if clearly stated, 0.7 if strongly implied, 0.5 if ambiguous, 0.2 if unlikely, 0.0 if clearly absent.
+- host_species_raw   : Use METHODS or ABSTRACT. If multiple species, join with " and ".
+- body_site_raw      : Use METHODS or ABSTRACT. If multiple sites, join with " and ".
+- condition_raw      : Use ABSTRACT or INTRODUCTION. Give the disease/condition name only.
+  Do NOT include phrases like "patients with" or "diagnosed with".
+  If the study compares diseased vs. healthy controls, give the disease name only.
+- sequencing_type_raw: Prefer METHODS section. Give the method name exactly as written
+  (e.g. "16S rRNA gene sequencing", "shotgun metagenomics", "whole-genome sequencing").
+- sample_size_raw    : Prefer METHODS section. Give ONLY an integer. Convert word-numbers
+  (e.g. "forty-two" → 42). If a range or multiple cohorts, give the total or largest number.
+  If completely absent from the paper, return null.
+- has_differential_abundance: true ONLY when RESULTS or ABSTRACT explicitly states that
+  specific microbial taxa or features differ statistically between groups (p-value, FDR,
+  fold-change, or equivalent reported). Do NOT infer from study design alone.
+- differential_abundance_confidence:
+    1.0 = explicitly stated with statistics in RESULTS
+    0.8 = clearly stated in ABSTRACT with statistical language
+    0.6 = strongly implied (e.g. "significant differences in microbiota")
+    0.4 = ambiguous
+    0.2 = unlikely
+    0.0 = clearly absent or not a differential abundance study
 """
 
 
-def extract_year(pub_date_text: Any) -> int | None:
-    """Extract year from publication date strings like MedlineDate values."""
+# ---------------------------------------------------------------------------
+# PMC XML section parser  (Problem 3 fix)
+# ---------------------------------------------------------------------------
+
+# Section title keywords mapped to canonical names.
+# The regex is intentionally broad to handle variations like
+# "Materials and Methods", "Patients and Methods", "Statistical Analysis", etc.
+_SECTION_PATTERNS: List[Tuple[str, re.Pattern]] = [
+    ("ABSTRACT",      re.compile(r"abstract",                         re.I)),
+    ("INTRODUCTION",  re.compile(r"intro(?:duction)?|background",     re.I)),
+    ("METHODS",       re.compile(r"method|material|patient|protocol|statistical", re.I)),
+    ("RESULTS",       re.compile(r"result|finding",                   re.I)),
+    ("DISCUSSION",    re.compile(r"discussion|conclusion|summary",    re.I)),
+    ("SUPPLEMENTARY", re.compile(r"supplement|appendix",              re.I)),
+]
+
+
+def _classify_section_title(title: str) -> str:
+    """Map a raw section title to one of our canonical section names."""
+    for canonical, pattern in _SECTION_PATTERNS:
+        if pattern.search(title):
+            return canonical
+    return "OTHER"
+
+
+def _parse_pmc_sections(xml_text: str) -> Dict[str, str]:
+    """Parse PMC full-text XML into a dict of {canonical_section: joined_text}.
+
+    Handles nested <sec> elements.  Falls back gracefully on malformed XML.
+
+    Args:
+        xml_text: Raw PMC XML string (or plain text – handled via fallback).
+
+    Returns:
+        Dict mapping canonical section names to their text content.
+        Returns {"FULL_TEXT": xml_text} when XML cannot be parsed.
+    """
+    if not xml_text or not xml_text.strip():
+        return {}
+
+    # Quick check: if it does not look like XML, return as-is
+    if not xml_text.lstrip().startswith("<"):
+        return {"FULL_TEXT": xml_text}
+
+    try:
+        root = ElementTree.fromstring(xml_text)
+    except ElementTree.ParseError:
+        # Strip everything up to first '<' and retry once
+        start = xml_text.find("<")
+        if start > 0:
+            try:
+                root = ElementTree.fromstring(xml_text[start:])
+            except ElementTree.ParseError:
+                logger.debug("PMC XML parse failed – treating as plain text")
+                return {"FULL_TEXT": xml_text}
+        else:
+            return {"FULL_TEXT": xml_text}
+
+    sections: Dict[str, List[str]] = {}
+
+    def _walk(node: ElementTree.Element, inherited_label: str = "OTHER") -> None:
+        """Recursively collect text under each <sec> node."""
+        tag = node.tag.split("}")[-1] if "}" in node.tag else node.tag
+
+        if tag == "sec":
+            title_el = node.find("title")
+            raw_title = (title_el.text or "").strip() if title_el is not None else ""
+            label = _classify_section_title(raw_title) if raw_title else inherited_label
+
+            # Collect all paragraph text directly inside this <sec>
+            para_texts: List[str] = []
+            for child in node:
+                child_tag = child.tag.split("}")[-1] if "}" in child.tag else child.tag
+                if child_tag == "p":
+                    text = "".join(child.itertext()).strip()
+                    if text:
+                        para_texts.append(text)
+                elif child_tag != "sec":
+                    # Non-section, non-paragraph inline content (tables, figures captions)
+                    inline = "".join(child.itertext()).strip()
+                    if inline:
+                        para_texts.append(inline)
+
+            if para_texts:
+                sections.setdefault(label, []).extend(para_texts)
+
+            # Recurse into nested sections with parent label as fallback
+            for child in node:
+                child_tag = child.tag.split("}")[-1] if "}" in child.tag else child.tag
+                if child_tag == "sec":
+                    _walk(child, label)
+        else:
+            for child in node:
+                _walk(child, inherited_label)
+
+    _walk(root)
+
+    return {k: "\n\n".join(v) for k, v in sections.items() if v}
+
+
+# ---------------------------------------------------------------------------
+# Text preparation  (Problem 2 & 4 fix)
+# ---------------------------------------------------------------------------
+
+# Maximum characters fed to the prompt.  Gemini-1.5-Flash handles ~1M tokens
+# but we keep this conservative to control latency and cost.
+_CONTEXT_CHAR_LIMIT = 8_000
+
+# Per-section character budgets (must sum to ≤ _CONTEXT_CHAR_LIMIT).
+# Sections most relevant to our target fields get the largest budgets.
+_SECTION_BUDGETS: Dict[str, int] = {
+    "ABSTRACT":     1_200,   # Always include; condition / species often here
+    "METHODS":      3_000,   # sequencing_type, sample_size, body_site
+    "RESULTS":      2_000,   # differential abundance, sample_size confirmation
+    "INTRODUCTION": 800,     # condition context
+    "DISCUSSION":   600,     # sometimes contains summary stats
+    "OTHER":        400,     # miscellaneous
+}
+
+
+def _truncate(text: str, max_chars: int) -> str:
+    """Truncate text to max_chars, breaking at a sentence boundary when possible."""
+    if len(text) <= max_chars:
+        return text
+    cut = text[:max_chars]
+    # Try to end on a sentence boundary
+    last_period = cut.rfind(".")
+    if last_period > max_chars * 0.7:
+        cut = cut[: last_period + 1]
+    return cut + " [truncated]"
+
+
+def prepare_analysis_context(
+    abstract: str,
+    full_text: str,
+    *,
+    char_limit: int = _CONTEXT_CHAR_LIMIT,
+) -> str:
+    """Build the best possible analysis context from available paper content.
+
+    Strategy
+    --------
+    1. If `full_text` is available, parse it into named sections and assemble
+       a structured context string with section headers.  Each section is
+       individually capped at its budget so high-signal sections (METHODS,
+       RESULTS) dominate.
+    2. If `full_text` is not available or parsing yields nothing useful, fall
+       back to the abstract alone.
+    3. The abstract is *always* included (even when full_text is present) so
+       the LLM has a concise summary alongside the detailed sections.
+
+    Args:
+        abstract:   Paper abstract text.
+        full_text:  Full-text content (plain text or PMC XML).
+        char_limit: Soft upper bound on total characters returned.
+
+    Returns:
+        A structured string ready to be inserted into EXTRACTION_PROMPT as
+        {paper_content}.
+    """
+    abstract = (abstract or "").strip()
+    full_text = (full_text or "").strip()
+
+    # ------------------------------------------------------------------
+    # Fast path: no full text available → use abstract only
+    # ------------------------------------------------------------------
+    if not full_text:
+        if not abstract:
+            return ""
+        return f"ABSTRACT:\n{_truncate(abstract, char_limit)}"
+
+    # ------------------------------------------------------------------
+    # Parse full text into sections
+    # ------------------------------------------------------------------
+    sections = _parse_pmc_sections(full_text)
+
+    # If parsing produced nothing useful, treat full_text as plain text
+    if not sections:
+        sections = {"FULL_TEXT": full_text}
+
+    # Inject abstract into sections dict (overrides any parsed abstract
+    # only when the explicit abstract argument is richer)
+    if abstract:
+        existing_abs = sections.get("ABSTRACT", "")
+        if len(abstract) >= len(existing_abs):
+            sections["ABSTRACT"] = abstract
+
+    # ------------------------------------------------------------------
+    # Assemble the context string respecting per-section budgets
+    # ------------------------------------------------------------------
+    # Order: Abstract first, then high-signal sections, then the rest
+    ordered_keys = ["ABSTRACT", "METHODS", "RESULTS", "INTRODUCTION", "DISCUSSION"]
+    remaining_keys = [k for k in sections if k not in ordered_keys]
+    key_order = ordered_keys + remaining_keys
+
+    parts: List[str] = []
+    total_chars = 0
+
+    for key in key_order:
+        if key not in sections:
+            continue
+        budget = _SECTION_BUDGETS.get(key, _SECTION_BUDGETS["OTHER"])
+        remaining_budget = char_limit - total_chars
+        if remaining_budget <= 0:
+            break
+        effective_budget = min(budget, remaining_budget)
+        section_text = _truncate(sections[key], effective_budget)
+        parts.append(f"{key}:\n{section_text}")
+        total_chars += len(section_text)
+
+    return "\n\n".join(parts)
+
+
+# ---------------------------------------------------------------------------
+# Core LLM extraction helpers (unchanged signatures, updated to use new prompt)
+# ---------------------------------------------------------------------------
+
+def extract_year(pub_date_text: Any) -> Optional[int]:
+    """Extract 4-digit year from a publication date string."""
     match = re.search(r"\b(19|20)\d{2}\b", str(pub_date_text))
     return int(match.group(0)) if match else None
 
 
 def _build_field_result(
-    value: Any, status: str, confidence: float = 1.0
+    value: Any, status: str, confidence: Optional[float] = None
 ) -> Dict[str, Any]:
+    if confidence is None:
+        confidence = 0.85 if status == "PRESENT" else (0.65 if status == "PARTIALLY_PRESENT" else 0.0)
     return {
         "value": "" if status == "ABSENT" else ("" if value is None else str(value)),
         "status": status,
         "confidence": float(confidence),
-        "reason_if_missing": (
-            "" if status != "ABSENT" else "Information not found in the paper"
-        ),
+        "reason_if_missing": "" if status != "ABSENT" else "Information not found in the paper",
     }
 
 
+def _is_low_quality_cached_result(analysis_data: Dict[str, Any]) -> bool:
+    """Treat cached rows with all essential fields ABSENT as stale/low-quality."""
+    fields = analysis_data.get("fields") if isinstance(analysis_data, dict) else None
+    if not isinstance(fields, dict) or not fields:
+        return True
+
+    essential_keys = [
+        "host_species",
+        "body_site",
+        "condition",
+        "sequencing_type",
+        "sample_size",
+    ]
+
+    for key in essential_keys:
+        field = fields.get(key)
+        if not isinstance(field, dict):
+            return False
+        if str(field.get("status", "")).upper() != "ABSENT":
+            return False
+
+    return True
+
+
 def _parse_json_object(raw_text: str) -> Dict[str, Any]:
+    """Robustly extract a JSON object from an LLM response string."""
     if not raw_text:
         return {}
+    # Try direct parse first (ideal case: model returned clean JSON)
     try:
         return json.loads(raw_text)
-    except Exception:
-        start = raw_text.find("{")
-        end = raw_text.rfind("}") + 1
-        if start != -1 and end > start:
-            try:
-                return json.loads(raw_text[start:end])
-            except Exception:
-                return {}
+    except json.JSONDecodeError:
+        pass
+    # Fallback: locate first '{' … last '}'
+    start = raw_text.find("{")
+    end = raw_text.rfind("}") + 1
+    if start != -1 and end > start:
+        try:
+            return json.loads(raw_text[start:end])
+        except json.JSONDecodeError:
+            pass
+    # Handle fenced JSON blocks
+    fenced = re.search(r"```(?:json)?\s*(\{.*\})\s*```", raw_text, flags=re.S)
+    if fenced:
+        try:
+            return json.loads(fenced.group(1))
+        except json.JSONDecodeError:
+            pass
     return {}
 
 
+def _heuristic_payload_from_text(text: str) -> Dict[str, Any]:
+    """Best-effort extraction when the LLM returns invalid/empty JSON."""
+    t = (text or "").strip()
+    if not t:
+        return {}
+    lower = t.lower()
+
+    # host species
+    host_species_raw = None
+    if re.search(
+        r"\b(human|humans|men|women|participants?|subjects?|volunteers?|patients?|athletes?|controls?)\b",
+        lower,
+    ):
+        host_species_raw = "human"
+    elif re.search(r"\b(mouse|mice)\b", lower):
+        host_species_raw = "mouse"
+    elif re.search(r"\b(rat|rats)\b", lower):
+        host_species_raw = "rat"
+
+    # body site
+    body_site_raw = None
+    if re.search(r"\b(fecal|faecal|feces|faeces|stool)\b", lower):
+        body_site_raw = "fecal samples"
+    elif re.search(r"\b(oral|saliva|salivary)\b", lower):
+        body_site_raw = "oral"
+    elif re.search(r"\b(skin|dermal|cutaneous)\b", lower):
+        body_site_raw = "skin"
+
+    # condition
+    condition_raw = None
+    disease_phrase = re.search(
+        r"\bpatients?\s+with\s+([a-z][a-z0-9\-\s]{2,80}?(?:syndrome|disease|disorder|infection|cancer|diabetes))\b",
+        lower,
+    )
+    if disease_phrase:
+        condition_raw = disease_phrase.group(1).strip()
+    elif re.search(r"\b(healthy controls?|healthy sedentary)\b", lower):
+        condition_raw = "healthy"
+    else:
+        for term in [
+            "kostmann syndrome",
+            "obesity",
+            "diabetes",
+            "cancer",
+            "ibd",
+            "crohn",
+            "ulcerative colitis",
+            "parkinson",
+            "alzheimer",
+        ]:
+            if term in lower:
+                condition_raw = term
+                break
+
+    # sequencing type
+    sequencing_type_raw = None
+    if "16s" in lower:
+        sequencing_type_raw = "16S rRNA gene sequencing"
+    elif "shotgun" in lower or "metagenomic" in lower:
+        sequencing_type_raw = "shotgun metagenomics"
+    elif "high-throughput sequencing" in lower:
+        sequencing_type_raw = "high-throughput sequencing"
+    elif "sequencing" in lower:
+        sequencing_type_raw = "sequencing"
+
+    # sample size
+    sample_size_raw: Optional[int] = None
+    n_match = re.search(r"\bn\s*=\s*(\d{1,5})\b", lower)
+    if n_match:
+        sample_size_raw = int(n_match.group(1))
+    else:
+        mentions = [
+            int(m.group(1))
+            for m in re.finditer(
+                r"\b(\d{1,5})\s+(?:participants?|subjects?|patients?|controls?|samples?|men|women)\b",
+                lower,
+            )
+        ]
+        if mentions:
+            sample_size_raw = max(mentions)
+
+    return {
+        "host_species_raw": host_species_raw,
+        "body_site_raw": body_site_raw,
+        "condition_raw": condition_raw,
+        "sequencing_type_raw": sequencing_type_raw,
+        "sample_size_raw": sample_size_raw,
+        "has_differential_abundance": bool(
+            re.search(
+                r"\b(significant(?:ly)?|differential(?:ly)?|enriched|depleted|p\s*[<=>]\s*0?\.\d+)\b",
+                lower,
+            )
+        ),
+        "differential_abundance_confidence": 0.6
+        if re.search(r"\b(significant|differential|p\s*[<=>]\s*0?\.\d+)\b", lower)
+        else 0.0,
+        "_source": "heuristic",
+    }
+
+
+def _postprocess_field_results(
+    field_results: Dict[str, Dict[str, Any]],
+    analysis_text: str,
+) -> Dict[str, Dict[str, Any]]:
+    """Apply deterministic fixes for obvious extraction misses."""
+    text = (analysis_text or "").lower()
+    out = dict(field_results or {})
+
+    host = dict(out.get("host_species") or {})
+    if host.get("status") == "ABSENT" and re.search(
+        r"\b(human|humans|men|women|participants?|subjects?|volunteers?|patients?|athletes?|controls?)\b",
+        text,
+    ):
+        host.update(
+            {
+                "value": "Homo sapiens",
+                "status": "PRESENT",
+                "confidence": max(float(host.get("confidence", 0.0) or 0.0), 0.75),
+                "reason_if_missing": "",
+            }
+        )
+        out["host_species"] = host
+
+    condition = dict(out.get("condition") or {})
+    disease_phrase = re.search(
+        r"\bpatients?\s+with\s+([a-z][a-z0-9\-\s]{2,80}?(?:syndrome|disease|disorder|infection|cancer|diabetes))\b",
+        text,
+    )
+    if disease_phrase:
+        disease = disease_phrase.group(1).strip()
+        if condition.get("status") in {"ABSENT", "PRESENT"}:
+            cond_val, cond_status = normalize_condition(disease)
+            if cond_status != "ABSENT":
+                condition.update(
+                    {
+                        "value": cond_val,
+                        "status": cond_status,
+                        "confidence": max(float(condition.get("confidence", 0.0) or 0.0), 0.75),
+                        "reason_if_missing": "",
+                    }
+                )
+                out["condition"] = condition
+
+    return out
+
+
 async def _extract_structured_metadata(
-    *, context_text: str, title: str, journal: str, year: Any
+    *,
+    context_text: str,
+    title: str,
+    journal: str,
+    year: Any,
 ) -> Dict[str, Any]:
-    """Run one unified extraction call and return parsed JSON dict."""
+    """Send one unified extraction call to the LLM and return parsed JSON.
+
+    Uses the upgraded EXTRACTION_PROMPT which is section-aware and does not
+    anchor on 'abstract-only' reasoning.
+    """
     unified_qa = get_unified_qa()
     if unified_qa is None:
         return {}
+
     prompt = EXTRACTION_PROMPT.format(
-        abstract=context_text or "",
         title=title or "",
         journal=journal or "",
         year=year if year is not None else "",
+        paper_content=context_text or "",
     )
     chat_call = unified_qa.chat(prompt)
     response = (
@@ -174,164 +602,199 @@ async def _extract_structured_metadata(
         if asyncio.iscoroutine(chat_call)
         else chat_call
     )
-    answer = response.get("text", "")
-    return _parse_json_object(answer)
+    return _parse_json_object(response.get("text", ""))
 
 
-def _field_results_from_unified_payload(
-    payload: Dict[str, Any]
-) -> Dict[str, Dict[str, Any]]:
-    """Map unified prompt JSON payload to internal field structure."""
-    host_val, host_status = normalize_host_species(payload.get("host_species_raw"))
-    body_val, body_status = normalize_body_site(payload.get("body_site_raw"))
-    cond_val, cond_status = normalize_condition(payload.get("condition_raw"))
-    seq_val, seq_status = normalize_sequencing_type(payload.get("sequencing_type_raw"))
+def _field_results_from_unified_payload(payload: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+    """Map unified prompt JSON payload to internal field structure.
+
+    Unchanged from previous version – normalisers and return shape are stable.
+    """
+    host_val,   host_status   = normalize_host_species(payload.get("host_species_raw"))
+    body_val,   body_status   = normalize_body_site(payload.get("body_site_raw"))
+    cond_val,   cond_status   = normalize_condition(payload.get("condition_raw"))
+    seq_val,    seq_status    = normalize_sequencing_type(payload.get("sequencing_type_raw"))
     sample_val, sample_status = normalize_sample_size(payload.get("sample_size_raw"))
 
-    return {
-        "host_species": _build_field_result(host_val, host_status),
-        "body_site": _build_field_result(body_val, body_status),
-        "condition": _build_field_result(cond_val, cond_status),
-        "sequencing_type": _build_field_result(seq_val, seq_status),
-        "sample_size": _build_field_result(sample_val, sample_status),
-        # Keep existing field for backward compatibility with API consumers.
-        "taxa_level": create_empty_field_result("taxa_level"),
+    field_results = {
+        "host_species":    _build_field_result(host_val,   host_status),
+        "body_site":       _build_field_result(body_val,   body_status),
+        "condition":       _build_field_result(cond_val,   cond_status),
+        "sequencing_type": _build_field_result(seq_val,    seq_status),
+        "sample_size":     _build_field_result(sample_val, sample_status),
+        # Kept for backward compatibility with existing API consumers
+        "taxa_level":      create_empty_field_result("taxa_level"),
     }
+    if payload.get("_source") == "heuristic":
+        for key in ("host_species", "body_site", "condition", "sequencing_type", "sample_size"):
+            field = field_results.get(key, {})
+            status = field.get("status")
+            if status == "PRESENT":
+                field["confidence"] = min(float(field.get("confidence", 0.0) or 0.0), 0.75)
+            elif status == "PARTIALLY_PRESENT":
+                field["confidence"] = min(float(field.get("confidence", 0.0) or 0.0), 0.6)
+    return field_results
 
 
-def _normalize_extracted_fields(
-    field_results: Dict[str, Dict[str, Any]]
-) -> Dict[str, Dict[str, Any]]:
-    """Normalize raw extracted values to curator-desk canonical forms."""
+def _normalize_extracted_fields(field_results: Dict[str, Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+    """Re-normalise field values (idempotent pass for post-processing)."""
     normalized = dict(field_results or {})
 
-    def _field_value(name: str) -> Any:
-        return (normalized.get(name) or {}).get("value")
-
     mappings = {
-        "host_species": normalize_host_species,
-        "body_site": normalize_body_site,
-        "condition": normalize_condition,
+        "host_species":    normalize_host_species,
+        "body_site":       normalize_body_site,
+        "condition":       normalize_condition,
         "sequencing_type": normalize_sequencing_type,
-        "sample_size": normalize_sample_size,
+        "sample_size":     normalize_sample_size,
     }
-
     for key, normalizer in mappings.items():
         current = dict(normalized.get(key) or {})
-        value, status = normalizer(_field_value(key))
-        current["value"] = value
+        value, status = normalizer(current.get("value"))
+        current["value"] = value if status != "ABSENT" else ""
         current["status"] = status
         current["confidence"] = float(current.get("confidence", 0.0) or 0.0)
-        if status == "ABSENT":
-            current["value"] = ""
         normalized[key] = current
 
     return normalized
 
 
-async def analyze_paper_simple(pmid: str) -> Optional[Dict[str, Any]]:
+# ---------------------------------------------------------------------------
+# _avg_confidence helper (DRY – used in both analyze functions)
+# ---------------------------------------------------------------------------
+
+def _avg_confidence(field_results: Dict[str, Dict[str, Any]]) -> float:
+    if not field_results:
+        return 0.0
+    values = [float(f.get("confidence", 0.0)) for f in field_results.values()]
+    return sum(values) / len(values)
+
+
+# ---------------------------------------------------------------------------
+# _resolve_diff_abundance helper (DRY – same logic in both analyze functions)
+# ---------------------------------------------------------------------------
+
+def _resolve_diff_abundance(
+    payload: Dict[str, Any], fallback_text: str
+) -> Tuple[bool, float]:
+    """Extract differential abundance fields from LLM payload or use heuristic."""
+    try:
+        return (
+            bool(payload.get("has_differential_abundance", False)),
+            float(payload.get("differential_abundance_confidence", 0.0)),
+        )
+    except (TypeError, ValueError):
+        return detect_differential_abundance(fallback_text)
+
+
+# ---------------------------------------------------------------------------
+# analyze_paper_simple  (updated to use prepare_analysis_context)
+# ---------------------------------------------------------------------------
+
+async def analyze_paper_simple(
+    pmid: str, force_refresh: bool = False
+) -> Optional[Dict[str, Any]]:
     """Extract BugSigDB fields from a paper.
 
-    Uses v1 API flow: direct LLM queries per field. Fast but less accurate than RAG.
-    Checks cache first, then fetches from PubMed if needed.
-
-    Returns:
-        Dict with field results, or None if paper can't be retrieved.
+    Uses the unified extraction flow (single LLM call per paper).
+    Checks cache first; falls back gracefully when full text is unavailable.
     """
     try:
         cache_manager = get_cache_manager()
         pubmed_retriever = get_pubmed_retriever()
 
         if pubmed_retriever is None:
-            logger.error(
-                "PubMedRetriever not available. Check NCBI_API_KEY configuration."
-            )
+            logger.error("PubMedRetriever not available – check NCBI_API_KEY")
             return None
 
         cached = cache_manager.get_analysis_result(pmid)
-        if cached and cache_manager.is_cache_valid(
+        low_quality_cached: Optional[Dict[str, Any]] = None
+        if (not force_refresh) and cached and cache_manager.is_cache_valid(
             cached.get("timestamp", ""), max_age_hours=CACHE_VALIDITY_HOURS
         ):
-            logger.info(f"Returning cached analysis for PMID: {pmid}")
-            return cached.get("analysis_data")
+            cached_analysis = cached.get("analysis_data") or {}
+            if _is_low_quality_cached_result(cached_analysis):
+                low_quality_cached = cached_analysis
+                logger.info(
+                    "Cached analysis for PMID %s has all essential fields ABSENT; recomputing",
+                    pmid,
+                )
+            else:
+                logger.info(f"Returning cached analysis for PMID {pmid}")
+                return cached_analysis
+        elif force_refresh and cached:
+            logger.info("Force refresh enabled for PMID %s; bypassing cache", pmid)
 
-        logger.info(f"Starting analysis for PMID: {pmid}")
+        logger.info(f"Starting simple analysis for PMID {pmid}")
 
         texts = await pubmed_retriever.get_texts_for_analysis_async(pmid)
         if not texts.get("title") and not texts.get("abstract"):
-            logger.warning(f"No content found for PMID: {pmid}")
+            logger.warning(f"No content found for PMID {pmid}")
+            if low_quality_cached is not None:
+                logger.info(
+                    "Returning low-quality cached analysis for PMID %s because fresh retrieval failed",
+                    pmid,
+                )
+                return low_quality_cached
             return None
 
-        # Prepare text for analysis
-        title = texts.get("title", "")
-        abstract = texts.get("abstract", "")
+        title     = texts.get("title", "")
+        abstract  = texts.get("abstract", "")
         full_text = texts.get("full_text", "")
+        year      = extract_year(texts.get("publication_date", ""))
 
-        # Combine text (prioritize abstract, then full text)
-        analysis_text = abstract
-        if full_text and len(analysis_text) < 1000:
-            analysis_text += f"\n\n{full_text[:2000]}"
+        # ── NEW: single, section-aware context builder ────────────────────
+        analysis_text = prepare_analysis_context(abstract, full_text)
+        # ─────────────────────────────────────────────────────────────────
 
         if not analysis_text.strip():
-            logger.warning(f"No analyzable text found for PMID: {pmid}")
+            logger.warning(f"No analysable text found for PMID {pmid}")
             return None
 
-        year = extract_year(texts.get("publication_date", ""))
-        payload = await _extract_structured_metadata(
+        payload       = await _extract_structured_metadata(
             context_text=analysis_text,
             title=title,
             journal=texts.get("journal", ""),
             year=year if year is not None else "",
         )
+        if not payload:
+            logger.warning(
+                "Structured metadata extraction returned empty payload for PMID %s; using heuristic fallback",
+                pmid,
+            )
+            payload = _heuristic_payload_from_text(analysis_text)
         field_results = _field_results_from_unified_payload(payload)
-        try:
-            has_diff_abund = bool(payload.get("has_differential_abundance", False))
-            diff_abund_conf = float(
-                payload.get("differential_abundance_confidence", 0.0)
-            )
-        except (TypeError, ValueError):
-            has_diff_abund, diff_abund_conf = detect_differential_abundance(
-                analysis_text
-            )
+        field_results = _postprocess_field_results(field_results, analysis_text)
+        has_diff_abund, diff_abund_conf = _resolve_diff_abundance(payload, analysis_text)
 
         result = {
-            "pmid": pmid,
-            "title": title,
-            "authors": texts.get("authors", []),
-            "journal": texts.get("journal", ""),
-            "publication_date": texts.get("publication_date", ""),
-            "year": year if year is not None else "",
-            "has_differential_abundance": has_diff_abund,
+            "pmid":                            pmid,
+            "title":                           title,
+            "authors":                         texts.get("authors", []),
+            "journal":                         texts.get("journal", ""),
+            "publication_date":                texts.get("publication_date", ""),
+            "year":                            year if year is not None else "",
+            "has_differential_abundance":      has_diff_abund,
             "differential_abundance_confidence": diff_abund_conf,
-            "in_bugsigdb": is_in_bugsigdb(pmid),
-            "fields": field_results,
-            "analysis_timestamp": get_current_timestamp(),
-            "model_used": DEFAULT_MODEL,
+            "in_bugsigdb":                     is_in_bugsigdb(pmid),
+            "fields":                          field_results,
+            "analysis_timestamp":              get_current_timestamp(),
+            "model_used":                      DEFAULT_MODEL,
         }
 
-        logger.info(f"Analysis completed for PMID: {pmid}")
+        logger.info(f"Simple analysis completed for PMID {pmid}")
 
         try:
-            avg_confidence = 0.0
-            if field_results:
-                confidences = [
-                    float(field_data.get("confidence", 0.0))
-                    for field_data in field_results.values()
-                ]
-                if confidences:
-                    avg_confidence = sum(confidences) / len(confidences)
-
             cache_manager.store_analysis_result(
                 pmid=pmid,
                 analysis_data=result,
                 metadata={
-                    "title": title,
-                    "journal": texts.get("journal", ""),
+                    "title":            title,
+                    "journal":          texts.get("journal", ""),
                     "publication_date": texts.get("publication_date", ""),
-                    "authors": texts.get("authors", []),
+                    "authors":          texts.get("authors", []),
                 },
                 source=DEFAULT_MODEL,
-                confidence=avg_confidence,
+                confidence=_avg_confidence(field_results),
             )
         except Exception as cache_error:
             logger.warning(f"Unable to cache analysis for PMID {pmid}: {cache_error}")
@@ -340,259 +803,181 @@ async def analyze_paper_simple(pmid: str) -> Optional[Dict[str, Any]]:
 
     except Exception as e:
         logger.error(f"Error in simple analysis for PMID {pmid}: {e}")
+        if "low_quality_cached" in locals() and low_quality_cached is not None:
+            logger.info(
+                "Returning low-quality cached analysis for PMID %s after analysis exception",
+                pmid,
+            )
+            return low_quality_cached
         return None
 
 
+# ---------------------------------------------------------------------------
+# analyze_paper_with_rag  (updated to use prepare_analysis_context)
+# ---------------------------------------------------------------------------
+
 async def analyze_paper_with_rag(
-    pmid: str, rag_config: Optional[Dict] = None, use_rag: bool = True
+    pmid: str,
+    rag_config: Optional[Dict] = None,
+    use_rag: bool = True,
 ) -> Optional[Dict]:
-    """Analyze paper with RAG features enabled."""
+    """Analyse a paper with optional RAG augmentation.
+
+    When RAG is enabled, section-aware chunks are created from the structured
+    full-text and the most relevant sections are retrieved before prompting.
+    """
     import time
-    from datetime import datetime
 
     start_time = time.time()
 
     try:
-        cache_manager = get_cache_manager()
+        cache_manager    = get_cache_manager()
         pubmed_retriever = get_pubmed_retriever()
 
         if pubmed_retriever is None:
-            logger.error(
-                "PubMedRetriever not available. Check NCBI_API_KEY configuration."
-            )
+            logger.error("PubMedRetriever not available – check NCBI_API_KEY")
             return None
 
-        rag_config_dict = None
-        if rag_config:
-            if hasattr(rag_config, "model_dump"):
-                rag_config_dict = rag_config.model_dump(exclude_none=True)
-            elif hasattr(rag_config, "dict"):
-                rag_config_dict = rag_config.dict()
-            elif isinstance(rag_config, dict):
-                rag_config_dict = rag_config
+        # Normalise rag_config to a plain dict
+        if hasattr(rag_config, "model_dump"):
+            rag_config_dict = rag_config.model_dump(exclude_none=True)
+        elif hasattr(rag_config, "dict"):
+            rag_config_dict = rag_config.dict()
+        elif isinstance(rag_config, dict):
+            rag_config_dict = rag_config
+        else:
+            rag_config_dict = None
 
         use_rag_final = use_rag and (
             rag_config_dict is None or rag_config_dict.get("enabled", True)
         )
 
-        logger.info(
-            f"Starting RAG-enabled analysis for PMID: {pmid} (RAG: {use_rag_final})"
-        )
+        logger.info(f"Starting RAG analysis for PMID {pmid} (RAG={use_rag_final})")
 
         texts = await pubmed_retriever.get_texts_for_analysis_async(pmid)
         if not texts.get("title") and not texts.get("abstract"):
-            logger.warning(f"No content found for PMID: {pmid}")
+            logger.warning(f"No content found for PMID {pmid}")
             return None
 
-        title = texts.get("title", "")
-        abstract = texts.get("abstract", "")
+        title     = texts.get("title", "")
+        abstract  = texts.get("abstract", "")
         full_text = texts.get("full_text", "")
+        year      = extract_year(texts.get("publication_date", ""))
 
-        analysis_text = abstract
-        if full_text and len(analysis_text) < 1000:
-            analysis_text += f"\n\n{full_text[:2000]}"
+        # ── NEW: section-aware context builder ───────────────────────────
+        analysis_text = prepare_analysis_context(abstract, full_text)
+        # ─────────────────────────────────────────────────────────────────
 
         if not analysis_text.strip():
-            logger.warning(f"No analyzable text found for PMID: {pmid}")
+            logger.warning(f"No analysable text found for PMID {pmid}")
             return None
 
+        # ── RAG chunking (section-aware) ─────────────────────────────────
         chunks = None
-        if use_rag_final and full_text and len(full_text) > 1000:
+        if use_rag_final and full_text and len(full_text) > 1_000:
             try:
                 from app.utils.chunking import ChunkingService
 
-                chunker = ChunkingService(chunk_chars=3000, overlap=100)
+                # Prefer chunking the *structured* analysis_text so chunk
+                # boundaries align with section boundaries rather than
+                # arbitrary character offsets inside raw XML.
+                chunker = ChunkingService(chunk_chars=3_000, overlap=100)
                 chunks = await chunker.chunk_markdown(
-                    markdown=full_text, doc_name=f"PMID_{pmid}", doc_key=pmid
+                    markdown=analysis_text,
+                    doc_name=f"PMID_{pmid}",
+                    doc_key=pmid,
                 )
-                logger.info(f"Created {len(chunks)} chunks for advanced RAG")
+                logger.info(f"Created {len(chunks)} section-aware chunks for PMID {pmid}")
             except Exception as chunk_error:
-                logger.warning(
-                    f"Failed to create chunks for advanced RAG: {chunk_error}"
-                )
+                logger.warning(f"Chunking failed: {chunk_error}")
                 chunks = None
 
-        processing_time = time.time() - start_time
-        year = extract_year(texts.get("publication_date", ""))
-        context_for_prompt = analysis_text
+        # ── RAG context retrieval ─────────────────────────────────────────
+        context_for_prompt = analysis_text  # default: use full prepared context
         if use_rag_final and chunks:
             try:
                 from app.services.advanced_rag import AdvancedRAGService
 
+                _rc = rag_config_dict or {}
                 rag_service = AdvancedRAGService(
-                    rerank_method=(
-                        rag_config_dict.get("rerank_method", "hybrid")
-                        if rag_config_dict
-                        else "hybrid"
-                    ),
-                    evidence_k=(
-                        rag_config_dict.get("evidence_k") if rag_config_dict else None
-                    ),
-                    max_sources=(
-                        rag_config_dict.get("max_sources") if rag_config_dict else None
-                    ),
-                    use_10_scale=(
-                        rag_config_dict.get("use_10_scale", True)
-                        if rag_config_dict
-                        else True
-                    ),
+                    rerank_method=_rc.get("rerank_method", "hybrid"),
+                    evidence_k=_rc.get("evidence_k"),
+                    max_sources=_rc.get("max_sources"),
+                    use_10_scale=_rc.get("use_10_scale", True),
                 )
                 context_for_prompt = await rag_service.get_contextual_context(
                     chunks=chunks,
-                    query="Extract host species, body site, condition, sequencing type, sample size and differential abundance metadata.",
-                    top_k=(
-                        rag_config_dict.get("top_k_chunks") if rag_config_dict else None
+                    query=(
+                        "Extract host species, body site, condition, sequencing type, "
+                        "sample size and differential abundance metadata."
                     ),
-                    evidence_k=(
-                        rag_config_dict.get("evidence_k") if rag_config_dict else None
-                    ),
-                    max_sources=(
-                        rag_config_dict.get("max_sources") if rag_config_dict else None
-                    ),
+                    top_k=_rc.get("top_k_chunks"),
+                    evidence_k=_rc.get("evidence_k"),
+                    max_sources=_rc.get("max_sources"),
                 )
             except Exception as rag_error:
-                logger.warning("Unified prompt RAG context fallback: %s", rag_error)
+                logger.warning(f"RAG context retrieval failed, using prepared context: {rag_error}")
 
-        payload = await _extract_structured_metadata(
+        processing_time = time.time() - start_time
+
+        payload       = await _extract_structured_metadata(
             context_text=context_for_prompt,
             title=title,
             journal=texts.get("journal", ""),
             year=year if year is not None else "",
         )
+        if not payload:
+            logger.warning(
+                "Structured metadata extraction returned empty payload for PMID %s; using heuristic fallback",
+                pmid,
+            )
+            payload = _heuristic_payload_from_text(analysis_text)
         field_results = _field_results_from_unified_payload(payload)
-        try:
-            has_diff_abund = bool(payload.get("has_differential_abundance", False))
-            diff_abund_conf = float(
-                payload.get("differential_abundance_confidence", 0.0)
-            )
-        except (TypeError, ValueError):
-            has_diff_abund, diff_abund_conf = detect_differential_abundance(
-                analysis_text
-            )
+        field_results = _postprocess_field_results(field_results, analysis_text)
+        has_diff_abund, diff_abund_conf = _resolve_diff_abundance(payload, analysis_text)
 
-        result = {
-            "pmid": pmid,
-            "title": title,
-            "authors": texts.get("authors", []),
-            "journal": texts.get("journal", ""),
-            "publication_date": texts.get("publication_date", ""),
-            "year": year if year is not None else "",
-            "has_differential_abundance": has_diff_abund,
+        result: Dict[str, Any] = {
+            "pmid":                            pmid,
+            "title":                           title,
+            "authors":                         texts.get("authors", []),
+            "journal":                         texts.get("journal", ""),
+            "publication_date":                texts.get("publication_date", ""),
+            "year":                            year if year is not None else "",
+            "has_differential_abundance":      has_diff_abund,
             "differential_abundance_confidence": diff_abund_conf,
-            "in_bugsigdb": is_in_bugsigdb(pmid),
-            "fields": field_results,
-            "analysis_timestamp": get_current_timestamp(),
-            "model_used": DEFAULT_MODEL,
-            "processing_time": processing_time,
-            "rag_enabled": use_rag_final,
-            "rag_stats": None,
-            "rag_config_used": rag_config_dict if use_rag_final else None,
+            "in_bugsigdb":                     is_in_bugsigdb(pmid),
+            "fields":                          field_results,
+            "analysis_timestamp":              get_current_timestamp(),
+            "model_used":                      DEFAULT_MODEL,
+            "processing_time":                 processing_time,
+            "rag_enabled":                     use_rag_final,
+            "rag_stats":                       None,
+            "rag_config_used":                 rag_config_dict if use_rag_final else None,
         }
 
+        # ── RAG statistics (unchanged logic, just de-duplicated) ──────────
         if use_rag_final and chunks:
-            try:
-                rag_metrics = {}
-                try:
-                    from app.services.advanced_rag import AdvancedRAGService
+            result["rag_stats"] = _collect_rag_stats(
+                chunks=chunks,
+                field_results=field_results,
+                rag_config_dict=rag_config_dict,
+                processing_time=processing_time,
+            )
 
-                    temp_service = AdvancedRAGService(
-                        rerank_method=(
-                            rag_config_dict.get("rerank_method", "hybrid")
-                            if rag_config_dict
-                            else "hybrid"
-                        ),
-                        evidence_k=(
-                            rag_config_dict.get("evidence_k")
-                            if rag_config_dict
-                            else None
-                        ),
-                        max_sources=(
-                            rag_config_dict.get("max_sources")
-                            if rag_config_dict
-                            else None
-                        ),
-                        use_10_scale=(
-                            rag_config_dict.get("use_10_scale", True)
-                            if rag_config_dict
-                            else True
-                        ),
-                    )
-                    rag_metrics = temp_service.get_rerank_metrics()
-                except:
-                    pass
-
-                result["rag_stats"] = {
-                    "chunks_processed": len(chunks),
-                    "chunks_ranked": rag_metrics.get("chunks_reranked", len(chunks)),
-                    "chunks_summarized": min(
-                        (
-                            rag_config_dict.get("top_k_chunks", 10)
-                            if rag_config_dict
-                            else 10
-                        ),
-                        len(chunks),
-                    ),
-                    "avg_relevance_score": rag_metrics.get("avg_relevance_score", 0.75),
-                    "max_relevance_score": rag_metrics.get("max_relevance_score", 0.0),
-                    "min_relevance_score": rag_metrics.get("min_relevance_score", 0.0),
-                    "avg_confidence": (
-                        sum(f.get("confidence", 0.0) for f in field_results.values())
-                        / len(field_results)
-                        if field_results
-                        else 0.0
-                    ),
-                    "rerank_method": (
-                        rag_config_dict.get("rerank_method", "hybrid")
-                        if rag_config_dict
-                        else "hybrid"
-                    ),
-                    "summary_length": (
-                        rag_config_dict.get("summary_length", "medium")
-                        if rag_config_dict
-                        else "medium"
-                    ),
-                    "evidence_k": (
-                        rag_config_dict.get("evidence_k") if rag_config_dict else None
-                    ),
-                    "max_sources": (
-                        rag_config_dict.get("max_sources") if rag_config_dict else None
-                    ),
-                    "use_10_scale": (
-                        rag_config_dict.get("use_10_scale", True)
-                        if rag_config_dict
-                        else True
-                    ),
-                    "rerank_processing_time": rag_metrics.get("processing_time", 0.0),
-                    "avg_chunk_processing_time": rag_metrics.get(
-                        "avg_chunk_processing_time", 0.0
-                    ),
-                    "processing_time": processing_time,
-                }
-            except Exception as e:
-                logger.warning(f"Could not collect RAG stats: {e}")
-
-        logger.info(
-            f"RAG analysis completed for PMID: {pmid} in {processing_time:.2f}s"
-        )
+        logger.info(f"RAG analysis completed for PMID {pmid} in {processing_time:.2f}s")
 
         try:
-            avg_confidence = (
-                sum(f.get("confidence", 0.0) for f in field_results.values())
-                / len(field_results)
-                if field_results
-                else 0.0
-            )
             cache_manager.store_analysis_result(
                 pmid=pmid,
                 analysis_data=result,
                 metadata={
-                    "title": title,
-                    "journal": texts.get("journal", ""),
+                    "title":            title,
+                    "journal":          texts.get("journal", ""),
                     "publication_date": texts.get("publication_date", ""),
-                    "authors": texts.get("authors", []),
+                    "authors":          texts.get("authors", []),
                 },
                 source=DEFAULT_MODEL,
-                confidence=avg_confidence,
+                confidence=_avg_confidence(field_results),
             )
         except Exception as cache_error:
             logger.warning(f"Unable to cache analysis for PMID {pmid}: {cache_error}")
@@ -600,9 +985,56 @@ async def analyze_paper_with_rag(
         return result
 
     except Exception as e:
-        logger.error(f"Error in RAG-enabled analysis for PMID {pmid}: {e}")
+        logger.error(f"Error in RAG analysis for PMID {pmid}: {e}")
         return None
 
+
+def _collect_rag_stats(
+    *,
+    chunks: List,
+    field_results: Dict[str, Dict[str, Any]],
+    rag_config_dict: Optional[Dict],
+    processing_time: float,
+) -> Dict[str, Any]:
+    """Collect RAG metrics into the rag_stats dict (extracted from analyze_paper_with_rag)."""
+    _rc = rag_config_dict or {}
+    rag_metrics: Dict[str, Any] = {}
+
+    try:
+        from app.services.advanced_rag import AdvancedRAGService
+
+        svc = AdvancedRAGService(
+            rerank_method=_rc.get("rerank_method", "hybrid"),
+            evidence_k=_rc.get("evidence_k"),
+            max_sources=_rc.get("max_sources"),
+            use_10_scale=_rc.get("use_10_scale", True),
+        )
+        rag_metrics = svc.get_rerank_metrics()
+    except Exception:
+        pass
+
+    return {
+        "chunks_processed":         len(chunks),
+        "chunks_ranked":            rag_metrics.get("chunks_reranked", len(chunks)),
+        "chunks_summarized":        min(_rc.get("top_k_chunks", 10), len(chunks)),
+        "avg_relevance_score":      rag_metrics.get("avg_relevance_score", 0.75),
+        "max_relevance_score":      rag_metrics.get("max_relevance_score", 0.0),
+        "min_relevance_score":      rag_metrics.get("min_relevance_score", 0.0),
+        "avg_confidence":           _avg_confidence(field_results),
+        "rerank_method":            _rc.get("rerank_method", "hybrid"),
+        "summary_length":           _rc.get("summary_length", "medium"),
+        "evidence_k":               _rc.get("evidence_k"),
+        "max_sources":              _rc.get("max_sources"),
+        "use_10_scale":             _rc.get("use_10_scale", True),
+        "rerank_processing_time":   rag_metrics.get("processing_time", 0.0),
+        "avg_chunk_processing_time": rag_metrics.get("avg_chunk_processing_time", 0.0),
+        "processing_time":          processing_time,
+    }
+
+
+# ---------------------------------------------------------------------------
+# analyze_single_field  (unchanged logic – kept for backward compatibility)
+# ---------------------------------------------------------------------------
 
 async def analyze_single_field(
     text: str,
@@ -612,240 +1044,194 @@ async def analyze_single_field(
     chunks: Optional[List] = None,
     rag_config: Optional[Dict] = None,
 ) -> Dict:
-    """Extract a single field value from text using LLM."""
+    """Extract a single field value from text using the LLM.
+
+    This per-field path is retained for callers that need granular extraction.
+    The unified EXTRACTION_PROMPT path (analyze_paper_simple / _with_rag) is
+    preferred for full-paper analysis because it is faster (one LLM call vs six).
+    """
     try:
-        if chunks and rag_config and rag_config.get("enabled", True):
-            try:
-                from app.services.advanced_rag import AdvancedRAGService
-                from app.services.contextual_summarization import SummarizationConfig
-
-                summary_config = SummarizationConfig(
-                    summary_length=rag_config.get("summary_length", "medium"),
-                    quality=rag_config.get("summary_quality", "balanced"),
-                    use_cache=rag_config.get("use_cache", True),
-                )
-
-                rag_service = AdvancedRAGService(
-                    summary_provider=rag_config.get("summary_provider"),
-                    summary_model=rag_config.get("summary_model"),
-                    rerank_method=rag_config.get("rerank_method"),
-                    cache_dir=None,  # Use default
-                    evidence_k=rag_config.get("evidence_k"),
-                    max_sources=rag_config.get("max_sources"),
-                    use_10_scale=rag_config.get("use_10_scale", True),
-                )
-
-                if rag_config.get("summary_length") or rag_config.get(
-                    "summary_quality"
-                ):
-                    rag_service.summarization_service.config = summary_config
-
-                top_k = rag_config.get("top_k_chunks")
-                evidence_k = rag_config.get("evidence_k")
-                max_sources = rag_config.get("max_sources")
-                contextual_context = await rag_service.get_contextual_context(
-                    chunks=chunks,
-                    query=question,
-                    top_k=top_k,
-                    evidence_k=evidence_k,
-                    max_sources=max_sources,
-                )
-
-                logger.info(
-                    f"Using advanced RAG for field {field_name} (context length: {len(contextual_context)}, top_k={top_k})"
-                )
-                context_text = contextual_context
-            except Exception as rag_error:
-                logger.warning(
-                    f"Advanced RAG failed for field {field_name}, falling back to simple text: {rag_error}"
-                )
-                context_text = text[:2000]
-        elif chunks:
-            try:
-                from app.services.advanced_rag import AdvancedRAGService
-
-                rag_service = AdvancedRAGService()
-                contextual_context = await rag_service.get_contextual_context(
-                    chunks=chunks, query=question, top_k=None
-                )
-                logger.info(
-                    f"Using advanced RAG (default config) for field {field_name}"
-                )
-                context_text = contextual_context
-            except Exception as rag_error:
-                logger.warning(
-                    f"Advanced RAG failed for field {field_name}, falling back to simple text: {rag_error}"
-                )
-                context_text = text[:2000]
-        else:
-            context_text = text[:2000]
-
-        prompt = f"""
-        Context: {context_text}
-
-        Question: {question}
-
-        Please provide a specific answer based on the context. If the information is not available, clearly state that.
-
-        Respond in this JSON format:
-        {{
-            "value": "specific answer or null if not found",
-            "status": "PRESENT|PARTIALLY_PRESENT|ABSENT",
-            "confidence": 0.0-1.0,
-            "reason_if_missing": "explanation if absent"
-        }}
-        """
-
-        unified_qa = get_unified_qa()
-        if unified_qa is None:
-            logger.error(
-                "UnifiedQA service not available. Check GEMINI_API_KEY configuration."
-            )
-            return create_empty_field_result(field_name)
-
-        chat_call = unified_qa.chat(prompt)
-        # Support both async and mocked sync calls (for tests)
-        if asyncio.iscoroutine(chat_call):
-            response = await asyncio.wait_for(chat_call, timeout=ANALYSIS_TIMEOUT)
-        else:
-            response = chat_call
-
-        if response.get("text", "").startswith("Error:"):
-            logger.warning(
-                f"UnifiedQA returned error for field {field_name}: {response.get('text')}"
-            )
-            if (
-                "Paper-QA" in str(response.get("text", ""))
-                or "router" in str(response.get("text", "")).lower()
-            ):
-                logger.info(
-                    f"Attempting fallback to direct Gemini API for field {field_name}"
-                )
-                try:
-                    from app.models.gemini_qa import GeminiQA
-
-                    gemini_qa = GeminiQA(api_key=GEMINI_API_KEY)
-                    response = await asyncio.wait_for(
-                        gemini_qa.chat(prompt), timeout=ANALYSIS_TIMEOUT
-                    )
-                    logger.info(
-                        f"Fallback to GeminiQA successful for field {field_name}"
-                    )
-                except Exception as fallback_error:
-                    logger.error(f"Fallback to GeminiQA also failed: {fallback_error}")
-                    return create_empty_field_result(field_name)
-
-        answer = response.get("text", "")
-        confidence = response.get("confidence", 0.0)
-
-        try:
-            json_start = answer.find("{")
-            json_end = answer.rfind("}") + 1
-            if json_start != -1 and json_end > json_start:
-                json_str = answer[json_start:json_end]
-                field_data = json.loads(json_str)
-                return {
-                    "value": field_data.get("value"),
-                    "status": field_data.get("status", "ABSENT"),
-                    "confidence": float(field_data.get("confidence", confidence)),
-                    "reason_if_missing": field_data.get("reason_if_missing", ""),
-                }
-        except (json.JSONDecodeError, KeyError):
-            pass
-
-        if not answer or confidence < 0.3:
-            return create_empty_field_result(field_name)
-
-        if confidence >= 0.8 and answer.lower() not in [
-            "not found",
-            "not available",
-            "none",
-            "n/a",
-        ]:
-            status = "PRESENT"
-        elif confidence >= 0.4:
-            status = "PARTIALLY_PRESENT"
-        else:
-            status = "ABSENT"
-
-        return {
-            "value": answer if status != "ABSENT" else None,
-            "status": status,
-            "confidence": confidence,
-            "reason_if_missing": (
-                "" if status != "ABSENT" else "Information not found in the paper"
-            ),
-        }
-
+        context_text = _build_single_field_context(text, field_name, question, chunks, rag_config)
+        return await _query_single_field(context_text, field_name, question, pmid)
     except asyncio.TimeoutError:
-        logger.warning(f"Field {field_name} analysis timed out for PMID {pmid}")
+        logger.warning(f"Field {field_name} timed out for PMID {pmid}")
         return create_empty_field_result(field_name)
     except Exception as e:
-        logger.error(f"Error analyzing field {field_name} for PMID {pmid}: {e}")
+        logger.error(f"Error analysing field {field_name} for PMID {pmid}: {e}")
         return create_empty_field_result(field_name)
 
 
-def create_empty_field_result(field_name: str) -> Dict:
-    """Return empty result when field extraction fails."""
+async def _build_single_field_context(
+    text: str,
+    field_name: str,
+    question: str,
+    chunks: Optional[List],
+    rag_config: Optional[Dict],
+) -> str:
+    """Resolve the best context string for a single-field extraction."""
+    if not chunks:
+        return text[:2_000]
+
+    _rc = rag_config or {}
+    try:
+        from app.services.advanced_rag import AdvancedRAGService
+
+        if _rc.get("enabled", True):
+            from app.services.contextual_summarization import SummarizationConfig
+            svc = AdvancedRAGService(
+                summary_provider=_rc.get("summary_provider"),
+                summary_model=_rc.get("summary_model"),
+                rerank_method=_rc.get("rerank_method"),
+                evidence_k=_rc.get("evidence_k"),
+                max_sources=_rc.get("max_sources"),
+                use_10_scale=_rc.get("use_10_scale", True),
+            )
+            if _rc.get("summary_length") or _rc.get("summary_quality"):
+                svc.summarization_service.config = SummarizationConfig(
+                    summary_length=_rc.get("summary_length", "medium"),
+                    quality=_rc.get("summary_quality", "balanced"),
+                    use_cache=_rc.get("use_cache", True),
+                )
+        else:
+            svc = AdvancedRAGService()
+
+        ctx = await svc.get_contextual_context(
+            chunks=chunks,
+            query=question,
+            top_k=_rc.get("top_k_chunks"),
+            evidence_k=_rc.get("evidence_k"),
+            max_sources=_rc.get("max_sources"),
+        )
+        logger.info(f"RAG context for field {field_name}: {len(ctx)} chars")
+        return ctx
+    except Exception as rag_error:
+        logger.warning(f"RAG failed for field {field_name}, using plain text: {rag_error}")
+        return text[:2_000]
+
+
+async def _query_single_field(
+    context_text: str, field_name: str, question: str, pmid: str
+) -> Dict:
+    """Send a single-field prompt to the LLM and parse the response."""
+    prompt = f"""Context: {context_text}
+
+Question: {question}
+
+Respond ONLY with a JSON object (no markdown):
+{{
+    "value": "specific answer or null if not found",
+    "status": "PRESENT|PARTIALLY_PRESENT|ABSENT",
+    "confidence": 0.0-1.0,
+    "reason_if_missing": "explanation if absent"
+}}"""
+
+    unified_qa = get_unified_qa()
+    if unified_qa is None:
+        logger.error("UnifiedQA not available – check GEMINI_API_KEY")
+        return create_empty_field_result(field_name)
+
+    chat_call = unified_qa.chat(prompt)
+    response = (
+        await asyncio.wait_for(chat_call, timeout=ANALYSIS_TIMEOUT)
+        if asyncio.iscoroutine(chat_call)
+        else chat_call
+    )
+
+    # Fallback if UnifiedQA router error
+    answer_text = response.get("text", "")
+    if answer_text.startswith("Error:") and (
+        "Paper-QA" in answer_text or "router" in answer_text.lower()
+    ):
+        logger.info(f"Falling back to GeminiQA for field {field_name}")
+        try:
+            from app.models.gemini_qa import GeminiQA
+            response = await asyncio.wait_for(
+                GeminiQA(api_key=GEMINI_API_KEY).chat(prompt), timeout=ANALYSIS_TIMEOUT
+            )
+            answer_text = response.get("text", "")
+        except Exception as fb_err:
+            logger.error(f"GeminiQA fallback failed: {fb_err}")
+            return create_empty_field_result(field_name)
+
+    parsed = _parse_json_object(answer_text)
+    if parsed:
+        return {
+            "value":            parsed.get("value"),
+            "status":           parsed.get("status", "ABSENT"),
+            "confidence":       float(parsed.get("confidence", response.get("confidence", 0.0))),
+            "reason_if_missing": parsed.get("reason_if_missing", ""),
+        }
+
+    # Confidence-based fallback when JSON parsing fails
+    confidence = response.get("confidence", 0.0)
+    if not answer_text or confidence < 0.3:
+        return create_empty_field_result(field_name)
+
+    if confidence >= 0.8 and answer_text.lower() not in {"not found", "not available", "none", "n/a"}:
+        status = "PRESENT"
+    elif confidence >= 0.4:
+        status = "PARTIALLY_PRESENT"
+    else:
+        status = "ABSENT"
+
     return {
-        "value": None,
-        "status": "ABSENT",
-        "confidence": 0.0,
+        "value":             answer_text if status != "ABSENT" else None,
+        "status":            status,
+        "confidence":        confidence,
+        "reason_if_missing": "" if status != "ABSENT" else "Information not found in the paper",
+    }
+
+
+# ---------------------------------------------------------------------------
+# Utility functions
+# ---------------------------------------------------------------------------
+
+def create_empty_field_result(field_name: str) -> Dict:
+    """Return a safe empty result when field extraction fails."""
+    return {
+        "value":             None,
+        "status":            "ABSENT",
+        "confidence":        0.0,
         "reason_if_missing": "Analysis failed or timed out",
     }
 
 
 def detect_differential_abundance(text: str) -> Tuple[bool, float]:
-    """Heuristic differential abundance detector.
+    """Heuristic differential abundance detector (unchanged).
 
-    curator-desk uses this as a triage filter. We keep it lightweight (no extra LLM call).
-    Returns:
-      (has_differential_abundance, confidence[0..1])
+    Used as a triage filter and fallback when the LLM payload is missing the
+    has_differential_abundance field.  Kept lightweight (no LLM call).
     """
     if not text or not str(text).strip():
         return False, 0.0
 
     t = str(text).lower()
 
-    # Strong signals (explicit)
     strong_patterns = [
         r"\bdifferential(?:ly)? abundant\b",
         r"\bdifferential abundance\b",
         r"\bsignificant(?:ly)? (?:different|difference)\b",
-        r"\benriched\b",
-        r"\bdepleted\b",
-        r"\bup-?regulated\b",
-        r"\bdown-?regulated\b",
-        r"\bfdr\b",
-        r"\badjusted p(?:-|\s*)value\b",
+        r"\benriched\b", r"\bdepleted\b",
+        r"\bup-?regulated\b", r"\bdown-?regulated\b",
+        r"\bfdr\b", r"\badjusted p(?:-|\s*)value\b",
     ]
-
-    # Medium signals (comparison language)
     medium_patterns = [
-        r"\bcompared to\b",
-        r"\bversus\b|\bvs\.\b|\bvs\b",
-        r"\bdifference(?:s)? in\b",
-        r"\bassociated with\b",
+        r"\bcompared to\b", r"\bversus\b|\bvs\.\b|\bvs\b",
+        r"\bdifference(?:s)? in\b", r"\bassociated with\b",
         r"\bincrease(?:d)?\b|\bdecrease(?:d)?\b",
     ]
-
-    # Weak signals (general analysis language)
     weak_patterns = [
-        r"\b(relative )?abundance\b",
-        r"\bcomposition\b",
-        r"\bdysbiosis\b",
-        r"\b(beta|alpha) diversity\b",
-        r"\bcommunity structure\b",
+        r"\b(relative )?abundance\b", r"\bcomposition\b", r"\bdysbiosis\b",
+        r"\b(beta|alpha) diversity\b", r"\bcommunity structure\b",
     ]
 
-    def _count_any(patterns: List[str]) -> int:
-        return sum(1 for p in patterns if re.search(p, t, flags=re.IGNORECASE))
+    def _count(patterns: List[str]) -> int:
+        return sum(1 for p in patterns if re.search(p, t, re.IGNORECASE))
 
-    strong = _count_any(strong_patterns)
-    medium = _count_any(medium_patterns)
-    weak = _count_any(weak_patterns)
+    strong = _count(strong_patterns)
+    medium = _count(medium_patterns)
+    weak   = _count(weak_patterns)
 
-    # Score in [0, 1]. Strong evidence dominates; medium/weak nudge confidence upward.
     score = 0.0
     if strong:
         score = 0.75 + min(0.25, 0.08 * (strong - 1) + 0.05 * medium + 0.03 * weak)

@@ -3,36 +3,25 @@
 BioAnalyzer CLI - User-Friendly Command Line Interface
 =====================================================
 
-This CLI provides a simple, user-friendly interface for BioAnalyzer.
-All commands are designed to be intuitive and easy to use.
-
 Usage:
-    BioAnalyzer help                    # Show help
-    BioAnalyzer build                   # Build Docker containers
-    BioAnalyzer start                   # Start the application
-    BioAnalyzer run table               # Run curator table (Streamlit)
-    BioAnalyzer analyze <pmid>          # Analyze a single paper
-    BioAnalyzer analyze <pmid1,pmid2>   # Analyze multiple papers
-    BioAnalyzer analyze --file PMID.xls --format csv --output results.csv
-    BioAnalyzer analyze --file PMID.xls --format curator_desk_csv --output curator_desk.csv
-    BioAnalyzer status                  # Check system status
-    BioAnalyzer stop                    # Stop the application
+    BioAnalyzer help
+    BioAnalyzer build / start / stop / restart / status
+    BioAnalyzer run table
+    BioAnalyzer analyze <pmid> | <pmid1,pmid2> | --file FILE [--format FMT] [-o OUT]
+    BioAnalyzer analyze-url <url> | --file FILE
+    BioAnalyzer retrieve <pmid> [--save]
+    BioAnalyzer qa [question | --interactive]
+    BioAnalyzer fields
+    BioAnalyzer settings view|save|load|preset|migrate
 """
 
 from __future__ import annotations
 
-import asyncio
-import json
-import sys
+import asyncio, csv, io, json, logging, os, re, subprocess, sys, time
 import argparse
-import os
-import subprocess
-import time
-import csv
-import re
 from pathlib import Path
-from typing import List, Optional, Dict, Any, TYPE_CHECKING
-import logging
+from typing import Any, Dict, List, Optional, TYPE_CHECKING
+from xml.etree import ElementTree
 
 if TYPE_CHECKING:
     from app.core.settings import BioAnalyzerSettings
@@ -41,771 +30,321 @@ import requests
 
 try:
     from dotenv import dotenv_values
-except ImportError:  # pragma: no cover - safety net for bare installs
+except ImportError:
     dotenv_values = None  # type: ignore
 
-# Add the project root to Python path
-# (this file lives in scripts/, so the repo root is one level up)
 project_root = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(project_root))
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
-
-# Compose project name: ensures network is always "bioanalyzer-package_bioanalyzer-net"
 COMPOSE_PROJECT_NAME = "bioanalyzer-package"
 
+# ---------------------------------------------------------------------------
+# Shared field definitions (single source of truth)
+# ---------------------------------------------------------------------------
+ANALYSIS_FIELDS: Dict[str, str] = {
+    "host_species":    "Host Species",
+    "body_site":       "Body Site",
+    "condition":       "Condition",
+    "sequencing_type": "Sequencing Type",
+    "taxa_level":      "Taxa Level",
+    "sample_size":     "Sample Size",
+}
+
+STATUS_ICONS = {"PRESENT": "✅", "PARTIALLY_PRESENT": "⚠️", "ABSENT": "❌"}
+
+
+# ---------------------------------------------------------------------------
+# Formatting helpers
+# ---------------------------------------------------------------------------
+
+def _field_val(fields: dict, key: str, attr: str = "value") -> str:
+    return str(fields.get(key, {}).get(attr, "") or "")
+
+
+def _status_normalise(value: Any) -> str:
+    s = str(value).strip().upper() if value else ""
+    return s if s in {"PRESENT", "PARTIALLY_PRESENT", "ABSENT"} else "ABSENT"
+
+
+def _bool_upper(value: Any) -> str:
+    return "TRUE" if bool(value) else "FALSE"
+
+
+def _extract_year(publication_date: Any) -> str:
+    s = str(publication_date or "").strip()
+    m = re.search(r"\b(19|20)\d{2}\b", s)
+    return m.group(0) if m else ""
+
+
+# ---------------------------------------------------------------------------
+# Unified result serialiser
+# ---------------------------------------------------------------------------
+
+def render_results(results: List[Dict[str, Any]], fmt: str) -> str:
+    """Convert analysis results to any supported format string."""
+    if fmt == "json":
+        return json.dumps(results, indent=2, ensure_ascii=False)
+    if fmt == "csv":
+        return _render_csv(results)
+    if fmt == "curator_desk_csv":
+        return _render_curator_desk_csv(results)
+    if fmt == "xml":
+        return _render_xml(results)
+    return _render_table(results)
+
+
+def _render_table(results: List[Dict[str, Any]]) -> str:
+    lines = ["\n" + "=" * 80, "🧬 BIOANALYZER - CURATABLE SIGNATURE ANALYSIS RESULTS", "=" * 80]
+    for r in results:
+        lines += [f"\n📄 PMID: {r.get('pmid','N/A')}", f"📝 Title: {r.get('title','N/A')}",
+                  f"📰 Journal: {r.get('journal','N/A')}", "-" * 60]
+        for key, label in ANALYSIS_FIELDS.items():
+            fd = r.get("fields", {}).get(key, {})
+            icon = STATUS_ICONS.get(fd.get("status", ""), "❓")
+            lines.append(f"{icon} {label:20} | {fd.get('status','UNKNOWN'):20} | "
+                         f"{str(fd.get('value','N/A')):30} | {fd.get('confidence', 0.0):.2f}")
+        lines += ["-" * 60, f"📋 Summary: {r.get('curation_summary','N/A')}",
+                  f"⏱️  Time: {r.get('processing_time', 0):.2f}s", ""]
+    return "\n".join(lines)
+
+
+def _render_csv(results: List[Dict[str, Any]]) -> str:
+    out = io.StringIO()
+    w = csv.writer(out)
+    headers = ["PMID", "Title", "Journal"]
+    for label in ANALYSIS_FIELDS.values():
+        headers += [label, f"{label} Status"]
+    headers += ["Summary", "Processing Time"]
+    w.writerow(headers)
+    for r in results:
+        fields = r.get("fields", {})
+        row = [r.get("pmid", ""), r.get("title", ""), r.get("journal", "")]
+        for key in ANALYSIS_FIELDS:
+            row += [_field_val(fields, key), _field_val(fields, key, "status")]
+        row += [r.get("curation_summary", ""), r.get("processing_time", 0)]
+        w.writerow(row)
+    return out.getvalue()
+
+
+def _render_curator_desk_csv(results: List[Dict[str, Any]]) -> str:
+    columns = ["PMID", "Title", "Journal", "Year", "Host Species", "Host Species Status",
+               "Body Site", "Body Site Status", "Condition", "Condition Status",
+               "Sequencing Type", "Sequencing Type Status", "Sample Size", "Sample Size Status",
+               "has_differential_abundance", "differential_abundance_confidence", "in_bugsigdb"]
+    out = io.StringIO()
+    w = csv.DictWriter(out, fieldnames=columns, extrasaction="ignore")
+    w.writeheader()
+    seen: set = set()
+    for r in results:
+        pmid = str(r.get("pmid", "") or "").strip()
+        if pmid in seen:
+            continue
+        seen.add(pmid)
+        fields = r.get("fields", {}) or {}
+        try:
+            conf = f"{float(r.get('differential_abundance_confidence', 0.0)):.2f}"
+        except (TypeError, ValueError):
+            conf = "0.00"
+        w.writerow({
+            "PMID": pmid,
+            "Title": r.get("title", ""), "Journal": r.get("journal", ""),
+            "Year": _extract_year(r.get("year") or r.get("publication_date", "")),
+            "Host Species":           _field_val(fields, "host_species"),
+            "Host Species Status":    _status_normalise(_field_val(fields, "host_species", "status")),
+            "Body Site":              _field_val(fields, "body_site"),
+            "Body Site Status":       _status_normalise(_field_val(fields, "body_site", "status")),
+            "Condition":              _field_val(fields, "condition"),
+            "Condition Status":       _status_normalise(_field_val(fields, "condition", "status")),
+            "Sequencing Type":        _field_val(fields, "sequencing_type"),
+            "Sequencing Type Status": _status_normalise(_field_val(fields, "sequencing_type", "status")),
+            "Sample Size":            _field_val(fields, "sample_size"),
+            "Sample Size Status":     _status_normalise(_field_val(fields, "sample_size", "status")),
+            "has_differential_abundance":        _bool_upper(r.get("has_differential_abundance")),
+            "differential_abundance_confidence": conf,
+            "in_bugsigdb":                       _bool_upper(r.get("in_bugsigdb")),
+        })
+    return out.getvalue()
+
+
+def _render_xml(results: List[Dict[str, Any]]) -> str:
+    if not results:
+        return '<?xml version="1.0" encoding="UTF-8"?>\n<BioAnalyzerResults></BioAnalyzerResults>'
+    lines = ['<?xml version="1.0" encoding="UTF-8"?>', "<BioAnalyzerResults>"]
+    xml_field_names = {"host_species": "HostSpecies", "body_site": "BodySite",
+                       "condition": "Condition", "sequencing_type": "SequencingType",
+                       "taxa_level": "TaxaLevel", "sample_size": "SampleSize"}
+    for r in results:
+        fields = r.get("fields", {})
+        lines += ["  <Analysis>",
+                  f"    <PMID>{r.get('pmid','')}</PMID>",
+                  f"    <Title>{r.get('title','')}</Title>",
+                  f"    <Journal>{r.get('journal','')}</Journal>",
+                  f"    <ProcessingTime>{r.get('processing_time',0)}</ProcessingTime>",
+                  "    <Fields>"]
+        for key, tag in xml_field_names.items():
+            fd = fields.get(key, {})
+            lines += [f"      <{tag}>",
+                      f"        <Status>{fd.get('status','UNKNOWN')}</Status>",
+                      f"        <Value><![CDATA[{fd.get('value','N/A')}]]></Value>",
+                      f"        <Confidence>{fd.get('confidence',0.0):.2f}</Confidence>",
+                      f"      </{tag}>"]
+        lines += ["    </Fields>",
+                  f"    <Summary><![CDATA[{r.get('curation_summary','')}]]></Summary>",
+                  "  </Analysis>"]
+    lines.append("</BioAnalyzerResults>")
+    return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Unified retrieval serialiser
+# ---------------------------------------------------------------------------
+
+def render_retrieval(results: List[Dict[str, Any]], fmt: str) -> str:
+    if fmt == "json":
+        return json.dumps(results, indent=2, ensure_ascii=False)
+    if fmt == "csv":
+        return _render_retrieval_csv(results)
+    return _render_retrieval_table(results)
+
+
+def _render_retrieval_table(results: List[Dict[str, Any]]) -> str:
+    lines = ["\n" + "=" * 80, "📥 BIOANALYZER - PUBMED PAPER RETRIEVAL RESULTS", "=" * 80]
+    for r in results:
+        if "error" in r:
+            lines += [f"\n❌ PMID: {r.get('pmid','N/A')}", f"Error: {r['error']}"]
+            continue
+        authors = r.get("authors", [])
+        author_str = ", ".join(authors[:3]) + (" et al." if len(authors) > 3 else "")
+        lines += [f"\n📄 PMID: {r.get('pmid','N/A')}", f"📝 Title: {r.get('title','N/A')}",
+                  f"📰 Journal: {r.get('journal','N/A')}", f"👥 Authors: {author_str}",
+                  f"📅 Publication Date: {r.get('publication_date','N/A')}",
+                  f"📖 Full Text: {'✅ Available' if r.get('has_full_text') else '❌ Not available'}"]
+        abstract = r.get("abstract", "")
+        if abstract:
+            lines.append(f"📋 Abstract: {abstract[:200]}{'...' if len(abstract) > 200 else ''}")
+        lines.append("-" * 60)
+    return "\n".join(lines)
+
+
+def _render_retrieval_csv(results: List[Dict[str, Any]]) -> str:
+    out = io.StringIO()
+    w = csv.writer(out)
+    w.writerow(["PMID", "Title", "Journal", "Authors", "Publication Date",
+                "Has Full Text", "Abstract Length", "Full Text Length", "Error"])
+    for r in results:
+        w.writerow([r.get("pmid", ""), r.get("title", ""), r.get("journal", ""),
+                    "; ".join(r.get("authors", [])), r.get("publication_date", ""),
+                    "Yes" if r.get("has_full_text") else "No",
+                    len(r.get("abstract", "")), len(r.get("full_text", "")),
+                    r.get("error", "")])
+    return out.getvalue()
+
+
+# ---------------------------------------------------------------------------
+# Main CLI class
+# ---------------------------------------------------------------------------
 
 class BioAnalyzerCLI:
     """User-friendly Command Line Interface for BioAnalyzer."""
 
+    REQUIRED_ENV = ["GEMINI_API_KEY", "NCBI_API_KEY", "EMAIL"]
+    OPTIONAL_ENV = ["API_TIMEOUT", "NCBI_RATE_LIMIT_DELAY", "USE_FULLTEXT", "LOG_LEVEL", "UVICORN_RELOAD"]
+
     def __init__(self):
         self.container_name = "bioanalyzer-package"
-        self.image_name = "bioanalyzer-package"
-        self.network_name = "bioanalyzer-network"
-        self.verbose = False
-        self.api_base_url = os.getenv(
-            "BIOANALYZER_API_URL", "http://localhost:8000/api/v1"
-        )
-        self.required_env_vars = [
-            "GEMINI_API_KEY",
-            "NCBI_API_KEY",
-            "EMAIL",
-        ]
-        self.optional_env_vars = [
-            "API_TIMEOUT",
-            "NCBI_RATE_LIMIT_DELAY",
-            "USE_FULLTEXT",
-            "LOG_LEVEL",
-            "UVICORN_RELOAD",
-        ]
+        self.image_name     = "bioanalyzer-package"
+        self.network_name   = "bioanalyzer-network"
+        self.verbose        = False
+        self.api_base_url   = os.getenv("BIOANALYZER_API_URL", "http://localhost:8000/api/v1")
 
-    def _get_env_file_path(self) -> Optional[str]:
-        """Get the absolute path to .env file if it exists."""
-        env_path = project_root / ".env"
-        if env_path.exists():
-            return str(env_path.resolve())
-        return None
+    # ------------------------------------------------------------------
+    # Environment helpers
+    # ------------------------------------------------------------------
 
-    def _get_env_file_values(self) -> Dict[str, str]:
-        """Return key/value pairs from .env if present."""
-        env_file = self._get_env_file_path()
-        if not env_file:
+    def _env_file_path(self) -> Optional[str]:
+        p = project_root / ".env"
+        return str(p.resolve()) if p.exists() else None
+
+    def _env_file_values(self) -> Dict[str, str]:
+        env_file = self._env_file_path()
+        if not env_file or dotenv_values is None:
             return {}
-        try:
-            if dotenv_values is None:
-                return {}
-            values = dotenv_values(env_file)
-            return {k: v for k, v in (values or {}).items() if v}
-        except Exception:
-            return {}
+        return {k: v for k, v in (dotenv_values(env_file) or {}).items() if v}
 
     def _collect_env_flags(self) -> List[str]:
-        """Collect docker -e flags for known env vars if present in the host environment."""
-        flags = []
-        env_file = self._get_env_file_path()
+        flags: List[str] = []
+        env_file = self._env_file_path()
         if env_file:
-            flags.extend(["--env-file", env_file])
-        for key in self.required_env_vars + self.optional_env_vars:
+            flags += ["--env-file", env_file]
+        for key in self.REQUIRED_ENV + self.OPTIONAL_ENV:
             val = os.environ.get(key)
-            if val is not None and str(val) != "":
-                flags.extend(["-e", f"{key}={val}"])
+            if val:
+                flags += ["-e", f"{key}={val}"]
         return flags
 
-    def _build_api_url(self, path: str) -> str:
-        """Construct a BioAnalyzer API URL relative to the configured base."""
-        base = self.api_base_url.rstrip("/")
-        suffix = path.lstrip("/")
-        return f"{base}/{suffix}" if suffix else base
-
     def _validate_environment(self) -> None:
-        """Warn about missing critical env vars before starting containers."""
-        env_file = self._get_env_file_path()
-        env_file_values = self._get_env_file_values()
-
-        missing_from_env = []
-        missing_from_everywhere = []
-
-        for key in self.required_env_vars:
-            host_value = os.environ.get(key)
-            file_value = env_file_values.get(key)
-            if not host_value and not file_value:
-                missing_from_everywhere.append(key)
-            elif not host_value and file_value:
-                missing_from_env.append(key)
-
-        if not missing_from_env and not missing_from_everywhere:
-            return
-
-        if missing_from_env:
-            print("⚠️  Environment variables will be loaded from .env only:")
-            for key in missing_from_env:
-                print(f"   - {key} (present in .env but not current shell)")
-            print(
-                "   This is fine, but export them if you need them on the host as well."
-            )
-
-        if missing_from_everywhere:
+        file_vals = self._env_file_values()
+        missing = [k for k in self.REQUIRED_ENV if not os.environ.get(k) and not file_vals.get(k)]
+        if missing:
             print("⚠️  Missing critical environment variables:")
-            for key in missing_from_everywhere:
-                print(f"   - {key}")
-            if env_file:
-                print(
-                    f"   Note: .env file found at {env_file}. Update it to include the keys above."
-                )
-            else:
-                print(
-                    "   Create a .env file in the project root or export them before running."
-                )
-                print("   Example:")
-                print(
-                    "     export GEMINI_API_KEY=your_key; export NCBI_API_KEY=your_key; export EMAIL=you@example.com"
-                )
+            for k in missing:
+                print(f"   - {k}")
 
-    def print_banner(self):
-        """Print the BioAnalyzer banner."""
-        print(
-            """
-🧬 =============================================== 🧬
-   BioAnalyzer - Curatable Signature Analysis Tool
-🧬 =============================================== 🧬
-        """
-        )
+    def _build_api_url(self, path: str) -> str:
+        return f"{self.api_base_url.rstrip('/')}/{path.lstrip('/')}"
 
-    def print_help(self):
-        """Print comprehensive help information."""
-        self.print_banner()
-        print(
-            """
-📋 AVAILABLE COMMANDS:
-=====================
+    # ------------------------------------------------------------------
+    # Docker helpers
+    # ------------------------------------------------------------------
 
-🔧 Setup Commands:
-   BioAnalyzer build                    Build Docker containers
-   BioAnalyzer start                    Start the application
-   BioAnalyzer run table                Run curator table (Streamlit)
-   BioAnalyzer stop                     Stop the application
-   BioAnalyzer restart                  Restart the application
-   BioAnalyzer status                   Check system status
+    def _run(self, cmd: List[str], **kwargs) -> subprocess.CompletedProcess:
+        return subprocess.run(cmd, capture_output=True, text=True, check=False, **kwargs)
 
-🔬 Analysis Commands:
-   BioAnalyzer analyze <pmid>           Analyze a single paper
-   BioAnalyzer analyze <pmid1,pmid2>    Analyze multiple papers
-   BioAnalyzer analyze --file <file>    Analyze from .txt, .csv, .xls, or .xlsx
-   BioAnalyzer analyze-url <url>        Analyze study from URL
-   BioAnalyzer analyze-url --file <file> Analyze studies from file
-   BioAnalyzer fields                   Show field information
-
-📥 Retrieval Commands:
-   BioAnalyzer retrieve <pmid>          Retrieve full paper text and metadata
-   BioAnalyzer retrieve <pmid1,pmid2>   Retrieve multiple papers
-   BioAnalyzer retrieve --file <file>  Retrieve papers from file
-
-💬 Q&A Commands:
-   BioAnalyzer qa <question>             Ask a question and get an answer
-   BioAnalyzer qa --interactive          Start interactive Q&A mode
-   BioAnalyzer qa                        Start interactive Q&A mode (default)
-
-⚙️  Settings Commands:
-   BioAnalyzer settings view             View current settings
-   BioAnalyzer settings save             Save current settings to file
-   BioAnalyzer settings load --file <f>  Load settings from file
-   BioAnalyzer settings preset <name>    Apply preset configuration
-   BioAnalyzer settings migrate --file <f> Migrate old settings format
-
-📊 Output Options:
-   --format json|csv|curator_desk_csv|table|xml       Output format (default: table)
-   --output <file>                     Save results to file (use with --format csv for reusable CSV)
-   --verbose                           Verbose output
-
-📖 Examples:
-   BioAnalyzer build
-   BioAnalyzer start
-   BioAnalyzer run table                # Curator table at http://localhost:8501
-   BioAnalyzer analyze 12345678
-   BioAnalyzer analyze 12345678,87654321
-   BioAnalyzer analyze --file pmids.txt --format json
-   BioAnalyzer analyze --file PMID.xls --format csv --output pmid_analysis.csv
-   BioAnalyzer analyze --file PMID.xls --format curator_desk_csv --output curator_desk.csv
-   BioAnalyzer analyze-url https://example.com/study
-   BioAnalyzer analyze-url --file urls.txt --format json
-   BioAnalyzer retrieve 12345678
-   BioAnalyzer retrieve 12345678,87654321 --save
-   BioAnalyzer retrieve --file pmids.txt --format json
-   BioAnalyzer fields
-   BioAnalyzer qa "What is the microbiome?"
-   BioAnalyzer qa --interactive
-   BioAnalyzer settings view
-   BioAnalyzer settings preset balanced --save
-   BioAnalyzer status
-   BioAnalyzer stop
-
-🔧 API:
-   Once started: http://localhost:8000
-   API Documentation: http://localhost:8000/docs
-
-❓ Need Help?
-   BioAnalyzer help                    Show this help
-   BioAnalyzer <command> --help        Show command-specific help
-        """
-        )
-
-    def check_docker(self):
-        """Check if Docker is available."""
+    def check_docker(self) -> bool:
         try:
             subprocess.run(["docker", "--version"], capture_output=True, check=True)
             return True
         except (subprocess.CalledProcessError, FileNotFoundError):
-            print(" Error: Docker is not installed or not available.")
-            print("Please install Docker to use BioAnalyzer.")
+            print("❌ Docker is not installed or not available.")
             return False
 
-    def check_image(self):
-        """Check if the Docker image exists."""
-        try:
-            subprocess.run(
-                ["docker", "image", "inspect", self.image_name],
-                capture_output=True,
-                check=True,
-            )
-            return True
-        except subprocess.CalledProcessError:
-            return False
+    def check_image(self) -> bool:
+        return self._run(["docker", "image", "inspect", self.image_name]).returncode == 0
 
-    def load_pmids_from_file(self, file_path: str) -> List[str]:
-        """Load PMIDs from a file, supporting txt, csv, xls, and xlsx formats.
+    def _compose_cmd(self) -> List[str]:
+        if self._run(["which", "docker-compose"]).stdout.strip():
+            return ["docker-compose"]
+        return ["docker", "compose"]
 
-        For Excel files, uses Docker to read them since pandas is only available in Docker.
-        """
-        file_path_obj = Path(file_path)
-        file_ext = file_path_obj.suffix.lower()
-
-        pmids = []
-
-        try:
-            if file_ext in [".xls", ".xlsx"]:
-                # Use Docker to read Excel files since pandas is only available in Docker
-                pmids = self._read_excel_via_docker(file_path)
-            elif file_ext == ".csv":
-                # Read CSV using standard library (no pandas needed)
-                with open(file_path, "r", encoding="utf-8") as f:
-                    reader = csv.reader(f)
-                    for row in reader:
-                        if row and row[0].strip():
-                            pmids.append(row[0].strip())
-            else:
-                # Default to text file (one PMID per line)
-                with open(file_path, "r", encoding="utf-8") as f:
-                    for line in f:
-                        line = line.strip()
-                        if line:
-                            # Handle comma-separated PMIDs in text files
-                            if "," in line:
-                                pmids.extend(
-                                    [p.strip() for p in line.split(",") if p.strip()]
-                                )
-                            else:
-                                pmids.append(line)
-
-            return pmids
-        except Exception as e:
-            raise Exception(f"Error reading file '{file_path}': {e}")
-
-    def _read_excel_via_docker(self, file_path: str) -> List[str]:
-        """Read Excel file using Docker container where pandas is available."""
-        file_path_obj = Path(file_path).resolve()
-        file_dir = file_path_obj.parent
-        file_name = file_path_obj.name
-
-        # Check if Docker is available
-        if not self.check_docker():
-            raise Exception(
-                "Docker is required to read Excel files but Docker is not available"
-            )
-
-        # Check if Docker image exists
-        if not self.check_image():
-            raise Exception(
-                f"Docker image '{self.image_name}' not found. "
-                "Please run 'BioAnalyzer build' first."
-            )
-
-        # Create a Python script to read the Excel file
-        script = f"""
-import pandas as pd
-import sys
-import json
-import re
-
-try:
-    # Read Excel file and auto-detect the best PMID column
-    df = pd.read_excel('/workspace/{file_name}')
-
-    def normalize_pmid(value):
-        if pd.isna(value):
-            return None
-        # Excel numeric cells often come through as floats (e.g. 12345678.0)
-        if isinstance(value, (int, float)):
-            if float(value).is_integer():
-                return str(int(value))
-            return None
-        raw = str(value).strip()
-        if not raw:
-            return None
-        # Handle strings that look like "12345678.0"
-        if re.fullmatch(r'\\d+\\.0+', raw):
-            return raw.split('.', 1)[0]
-        if re.fullmatch(r'\\d+', raw):
-            return raw
-        return None
-
-    def score_column(series):
-        normalized = [normalize_pmid(v) for v in series]
-        # Prefer likely PMIDs (6+ digits) to avoid selecting year columns (e.g., 2019)
-        likely_pmids = [p for p in normalized if p and len(p) >= 6]
-        return likely_pmids
-
-    best_pmids = []
-    best_score = -1
-
-    for col in df.columns:
-        pmids = score_column(df[col])
-        # Strongly prefer a column explicitly named like PMID
-        name_bonus = 100000 if 'pmid' in str(col).lower() else 0
-        score = len(pmids) + name_bonus
-        if score > best_score:
-            best_score = score
-            best_pmids = pmids
-
-    if not best_pmids:
-        raise ValueError(
-            'No valid PMIDs found in Excel file. Ensure a column contains numeric PMIDs.'
-        )
-
-    # De-duplicate while preserving order
-    seen = set()
-    deduped = []
-    for p in best_pmids:
-        if p not in seen:
-            seen.add(p)
-            deduped.append(p)
-
-    # Output as JSON for easy parsing
-    pmids = deduped
-    print(json.dumps(pmids))
-except Exception as e:
-    print('ERROR: ' + str(e), file=sys.stderr)
-    sys.exit(1)
-"""
-
-        try:
-            # Run the script in Docker
-            result = subprocess.run(
-                [
-                    "docker",
-                    "run",
-                    "--rm",
-                    "-v",
-                    f"{file_dir}:/workspace",
-                    "-w",
-                    "/workspace",
-                    self.image_name,
-                    "python",
-                    "-c",
-                    script,
-                ],
-                capture_output=True,
-                text=True,
-                check=True,
-                cwd=file_dir,
-            )
-
-            # Parse the JSON output
-            pmids = json.loads(result.stdout.strip())
-            return pmids
-
-        except subprocess.CalledProcessError as e:
-            error_msg = e.stderr.strip() if e.stderr else "Unknown error"
-            raise Exception(f"Failed to read Excel file via Docker: {error_msg}")
-        except json.JSONDecodeError:
-            raise Exception(f"Failed to parse Docker output: {result.stdout}")
-
-    def build_containers(self):
-        """Build Docker containers."""
-        print("🔨 Building BioAnalyzer containers...")
-
-        if not self.check_docker():
-            return False
-
-        try:
-            # Build the package image
-            print("📦 Building package image...")
-            result = subprocess.run(
-                ["docker", "build", "-t", self.image_name, "."],
-                cwd=project_root,
-                check=True,
-            )
-
-            print("✅ Package image built successfully!")
-            print("✅ All containers built successfully!")
-            return True
-
-        except subprocess.CalledProcessError as e:
-            print(f" Error building containers: {e}")
-            return False
-
-    def _ensure_network(self):
-        """Ensure Docker network exists for container communication."""
-        check_result = subprocess.run(
-            [
-                "docker",
-                "network",
-                "ls",
-                "--filter",
-                f"name={self.network_name}",
-                "--format",
-                "{{.Name}}",
-            ],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        if not check_result.stdout.strip():
-            subprocess.run(
-                ["docker", "network", "create", self.network_name],
-                capture_output=True,
-                check=False,
-            )
-
-    def _check_docker_permissions(self):
-        """Check if user has proper Docker permissions and provide helpful guidance (non-blocking)."""
-        test_result = subprocess.run(
-            ["docker", "ps"], capture_output=True, text=True, check=False
-        )
-
-        if test_result.returncode == 0:
-            return True
-        if (
-            "permission denied" in test_result.stderr.lower()
-            or "Got permission denied" in test_result.stderr
-        ):
-            print("\n⚠️  Docker permission issue detected (non-blocking warning).")
-            print("   To fix this permanently, run:")
-            print("   sudo usermod -aG docker $USER")
-            print("   Then log out and log back in (or run: newgrp docker)")
-            print("   Continuing anyway...")
-            return True
-
-        return True
+    def _is_container_running(self) -> bool:
+        for name in [self.container_name, "bioanalyzer-package"]:
+            if self._run(["docker", "ps", "--filter", f"name={name}", "-q"]).stdout.strip():
+                return True
+        return False
 
     def _ensure_volume_directories(self) -> bool:
-        """Ensure cache, logs, results exist and are writable by the container user."""
-        dirs = ["cache", "logs", "results"]
-        for name in dirs:
+        for name in ["cache", "logs", "results"]:
             path = project_root / name
             try:
                 path.mkdir(parents=True, exist_ok=True)
+                test = path / ".write_test"
+                test.write_text("")
+                test.unlink()
             except OSError as e:
-                print(f"❌ Cannot create directory {path}: {e}")
-                return False
-            test_file = path / ".write_test"
-            try:
-                test_file.write_text("")
-                test_file.unlink()
-            except OSError:
-                print(f"❌ Directory not writable by current user: {path}")
-                print(
-                    "   The package container needs to write here (e.g. performance.log)."
-                )
-                print("   Fix with:")
-                print(f"   sudo chown -R $USER:$USER {path}")
+                print(f"❌ Directory issue ({path}): {e}")
                 return False
         return True
 
-    def start_application(self):
-        """Start the BioAnalyzer application."""
-        print("🚀 Starting BioAnalyzer application...")
-
-        if not self.check_docker():
-            return False
-
-        if not self.check_image():
-            print("❌ Docker image not found. Building containers first...")
-            if not self.build_containers():
-                return False
-
+    def check_backend_health(self) -> bool:
         try:
-            self._validate_environment()
-            compose_file = project_root / "docker-compose.yml"
-            if not compose_file.exists():
-                print("❌ docker-compose.yml not found. Cannot start containers.")
-                return False
-            if not self._ensure_volume_directories():
-                return False
-            if self.check_backend_health():
-                print("✅ API is already available at http://localhost:8000")
-                return True
-            compose_cmd = ["docker-compose"]
-            check_compose = subprocess.run(
-                ["which", "docker-compose"], capture_output=True, text=True, check=False
-            )
-            if not check_compose.stdout.strip():
-                compose_cmd = ["docker", "compose"]
-            ps_result = subprocess.run(
-                compose_cmd + ["-p", COMPOSE_PROJECT_NAME, "ps", "-q"],
-                cwd=str(project_root),
-                capture_output=True,
-                text=True,
-                check=False,
-            )
-            containers_running = bool(ps_result.stdout.strip())
-            self._check_docker_permissions()
-            if containers_running and not self.check_backend_health():
-                print("🧹 Cleaning up existing containers...")
-                cleanup_result = subprocess.run(
-                    compose_cmd
-                    + ["-p", COMPOSE_PROJECT_NAME, "down", "--remove-orphans"],
-                    cwd=str(project_root),
-                    capture_output=True,
-                    text=True,
-                    check=False,
-                )
-                if cleanup_result.returncode != 0:
-                    subprocess.run(
-                        [
-                            "docker",
-                            "rm",
-                            "-f",
-                            "bioanalyzer-redis",
-                            "bioanalyzer-package",
-                        ],
-                        capture_output=True,
-                        check=False,
-                    )
-            print("🔧 Starting API...")
-            import os
-            import pwd
-            import grp
-
-            env = os.environ.copy()
-            try:
-                current_user = pwd.getpwuid(os.getuid())
-                current_group = grp.getgrgid(os.getgid())
-                env["UID"] = str(current_user.pw_uid)
-                env["GID"] = str(current_group.gr_gid)
-            except (KeyError, AttributeError):
-                env["UID"] = str(os.getuid())
-                env["GID"] = str(os.getgid())
-            # Only force-recreate when recovering from a bad state; normal start is faster without it
-            force_recreate = containers_running and not self.check_backend_health()
-            up_cmd = compose_cmd + [
-                "-p",
-                COMPOSE_PROJECT_NAME,
-                "up",
-                "-d",
-                "--remove-orphans",
-            ]
-            if force_recreate:
-                up_cmd.append("--force-recreate")
-
-            result = subprocess.run(
-                up_cmd,
-                cwd=str(project_root),
-                env=env,
-                capture_output=False,
-                text=True,
-                check=False,
-            )
-
-            if result.returncode != 0:
-                print(
-                    "❌ Error starting containers. Check the output above for details."
-                )
-                return False
-            if self._wait_for_backend_health(timeout=60, interval=2):
-                print("✅ API is running at http://localhost:8000")
-            else:
-                print(
-                    "⚠️  Package container started but /health did not report healthy within 60s"
-                )
-
-            print("\n🎉 BioAnalyzer backend is now running!")
-            print("🔧 API: http://localhost:8000")
-            print("📖 API Documentation: http://localhost:8000/docs")
-            print("💡 Use 'BioAnalyzer status' to check system status")
-
-            return True
-
-        except subprocess.CalledProcessError as e:
-            print(f"❌ Error starting application: {e}")
-            return False
-
-    def _is_package_container_running(self) -> bool:
-        """Return True if the BioAnalyzer package container is currently running."""
-        for name in [self.container_name, "bioanalyzer-package"]:
-            try:
-                r = subprocess.run(
-                    ["docker", "ps", "--filter", f"name={name}", "-q"],
-                    capture_output=True,
-                    text=True,
-                    check=False,
-                )
-                if r.returncode == 0 and r.stdout.strip():
-                    return True
-            except Exception:
-                pass
-        return False
-
-    def stop_application(self):
-        """Stop the BioAnalyzer application."""
-        print("🛑 Stopping BioAnalyzer application...")
-
-        try:
-            self._check_docker_permissions()
-            compose_file = project_root / "docker-compose.yml"
-            if compose_file.exists():
-                compose_cmd = ["docker-compose"]
-                check_compose = subprocess.run(
-                    ["which", "docker-compose"],
-                    capture_output=True,
-                    text=True,
-                    check=False,
-                )
-                if not check_compose.stdout.strip():
-                    compose_cmd = ["docker", "compose"]
-
-                # Stop using compose (project name used by CLI start)
-                result = subprocess.run(
-                    compose_cmd
-                    + ["-p", COMPOSE_PROJECT_NAME, "down", "--remove-orphans"],
-                    cwd=str(project_root),
-                    capture_output=True,
-                    text=True,
-                    check=False,
-                )
-                # If container still running (e.g. started without -p bioanalyzer-package),
-                # try default project name (directory name)
-                if self._is_package_container_running():
-                    default_project = project_root.name
-                    subprocess.run(
-                        compose_cmd
-                        + ["-p", default_project, "down", "--remove-orphans"],
-                        cwd=str(project_root),
-                        capture_output=True,
-                        text=True,
-                        check=False,
-                    )
-                # If container is now stopped, we're done
-                if not self._is_package_container_running():
-                    print("✅ BioAnalyzer application stopped")
-                    return True
-            # Fallback: stop by container name (e.g. compose down used different project name)
-            containers = [
-                self.container_name,
-                "bioanalyzer-package",
-                "bioanalyzer-redis",
-            ]
-            stopped_any = False
-
-            for container in containers:
-                try:
-                    stop_result = subprocess.run(
-                        ["docker", "stop", container],
-                        capture_output=True,
-                        text=True,
-                        check=False,
-                    )
-                    if stop_result.returncode == 0:
-                        subprocess.run(
-                            ["docker", "rm", container],
-                            capture_output=True,
-                            text=True,
-                            check=False,
-                        )
-                        print(f"✅ Stopped {container}")
-                        stopped_any = True
-                    else:
-                        rm_result = subprocess.run(
-                            ["docker", "rm", "-f", container],
-                            capture_output=True,
-                            text=True,
-                            check=False,
-                        )
-                        if rm_result.returncode == 0:
-                            print(f"✅ Removed {container}")
-                            stopped_any = True
-                except Exception:
-                    pass
-
-            if stopped_any:
-                print("✅ BioAnalyzer application stopped")
-            else:
-                print("✅ No containers were running")
-            return True
-
-        except Exception as e:
-            print(f"❌ Error stopping application: {e}")
-            return False
-
-    def restart_application(self):
-        """Restart the BioAnalyzer application."""
-        print("🔄 Restarting BioAnalyzer application...")
-        self.stop_application()
-        time.sleep(2)
-        return self.start_application()
-
-    def run_table(self, port: int = 8501) -> bool:
-        """Run the curator table (Streamlit) in Docker for sortable/searchable predictions."""
-        app_path = project_root / "curator_table" / "app.py"
-        if not app_path.exists():
-            print(f"❌ Curator table app not found: {app_path}")
-            return False
-        if not self.check_docker():
-            return False
-        if not self.check_image():
-            print("❌ Docker image not found. Run 'BioAnalyzer build' first.")
-            return False
-        print("📋 Starting BioAnalyzer Curator Table (Docker)...")
-        print(f"   Open http://localhost:{port} in your browser.")
-        print("   Press Ctrl+C to stop.")
-        env_flags = self._collect_env_flags()
-        cmd = [
-            "docker",
-            "run",
-            "--rm",
-            "-v",
-            f"{project_root}:/app",
-            "-w",
-            "/app",
-            "-p",
-            f"{port}:8501",
-            *env_flags,
-            self.image_name,
-            "streamlit",
-            "run",
-            "curator_table/app.py",
-            "--server.port=8501",
-            "--server.address=0.0.0.0",
-        ]
-        result = subprocess.run(cmd, cwd=project_root)
-        return result.returncode == 0
-
-    def check_backend_health(self):
-        """Check if the API is healthy."""
-        try:
-            import requests
-
-            response = requests.get("http://localhost:8000/health", timeout=5)
-            return response.status_code == 200
+            return requests.get("http://localhost:8000/health", timeout=5).status_code == 200
         except Exception:
             return False
 
-    def _wait_for_backend_health(self, timeout: int = 60, interval: float = 2) -> bool:
-        """Poll the API /health endpoint until it reports healthy or we time out."""
+    def _wait_for_health(self, timeout: int = 60, interval: float = 2) -> bool:
         deadline = time.time() + timeout
         print(f"⏳ Waiting for API health (timeout: {timeout}s)...")
         while time.time() < deadline:
@@ -814,1892 +353,709 @@ except Exception as e:
             time.sleep(max(0.5, interval))
         return False
 
-    def get_system_status(self):
-        """Get system status information."""
-        print("📊 BioAnalyzer System Status")
-        print("=" * 40)
-        docker_available = self.check_docker()
-        print(f"Docker: {'✅ Available' if docker_available else '❌ Not Available'}")
+    # ------------------------------------------------------------------
+    # Lifecycle commands
+    # ------------------------------------------------------------------
 
-        if not docker_available:
-            return
-        image_exists = self.check_image()
-        print(f"Package Image: {'✅ Built' if image_exists else '❌ Not Built'}")
-        backend_running = False
-        backend_status = ""
-        for container_name in [self.container_name, "bioanalyzer-package"]:
-            try:
-                result = subprocess.run(
-                    [
-                        "docker",
-                        "ps",
-                        "--filter",
-                        f"name={container_name}",
-                        "--format",
-                        "{{.Status}}",
-                    ],
-                    capture_output=True,
-                    text=True,
-                    check=True,
-                )
+    def build_containers(self) -> bool:
+        print("🔨 Building BioAnalyzer containers...")
+        if not self.check_docker():
+            return False
+        try:
+            subprocess.run(["docker", "build", "-t", self.image_name, "."], cwd=project_root, check=True)
+            print("✅ All containers built successfully!")
+            return True
+        except subprocess.CalledProcessError as e:
+            print(f"❌ Error building containers: {e}")
+            return False
 
-                if result.stdout.strip():
-                    backend_running = True
-                    backend_status = result.stdout.strip()
-                    break
-            except:
-                continue
-
-        if backend_running:
-            print(f"Package Container: ✅ {backend_status}")
-        else:
-            print("Package Container: ❌ Not Running")
+    def start_application(self) -> bool:
+        print("🚀 Starting BioAnalyzer application...")
+        if not self.check_docker():
+            return False
+        if not self.check_image():
+            print("❌ Docker image not found. Building first...")
+            if not self.build_containers():
+                return False
+        self._validate_environment()
+        if not (project_root / "docker-compose.yml").exists():
+            print("❌ docker-compose.yml not found.")
+            return False
+        if not self._ensure_volume_directories():
+            return False
         if self.check_backend_health():
-            print("API Health: ✅ Healthy")
-            print("🔧 API: http://localhost:8000")
-            print("📖 API Documentation: http://localhost:8000/docs")
-        else:
-            print("API Health: ❌ Not Responding")
-            if not backend_running:
-                print("")
-                print("💡 To get healthy: run  BioAnalyzer start")
-                print(
-                    "   If the package exits with permission errors, fix volume dirs:"
-                )
-                print("   sudo chown -R $USER:$USER cache logs results")
+            print("✅ API already running at http://localhost:8000")
+            return True
 
-    def handle_settings_command(self, args):
-        """Handle settings commands."""
+        compose = self._compose_cmd()
+        containers_up = bool(self._run(compose + ["-p", COMPOSE_PROJECT_NAME, "ps", "-q"],
+                                       cwd=str(project_root)).stdout.strip())
+        if containers_up and not self.check_backend_health():
+            subprocess.run(compose + ["-p", COMPOSE_PROJECT_NAME, "down", "--remove-orphans"],
+                           cwd=str(project_root), capture_output=True)
+
+        import pwd, grp
+        env = os.environ.copy()
         try:
-            from app.core.settings import SettingsManager, BioAnalyzerSettings
-        except ImportError as e:
-            print(f"❌ Error: Failed to import settings module: {e}")
-            print("   Make sure you're running from the project root directory.")
+            env["UID"] = str(pwd.getpwuid(os.getuid()).pw_uid)
+            env["GID"] = str(grp.getgrgid(os.getgid()).gr_gid)
+        except Exception:
+            env["UID"] = str(os.getuid())
+            env["GID"] = str(os.getgid())
+
+        up_cmd = compose + ["-p", COMPOSE_PROJECT_NAME, "up", "-d", "--remove-orphans"]
+        if containers_up:
+            up_cmd.append("--force-recreate")
+        subprocess.run(up_cmd, cwd=str(project_root), env=env, check=False)
+
+        if self._wait_for_health(60):
+            print("✅ API running at http://localhost:8000")
+        else:
+            print("⚠️  Container started but health check timed out after 60s")
+
+        print("\n🎉 BioAnalyzer backend is running!")
+        print("🔧 API: http://localhost:8000  |  📖 Docs: http://localhost:8000/docs")
+        return True
+
+    def stop_application(self) -> bool:
+        print("🛑 Stopping BioAnalyzer application...")
+        compose = self._compose_cmd()
+        if (project_root / "docker-compose.yml").exists():
+            subprocess.run(compose + ["-p", COMPOSE_PROJECT_NAME, "down", "--remove-orphans"],
+                           cwd=str(project_root), capture_output=True)
+            if self._is_container_running():
+                subprocess.run(compose + ["-p", project_root.name, "down", "--remove-orphans"],
+                               cwd=str(project_root), capture_output=True)
+        if not self._is_container_running():
+            print("✅ BioAnalyzer application stopped")
+            return True
+        for name in [self.container_name, "bioanalyzer-package", "bioanalyzer-redis"]:
+            self._run(["docker", "rm", "-f", name])
+        print("✅ BioAnalyzer application stopped")
+        return True
+
+    def restart_application(self) -> bool:
+        print("🔄 Restarting BioAnalyzer application...")
+        self.stop_application()
+        time.sleep(2)
+        return self.start_application()
+
+    def run_table(self, port: int = 8501) -> bool:
+        app_path = project_root / "curator_table" / "app.py"
+        if not app_path.exists():
+            print(f"❌ Curator table app not found: {app_path}")
+            return False
+        if not self.check_docker() or not self.check_image():
+            return False
+        print(f"📋 Starting Curator Table → http://localhost:{port}  (Ctrl+C to stop)")
+        cmd = ["docker", "run", "--rm",
+               "-v", f"{project_root}:/app", "-w", "/app",
+               "-p", f"{port}:8501", *self._collect_env_flags(), self.image_name,
+               "streamlit", "run", "curator_table/app.py",
+               "--server.port=8501", "--server.address=0.0.0.0"]
+        return subprocess.run(cmd, cwd=project_root).returncode == 0
+
+    def get_system_status(self):
+        print("📊 BioAnalyzer System Status\n" + "=" * 40)
+        ok = self.check_docker()
+        print(f"Docker:          {'✅ Available' if ok else '❌ Not Available'}")
+        if not ok:
             return
+        print(f"Package Image:   {'✅ Built' if self.check_image() else '❌ Not Built'}")
+        running = self._is_container_running()
+        print(f"Container:       {'✅ Running' if running else '❌ Stopped'}")
+        healthy = self.check_backend_health()
+        print(f"API Health:      {'✅ Healthy' if healthy else '❌ Not Responding'}")
+        if healthy:
+            print("🔧 http://localhost:8000  |  📖 http://localhost:8000/docs")
+        elif not running:
+            print("\n💡 Run: BioAnalyzer start")
 
-        manager = SettingsManager()
+    # ------------------------------------------------------------------
+    # PMID file loader
+    # ------------------------------------------------------------------
 
-        if args.settings_command == "view":
-            # Load current settings
-            settings = manager.load()
+    def load_pmids_from_file(self, file_path: str) -> List[str]:
+        ext = Path(file_path).suffix.lower()
+        if ext in [".xls", ".xlsx"]:
+            return self._read_excel_via_docker(file_path)
+        if ext == ".csv":
+            with open(file_path, encoding="utf-8") as f:
+                return [row[0].strip() for row in csv.reader(f) if row and row[0].strip()]
+        # Plain text
+        pmids: List[str] = []
+        with open(file_path, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line:
+                    pmids.extend(p.strip() for p in line.split(",") if p.strip())
+        return pmids
 
-            # Format output
-            if args.format == "json":
-                output = settings.model_dump_json(indent=2)
-            elif args.format == "yaml":
-                import yaml
+    def _read_excel_via_docker(self, file_path: str) -> List[str]:
+        file_path_obj = Path(file_path).resolve()
+        if not self.check_docker() or not self.check_image():
+            raise Exception("Docker image required to read Excel files. Run 'BioAnalyzer build'.")
+        script = r"""
+import pandas as pd, sys, json, re
 
-                output = yaml.dump(
-                    settings.model_dump(), default_flow_style=False, sort_keys=False
-                )
-            else:  # table format
-                output = self._format_settings_table(settings)
+def normalize(v):
+    if pd.isna(v): return None
+    if isinstance(v, (int, float)):
+        return str(int(v)) if float(v).is_integer() else None
+    raw = str(v).strip()
+    if re.fullmatch(r'\d+\.0+', raw): return raw.split('.')[0]
+    return raw if re.fullmatch(r'\d+', raw) else None
 
-            # Output
-            if args.output:
-                with open(args.output, "w") as f:
-                    f.write(output)
-                print(f"✅ Settings written to {args.output}")
-            else:
-                print(output)
+df = pd.read_excel('/workspace/""" + file_path_obj.name + r"""')
+best, best_score = [], -1
+for col in df.columns:
+    pmids = [p for p in (normalize(v) for v in df[col]) if p and len(p) >= 6]
+    score = len(pmids) + (100000 if 'pmid' in str(col).lower() else 0)
+    if score > best_score: best_score, best = score, pmids
+if not best: raise ValueError('No valid PMIDs found.')
+seen, out = set(), []
+for p in best:
+    if p not in seen: seen.add(p); out.append(p)
+print(json.dumps(out))
+"""
+        result = subprocess.run(
+            ["docker", "run", "--rm",
+             "-v", f"{file_path_obj.parent}:/workspace", "-w", "/workspace",
+             self.image_name, "python", "-c", script],
+            capture_output=True, text=True, check=True)
+        return json.loads(result.stdout.strip())
 
-        elif args.settings_command == "save":
-            # Determine settings to save
-            if args.preset:
-                settings = BioAnalyzerSettings.from_preset(args.preset)
-            else:
-                settings = manager.load()
-
-            # Save to file
-            file_path = Path(args.file) if args.file else manager.DEFAULT_SETTINGS_FILE
-            manager.save(settings, file_path, args.format)
-            print(f"✅ Settings saved to {file_path}")
-            if args.preset:
-                print(f"   Preset: {args.preset}")
-
-        elif args.settings_command == "load":
-            # Load from file
-            file_path = Path(args.file)
-            if not file_path.exists():
-                print(f"❌ Error: Settings file not found: {file_path}")
-                return
-
-            settings = BioAnalyzerSettings.from_file(file_path)
-            print(f"✅ Settings loaded from {file_path}")
-
-            if args.apply:
-                settings.apply_to_environment()
-                print("✅ Settings applied to environment variables")
-
-        elif args.settings_command == "preset":
-            # Apply preset
-            settings = BioAnalyzerSettings.from_preset(args.name)
-            print(f"✅ Preset '{args.name}' loaded")
-
-            if args.save:
-                manager.save(settings)
-                print(f"✅ Preset saved to {manager.DEFAULT_SETTINGS_FILE}")
-            else:
-                # Show what would be applied
-                print("\n📋 Preset configuration:")
-                print(self._format_settings_table(settings))
-                print("\n💡 Tip: Use --save to save this preset to your settings file")
-
-        elif args.settings_command == "migrate":
-            # Migrate old settings
-            old_file = Path(args.file)
-            if not old_file.exists():
-                print(f"❌ Error: Settings file not found: {old_file}")
-                return
-
-            output_file = (
-                Path(args.output)
-                if args.output
-                else old_file.with_suffix(".new" + old_file.suffix)
-            )
-            migrated = manager.migrate_settings(old_file, output_file)
-            print(f"✅ Settings migrated from {old_file} to {output_file}")
-
-        else:
-            print("❌ Error: Unknown settings command")
-            print("   Available commands: view, save, load, preset, migrate")
-
-    def _format_settings_table(self, settings: "BioAnalyzerSettings") -> str:
-        """Format settings as a readable table."""
-        lines = []
-        lines.append("=" * 60)
-        lines.append("BioAnalyzer Settings")
-        lines.append("=" * 60)
-
-        # Version and preset
-        if settings.preset:
-            lines.append(f"\n📦 Preset: {settings.preset}")
-        lines.append(f"📌 Version: {settings.version}")
-        lines.append(f"🌍 Environment: {settings.environment.value}")
-
-        # API Settings
-        lines.append("\n🔌 API Configuration:")
-        lines.append(f"  Timeout: {settings.api.timeout}s")
-        lines.append(f"  Analysis Timeout: {settings.api.analysis_timeout}s")
-        lines.append(f"  Gemini Timeout: {settings.api.gemini_timeout}s")
-        lines.append(
-            f"  Max Concurrent Requests: {settings.api.max_concurrent_requests}"
-        )
-        lines.append(f"  NCBI Rate Limit Delay: {settings.api.ncbi_rate_limit_delay}s")
-
-        # LLM Settings
-        lines.append("\n🤖 LLM Configuration:")
-        lines.append(f"  Provider: {settings.llm.provider or 'Auto-detect'}")
-        lines.append(f"  Model: {settings.llm.model or 'Provider default'}")
-
-        # RAG Settings
-        lines.append("\n📚 RAG Configuration:")
-        lines.append(f"  Enabled: {settings.rag.enabled}")
-        lines.append(f"  Top K Chunks: {settings.rag.top_k_chunks}")
-        lines.append(f"  Re-rank Method: {settings.rag.rerank_method.value}")
-        lines.append(f"  Summary Length: {settings.rag.summary_length.value}")
-        lines.append(f"  Summary Quality: {settings.rag.summary_quality.value}")
-        lines.append(f"  Use Cache: {settings.rag.use_cache}")
-        lines.append(f"  Max Key Points: {settings.rag.max_summary_key_points}")
-
-        # Cache Settings
-        lines.append("\n💾 Cache Configuration:")
-        lines.append(f"  Enabled: {settings.cache.enabled}")
-        lines.append(f"  Validity Hours: {settings.cache.validity_hours}")
-        lines.append(f"  Max Size: {settings.cache.max_size}")
-        lines.append(f"  Directory: {settings.cache.directory}")
-
-        # Rate Limiting
-        lines.append("\n⏱️  Rate Limiting:")
-        lines.append(f"  Enabled: {settings.rate_limit.enabled}")
-        lines.append(f"  Requests/Minute: {settings.rate_limit.requests_per_minute}")
-
-        # Logging
-        lines.append("\n📝 Logging Configuration:")
-        lines.append(f"  Level: {settings.logging.level.value}")
-        lines.append(f"  Directory: {settings.logging.directory}")
-        lines.append(
-            f"  Max File Size: {settings.logging.max_file_size / (1024*1024):.1f} MB"
-        )
-        lines.append(f"  Max Files: {settings.logging.max_files}")
-
-        # Retrieval
-        lines.append("\n🔍 Retrieval Configuration:")
-        lines.append(f"  Use Fulltext: {settings.retrieval.use_fulltext}")
-        lines.append(f"  NCBI API URL: {settings.retrieval.ncbi_api_url}")
-
-        # Security
-        lines.append("\n🔒 Security Configuration:")
-        lines.append(f"  CORS Origins: {', '.join(settings.security.cors_origins)}")
-        lines.append(f"  Request ID: {settings.security.enable_request_id}")
-
-        lines.append("\n" + "=" * 60)
-
-        return "\n".join(lines)
-
-    def interactive_analysis(self):
-        """Start interactive analysis mode."""
-        self.print_banner()
-        print("🔬 Interactive Analysis Mode")
-        print("=" * 40)
-        print("Enter PMIDs to analyze (one per line, or comma-separated)")
-        print("Type 'help' for commands, 'quit' to exit")
-        print()
-
-        while True:
-            try:
-                user_input = input("BioAnalyzer> ").strip()
-
-                if user_input.lower() in ["quit", "exit", "q"]:
-                    print("👋 Goodbye!")
-                    break
-                elif user_input.lower() == "help":
-                    print(
-                        """
-📋 Available commands:
-   <pmid>                    Analyze a single paper
-   <pmid1,pmid2,pmid3>      Analyze multiple papers
-   help                      Show this help
-   quit                      Exit interactive mode
-                    """
-                    )
-                    continue
-                elif not user_input:
-                    continue
-
-                # Parse PMIDs
-                pmids = []
-                if "," in user_input:
-                    pmids = [p.strip() for p in user_input.split(",") if p.strip()]
-                else:
-                    pmids = [user_input]
-
-                if pmids:
-                    print(f"🔬 Analyzing {len(pmids)} paper(s)...")
-                    asyncio.run(self.analyze_papers_interactive(pmids))
-
-            except KeyboardInterrupt:
-                print("\n👋 Goodbye!")
-                break
-            except Exception as e:
-                print(f"❌ Error: {e}")
-
-    async def analyze_papers_interactive(self, pmids: List[str]):
-        """Analyze papers in interactive mode."""
-        try:
-            import requests
-
-            for i, pmid in enumerate(pmids, 1):
-                print(f"\n[{i}/{len(pmids)}] Analyzing PMID: {pmid}")
-
-                try:
-                    # Use API instead of direct import
-                    response = requests.get(
-                        f"http://localhost:8000/api/v1/analyze/{pmid}", timeout=60
-                    )
-
-                    if response.status_code == 200:
-                        result = response.json()
-                        print(f"✅ Analysis completed for PMID {pmid}")
-
-                        # Show quick summary
-                        fields = result.get("fields", {})
-                        present_count = sum(
-                            1 for f in fields.values() if f.get("status") == "PRESENT"
-                        )
-                        print(f"   📊 Fields present: {present_count}/6")
-
-                        # Show field status
-                        field_names = {
-                            "host_species": "Host Species",
-                            "body_site": "Body Site",
-                            "condition": "Condition",
-                            "sequencing_type": "Sequencing Type",
-                            "taxa_level": "Taxa Level",
-                            "sample_size": "Sample Size",
-                        }
-
-                        for field_key, field_name in field_names.items():
-                            field_data = fields.get(field_key, {})
-                            status = field_data.get("status", "UNKNOWN")
-                            status_icons = {
-                                "PRESENT": "✅",
-                                "PARTIALLY_PRESENT": "⚠️",
-                                "ABSENT": "❌",
-                            }
-                            icon = status_icons.get(status, "❓")
-                            print(f"   {icon} {field_name}: {status}")
-                    else:
-                        error_detail = response.json().get("detail", "Unknown error")
-                        print(f"❌ Analysis failed for PMID {pmid}: {error_detail}")
-
-                except requests.exceptions.RequestException as e:
-                    print(f"❌ Error connecting to API for PMID {pmid}: {e}")
-                except Exception as e:
-                    print(f"❌ Error analyzing PMID {pmid}: {e}")
-
-        except ImportError:
-            print(
-                "❌ Error: requests module not available. Please install it: pip install requests"
-            )
-        except Exception as e:
-            print(f"❌ Error: {e}")
+    # ------------------------------------------------------------------
+    # Analysis commands
+    # ------------------------------------------------------------------
 
     async def analyze_papers(
         self,
         pmids: List[str],
-        output_format: str = "table",
+        fmt: str = "table",
         output_file: Optional[str] = None,
+        refresh: bool = False,
     ):
-        """Analyze papers and return results."""
-        try:
-            import requests
-            from app.services.bugsigdb_check import get_bugsigdb_pmids
-
-            results = []
-            total = len(pmids)
-
-            print(f"🔬 Analyzing {total} paper(s)...")
-            # Warm BugSigDB PMID cache once per run; failures gracefully default to empty set.
-            get_bugsigdb_pmids()
-
-            for i, pmid in enumerate(pmids, 1):
-                print(f"[{i}/{total}] Analyzing PMID: {pmid}")
-
-                try:
-                    # Use API instead of direct import
-                    response = requests.get(
-                        f"http://localhost:8000/api/v1/analyze/{pmid}", timeout=60
-                    )
-
-                    if response.status_code == 200:
-                        result = response.json()
-                        results.append(result)
-                        print(f"✅ Analysis completed for PMID {pmid}")
-                    else:
-                        error_detail = response.json().get("detail", "Unknown error")
-                        print(f"❌ Analysis failed for PMID {pmid}: {error_detail}")
-
-                except requests.exceptions.RequestException as e:
-                    print(f"❌ Error connecting to API for PMID {pmid}: {e}")
-                except Exception as e:
-                    print(f"❌ Error analyzing PMID {pmid}: {e}")
-
-            if results:
-                if output_file:
-                    self.save_results(results, output_file, output_format)
-                    print(
-                        f"✅ Successfully analyzed {len(results)} out of {total} paper(s)"
-                    )
-                    if len(results) < total:
-                        print(
-                            f"⚠️  {total - len(results)} paper(s) failed or were skipped"
-                        )
-                else:
-                    self.display_results(results, output_format)
-            else:
-                print("❌ No results obtained.")
-                if output_file:
-                    print(f"⚠️  No results to save to {output_file}")
-
-        except ImportError:
-            print(
-                "❌ Error: requests module not available. Please install it: pip install requests"
-            )
-        except Exception as e:
-            print(f"❌ Error: {e}")
-
-    def display_results(self, results: List[Dict[str, Any]], output_format: str):
-        """Display results in the specified format."""
-        if output_format == "json":
-            print(json.dumps(results, indent=2, ensure_ascii=False))
-        elif output_format == "csv":
-            self.display_csv_results(results)
-        elif output_format == "curator_desk_csv":
-            self.display_curator_desk_csv_results(results)
-        elif output_format == "xml":
-            self.display_xml_results(results)
-        else:
-            self.display_table_results(results)
-
-    def display_table_results(self, results: List[Dict[str, Any]]):
-        """Display results in table format."""
-        if not results:
-            print("No results to display.")
-            return
-
-        print("\n" + "=" * 80)
-        print("🧬 BIOANALYZER - CURATABLE SIGNATURE ANALYSIS RESULTS")
-        print("=" * 80)
-
-        for result in results:
-            print(f"\n📄 PMID: {result.get('pmid', 'N/A')}")
-            print(f"📝 Title: {result.get('title', 'N/A')}")
-            print(f"📰 Journal: {result.get('journal', 'N/A')}")
-            print("-" * 60)
-
-            fields = result.get("fields", {})
-            field_names = {
-                "host_species": "Host Species",
-                "body_site": "Body Site",
-                "condition": "Condition",
-                "sequencing_type": "Sequencing Type",
-                "taxa_level": "Taxa Level",
-                "sample_size": "Sample Size",
-            }
-
-            for field_key, field_name in field_names.items():
-                field_data = fields.get(field_key, {})
-                status = field_data.get("status", "UNKNOWN")
-                value = field_data.get("value", "N/A")
-                confidence = field_data.get("confidence", 0.0)
-
-                status_icons = {
-                    "PRESENT": "✅",
-                    "PARTIALLY_PRESENT": "⚠️",
-                    "ABSENT": "❌",
-                }
-                icon = status_icons.get(status, "❓")
-
-                print(
-                    f"{icon} {field_name:20} | {status:20} | {str(value):30} | {confidence:.2f}"
-                )
-
-            print("-" * 60)
-            print(f"📋 Summary: {result.get('curation_summary', 'N/A')}")
-            print(f"⏱️  Time: {result.get('processing_time', 0):.2f}s")
-            print()
-
-    def display_csv_results(self, results: List[Dict[str, Any]]):
-        """Display results in CSV format."""
-        if not results:
-            print("No results to display.")
-            return
-        print(self.get_csv_content(results))
-
-    def display_curator_desk_csv_results(self, results: List[Dict[str, Any]]):
-        """Display curator-desk compatible CSV format (Levi spec)."""
-        if not results:
-            print("No results to display.")
-            return
-        print(self.get_curator_desk_csv_content(results))
-
-    def display_xml_results(self, results: List[Dict[str, Any]]):
-        """Display results in XML format."""
-        if not results:
-            print("No results to display.")
-            return
-        print(self.get_xml_content(results))
-
-    def _collect_urls(
-        self, inline_urls: List[str], file_path: Optional[str]
-    ) -> List[str]:
-        """Collect URLs from CLI arguments and optional file."""
-        urls = []
-
-        for value in inline_urls or []:
-            if "," in value:
-                urls.extend([item.strip() for item in value.split(",") if item.strip()])
-            else:
-                urls.append(value.strip())
-
-        if file_path:
-            try:
-                with open(file_path, "r", encoding="utf-8") as handle:
-                    urls.extend(line.strip() for line in handle if line.strip())
-            except Exception as exc:
-                print(f"❌ Error reading URL file: {exc}")
-
-        # Remove duplicates while preserving order
-        cleaned_urls = []
-        seen = set()
-        for url in urls:
-            if url and url not in seen:
-                seen.add(url)
-                cleaned_urls.append(url)
-        return cleaned_urls
-
-    def handle_url_analysis(
-        self,
-        urls: List[str],
-        file_path: Optional[str],
-        embedding_model: str,
-        llm_model: str,
-        output_format: str,
-        output_file: Optional[str],
-        poll_interval: int,
-        timeout: int,
-    ):
-        """Entry point for the analyze-url command."""
-        all_urls = self._collect_urls(urls, file_path)
-        if not all_urls:
-            print("❌ Error: No URLs provided.")
-            print("Usage: BioAnalyzer analyze-url <url1> [url2]")
-            print("   or: BioAnalyzer analyze-url --file urls.txt")
-            return
-
-        results = []
-        for index, url in enumerate(all_urls, 1):
-            print(f"\n[{index}/{len(all_urls)}] Starting analysis for URL: {url}")
-            job_id = self._start_url_analysis_job(url, embedding_model, llm_model)
-            if not job_id:
-                continue
-
-            analysis_result = self._poll_url_analysis_job(
-                job_id=job_id, poll_interval=poll_interval, timeout=timeout
-            )
-
-            if analysis_result:
-                analysis_result["job_id"] = job_id
-                results.append(analysis_result)
-
-        if not results:
-            print("❌ No URL analyses completed successfully.")
-            return
-
-        if output_file:
-            self.save_url_analysis_results(results, output_file, output_format)
-        else:
-            self.display_url_analysis_results(results, output_format)
-
-    def _start_url_analysis_job(
-        self, url: str, embedding_model: str, llm_model: str
-    ) -> Optional[str]:
-        """Submit a new URL analysis job."""
-        try:
-            payload = {
-                "url": url,
-                "embedding_model": embedding_model,
-                "llm_model": llm_model,
-            }
-            response = requests.post(
-                self._build_api_url("/analyze-url"), json=payload, timeout=30
-            )
-            if response.status_code != 200:
-                detail = response.json().get("detail", response.text)
-                print(f"❌ Failed to start analysis for {url}: {detail}")
-                return None
-
-            job_info = response.json()
-            job_id = job_info.get("job_id")
-            print(f"🆔 Job ID: {job_id}")
-            return job_id
-        except requests.exceptions.RequestException as exc:
-            print(f"❌ Network error starting URL analysis: {exc}")
-            return None
-
-    def _poll_url_analysis_job(
-        self, job_id: str, poll_interval: int, timeout: int
-    ) -> Optional[Dict[str, Any]]:
-        """Poll the status endpoint until the job completes or fails."""
-        deadline = time.time() + timeout
-        status_url = self._build_api_url(f"/analysis-status/{job_id}")
-        result_url = self._build_api_url(f"/analysis-result/{job_id}")
-
-        while time.time() < deadline:
-            try:
-                status_response = requests.get(status_url, timeout=15)
-                if status_response.status_code != 200:
-                    print(f"❌ Failed to fetch status for job {job_id}")
-                    return None
-
-                status_payload = status_response.json()
-                job_status = status_payload.get("status", "unknown")
-                progress = status_payload.get("progress", "")
-                print(f"   ⏳ Status: {job_status} ({progress})")
-
-                if job_status == "completed":
-                    return self._fetch_url_analysis_result(result_url)
-                if job_status == "failed":
-                    print(
-                        f"❌ Job {job_id} failed: {status_payload.get('error', 'Unknown error')}"
-                    )
-                    return None
-
-                time.sleep(max(1, poll_interval))
-            except requests.exceptions.RequestException as exc:
-                print(f"❌ Error polling job {job_id}: {exc}")
-                time.sleep(max(1, poll_interval))
-
-        print(f"⚠️  Job {job_id} timed out after {timeout} seconds")
-        return None
-
-    def _fetch_url_analysis_result(self, result_url: str) -> Optional[Dict[str, Any]]:
-        """Fetch the completed analysis result."""
-        try:
-            response = requests.get(result_url, timeout=30)
-            if response.status_code != 200:
-                detail = response.json().get("detail", response.text)
-                print(f"❌ Failed to fetch analysis result: {detail}")
-                return None
-            return response.json()
-        except requests.exceptions.RequestException as exc:
-            print(f"❌ Error retrieving analysis result: {exc}")
-            return None
-
-    def display_url_analysis_results(
-        self, results: List[Dict[str, Any]], output_format: str
-    ):
-        """Display URL workflow results."""
-        if not results:
-            print("No URL analysis results to display.")
-            return
-
-        if output_format == "json":
-            print(json.dumps(results, indent=2, ensure_ascii=False))
-            return
-
-        print("\n" + "=" * 80)
-        print("🌐 BIOANALYZER - URL STUDY ANALYSIS RESULTS")
-        print("=" * 80)
-
-        for result in results:
-            print(f"\n🔗 Source URL: {result.get('source_url', 'N/A')}")
-            print(f"🆔 Job ID: {result.get('job_id', 'N/A')}")
-            print(f"🧪 Experiments: {len(result.get('experiments', []))}")
-            print(f"🧬 Total Signatures: {result.get('total_signatures', 0)}")
-            print(
-                f"✅ Curation Ready: {'Yes' if result.get('curation_ready') else 'No'}"
-            )
-            print(
-                f"⚠️  Missing Fields: {', '.join(result.get('missing_fields', [])) or 'None'}"
-            )
-            print(f"📊 Confidence Score: {result.get('confidence_score', 0.0):.2f}")
-            print("-" * 60)
-
-            for exp in result.get("experiments", []):
-                metadata = exp.get("metadata", {})
-                print(f"   • Experiment: {exp.get('title', 'Untitled')}")
-                print(f"     Host Species: {metadata.get('host_species', 'N/A')}")
-                print(f"     Body Site   : {metadata.get('body_site', 'N/A')}")
-                print(f"     Condition   : {metadata.get('condition', 'N/A')}")
-                print(f"     Sequencing  : {metadata.get('sequencing_type', 'N/A')}")
-                print(f"     Taxa Level  : {metadata.get('taxa_level', 'N/A')}")
-                print(f"     Sample Size : {metadata.get('sample_size', 'N/A')}")
-                if exp.get("signatures"):
-                    print(f"     Signatures  : {len(exp['signatures'])}")
-                else:
-                    print("     Signatures  : None detected")
-                print()
-
-    def save_url_analysis_results(
-        self, results: List[Dict[str, Any]], filename: str, output_format: str
-    ):
-        """Save URL analysis results to disk."""
-        if output_format == "json":
-            content = json.dumps(results, indent=2, ensure_ascii=False)
-        else:
-            content = self.get_url_analysis_table_content(results)
-
-        with open(filename, "w", encoding="utf-8") as handle:
-            handle.write(content)
-
-        print(f"💾 URL analysis results saved to: {filename}")
-
-    def get_url_analysis_table_content(self, results: List[Dict[str, Any]]) -> str:
-        """Generate a text table for URL analyses."""
-        lines = ["BIOANALYZER - URL STUDY ANALYSIS RESULTS", "=" * 60, ""]
-        for result in results:
-            lines.append(f"Source URL: {result.get('source_url', 'N/A')}")
-            lines.append(f"Experiments: {len(result.get('experiments', []))}")
-            lines.append(f"Total Signatures: {result.get('total_signatures', 0)}")
-            lines.append(
-                f"Curation Ready: {'Yes' if result.get('curation_ready') else 'No'}"
-            )
-            lines.append(
-                f"Missing Fields: {', '.join(result.get('missing_fields', [])) or 'None'}"
-            )
-            lines.append("")
-            for exp in result.get("experiments", []):
-                meta = exp.get("metadata", {})
-                lines.append(f"  - {exp.get('title', 'Untitled')}")
-                lines.append(f"    Host Species : {meta.get('host_species', 'N/A')}")
-                lines.append(f"    Body Site    : {meta.get('body_site', 'N/A')}")
-                lines.append(f"    Condition    : {meta.get('condition', 'N/A')}")
-                lines.append(f"    Sequencing   : {meta.get('sequencing_type', 'N/A')}")
-                lines.append(f"    Taxa Level   : {meta.get('taxa_level', 'N/A')}")
-                lines.append(f"    Sample Size  : {meta.get('sample_size', 'N/A')}")
-                if exp.get("signatures"):
-                    lines.append(f"    Signatures   : {len(exp['signatures'])}")
-                else:
-                    lines.append("    Signatures   : None")
-                lines.append("")
-            lines.append("-" * 60)
-        return "\n".join(lines)
-
-    def save_results(
-        self, results: List[Dict[str, Any]], filename: str, output_format: str
-    ):
-        """Save results to a file."""
-        if output_format == "json":
-            content = json.dumps(results, indent=2, ensure_ascii=False)
-        elif output_format == "csv":
-            content = self.get_csv_content(results)
-        elif output_format == "curator_desk_csv":
-            content = self.get_curator_desk_csv_content(results)
-        elif output_format == "xml":
-            content = self.get_xml_content(results)
-        else:
-            content = self.get_table_content(results)
-
-        with open(filename, "w", encoding="utf-8") as f:
-            f.write(content)
-
-        print(f"💾 Results saved to: {filename}")
-
-    def get_csv_content(self, results: List[Dict[str, Any]]) -> str:
-        """Get CSV content for results."""
-        import io
-
-        output = io.StringIO()
-        writer = csv.writer(output)
-
-        # Header
-        headers = [
-            "PMID",
-            "Title",
-            "Journal",
-            "Host Species",
-            "Host Species Status",
-            "Body Site",
-            "Body Site Status",
-            "Condition",
-            "Condition Status",
-            "Sequencing Type",
-            "Sequencing Type Status",
-            "Taxa Level",
-            "Taxa Level Status",
-            "Sample Size",
-            "Sample Size Status",
-            "Summary",
-            "Processing Time",
-        ]
-        writer.writerow(headers)
-
-        # Data rows
-        for result in results:
-            fields = result.get("fields", {})
-            row = [
-                result.get("pmid", ""),
-                result.get("title", ""),
-                result.get("journal", ""),
-                fields.get("host_species", {}).get("value", ""),
-                fields.get("host_species", {}).get("status", ""),
-                fields.get("body_site", {}).get("value", ""),
-                fields.get("body_site", {}).get("status", ""),
-                fields.get("condition", {}).get("value", ""),
-                fields.get("condition", {}).get("status", ""),
-                fields.get("sequencing_type", {}).get("value", ""),
-                fields.get("sequencing_type", {}).get("status", ""),
-                fields.get("taxa_level", {}).get("value", ""),
-                fields.get("taxa_level", {}).get("status", ""),
-                fields.get("sample_size", {}).get("value", ""),
-                fields.get("sample_size", {}).get("status", ""),
-                result.get("curation_summary", ""),
-                result.get("processing_time", 0),
-            ]
-            writer.writerow(row)
-
-        return output.getvalue()
-
-    def _extract_year(self, publication_date: Any) -> str:
-        """Extract a 4-digit publication year from a publication date-like string."""
-        if publication_date is None:
-            return ""
-        s = str(publication_date).strip()
-        if not s:
-            return ""
-        m = re.search(r"\b(19|20)\d{2}\b", s)
-        return m.group(0) if m else ""
-
-    def _ols_search_url(self, ontology: str, query: str) -> str:
-        """Build an OLS4 search URL (future ontology mapping support)."""
-        q = (query or "").strip()
-        if not q:
-            return ""
-        return (
-            "https://www.ebi.ac.uk/ols4/search"
-            f"?q={requests.utils.quote(q)}&ontology={requests.utils.quote(ontology)}"
-        )
-
-    def _ncbi_taxonomy_search_url(self, query: str) -> str:
-        q = (query or "").strip()
-        if not q:
-            return ""
-        return f"https://www.ncbi.nlm.nih.gov/taxonomy/?term={requests.utils.quote(q)}"
-
-    def get_curator_desk_csv_content(self, results: List[Dict[str, Any]]) -> str:
-        """Get curator-desk compatible CSV content (aligned to Levi spec)."""
-        import io
-
-        output_columns = [
-            "PMID",
-            "Title",
-            "Journal",
-            "Year",
-            "Host Species",
-            "Host Species Status",
-            "Body Site",
-            "Body Site Status",
-            "Condition",
-            "Condition Status",
-            "Sequencing Type",
-            "Sequencing Type Status",
-            "Sample Size",
-            "Sample Size Status",
-            "has_differential_abundance",
-            "differential_abundance_confidence",
-            "in_bugsigdb",
-        ]
-
-        def _status_or_absent(value: Any) -> str:
-            status = str(value).strip().upper() if value is not None else ""
-            return (
-                status
-                if status in {"PRESENT", "PARTIALLY_PRESENT", "ABSENT"}
-                else "ABSENT"
-            )
-
-        def _text_or_empty(value: Any) -> str:
-            return "" if value is None else str(value).strip()
-
-        def _bool_upper(value: Any) -> str:
-            return "TRUE" if bool(value) else "FALSE"
-
-        output = io.StringIO()
-        writer = csv.DictWriter(
-            output, fieldnames=output_columns, extrasaction="ignore"
-        )
-        writer.writeheader()
-
-        seen_pmids = set()
-        for result in results:
-            fields = result.get("fields", {}) or {}
-            pmid = _text_or_empty(result.get("pmid", ""))
-            if pmid in seen_pmids:
-                continue
-            seen_pmids.add(pmid)
-
-            year = self._extract_year(
-                result.get("year") or result.get("publication_date", "")
-            )
-            confidence = result.get("differential_abundance_confidence", 0.0)
-            try:
-                confidence_str = f"{float(confidence):.2f}"
-            except (TypeError, ValueError):
-                confidence_str = "0.00"
-
-            row = {
-                "PMID": pmid,
-                "Title": _text_or_empty(result.get("title", "")),
-                "Journal": _text_or_empty(result.get("journal", "")),
-                "Year": _text_or_empty(year),
-                "Host Species": _text_or_empty(
-                    fields.get("host_species", {}).get("value", "")
-                ),
-                "Host Species Status": _status_or_absent(
-                    fields.get("host_species", {}).get("status", "ABSENT")
-                ),
-                "Body Site": _text_or_empty(
-                    fields.get("body_site", {}).get("value", "")
-                ),
-                "Body Site Status": _status_or_absent(
-                    fields.get("body_site", {}).get("status", "ABSENT")
-                ),
-                "Condition": _text_or_empty(
-                    fields.get("condition", {}).get("value", "")
-                ),
-                "Condition Status": _status_or_absent(
-                    fields.get("condition", {}).get("status", "ABSENT")
-                ),
-                "Sequencing Type": _text_or_empty(
-                    fields.get("sequencing_type", {}).get("value", "")
-                ),
-                "Sequencing Type Status": _status_or_absent(
-                    fields.get("sequencing_type", {}).get("status", "ABSENT")
-                ),
-                "Sample Size": _text_or_empty(
-                    fields.get("sample_size", {}).get("value", "")
-                ),
-                "Sample Size Status": _status_or_absent(
-                    fields.get("sample_size", {}).get("status", "ABSENT")
-                ),
-                "has_differential_abundance": _bool_upper(
-                    result.get("has_differential_abundance", False)
-                ),
-                "differential_abundance_confidence": confidence_str,
-                "in_bugsigdb": _bool_upper(result.get("in_bugsigdb", False)),
-            }
-            writer.writerow(row)
-
-        return output.getvalue()
-
-    def get_xml_content(self, results: List[Dict[str, Any]]) -> str:
-        """Get XML content for results."""
-        if not results:
-            return '<?xml version="1.0" encoding="UTF-8"?>\n<BioAnalyzerResults></BioAnalyzerResults>'
-
-        xml_content = ['<?xml version="1.0" encoding="UTF-8"?>']
-        xml_content.append("<BioAnalyzerResults>")
-
-        for result in results:
-            xml_content.append("  <Analysis>")
-            xml_content.append(f'    <PMID>{result.get("pmid", "")}</PMID>')
-            xml_content.append(f'    <Title>{result.get("title", "")}</Title>')
-            xml_content.append(f'    <Journal>{result.get("journal", "")}</Journal>')
-            xml_content.append(
-                f'    <ProcessingTime>{result.get("processing_time", 0)}</ProcessingTime>'
-            )
-
-            fields = result.get("fields", {})
-            xml_content.append("    <Fields>")
-
-            field_names = {
-                "host_species": "HostSpecies",
-                "body_site": "BodySite",
-                "condition": "Condition",
-                "sequencing_type": "SequencingType",
-                "taxa_level": "TaxaLevel",
-                "sample_size": "SampleSize",
-            }
-
-            for field_key, field_name in field_names.items():
-                field_data = fields.get(field_key, {})
-                status = field_data.get("status", "UNKNOWN")
-                value = field_data.get("value", "N/A")
-                confidence = field_data.get("confidence", 0.0)
-
-                xml_content.append(f"      <{field_name}>")
-                xml_content.append(f"        <Status>{status}</Status>")
-                xml_content.append(f"        <Value><![CDATA[{value}]]></Value>")
-                xml_content.append(f"        <Confidence>{confidence:.2f}</Confidence>")
-                xml_content.append(f"      </{field_name}>")
-
-            xml_content.append("    </Fields>")
-            xml_content.append(
-                f'    <Summary><![CDATA[{result.get("curation_summary", "")}]]></Summary>'
-            )
-            xml_content.append("  </Analysis>")
-
-        xml_content.append("</BioAnalyzerResults>")
-        return "\n".join(xml_content)
-
-    def get_table_content(self, results: List[Dict[str, Any]]) -> str:
-        """Get table content for results."""
-        return "Table content implementation"
-
-    def show_fields_info(self):
-        """Show information about BugSigDB fields."""
-        print(
-            """
-🧬 BioAnalyzer - BugSigDB Essential Fields
-==========================================
-
-📋 6 Essential Fields for BugSigDB Curation:
-
-🧬 Host Species (host_species):
-   Description: The host organism being studied (e.g., Human, Mouse, Rat)
-   Required: Yes
-
-📍 Body Site (body_site):
-   Description: Where the microbiome sample was collected (e.g., Gut, Oral, Skin)
-   Required: Yes
-
-🏥 Condition (condition):
-   Description: What disease, treatment, or exposure is being studied
-   Required: Yes
-
-🔬 Sequencing Type (sequencing_type):
-   Description: What molecular method was used (e.g., 16S, metagenomics)
-   Required: Yes
-
-🌳 Taxa Level (taxa_level):
-   Description: What taxonomic level was analyzed (e.g., phylum, genus, species)
-   Required: Yes
-
-👥 Sample Size (sample_size):
-   Description: Number of samples or participants analyzed
-   Required: Yes
-
-📊 Field Status Values:
-   ✅ PRESENT: Information is complete and clear
-   ⚠️  PARTIALLY_PRESENT: Some information available but incomplete
-   ❌ ABSENT: Information is missing
-        """
-        )
-
-    def interactive_qa(self):
-        """Start interactive Q&A mode."""
-        self.print_banner()
-        print("💬 Interactive Q&A Mode")
-        print("=" * 40)
-        print("Ask any question and get AI-powered answers!")
-        print("Type 'help' for commands, 'quit' to exit")
-        print()
-
-        import requests
-
-        api_available = False
-        try:
-            response = requests.get("http://localhost:8000/health", timeout=2)
-            if response.status_code == 200:
-                api_available = True
-        except:
-            pass
-
-        if not api_available:
-            print("⚠️  Docker API is not running.")
-            print("   Please start BioAnalyzer first: BioAnalyzer start")
-            print("   Then the Q&A feature will use the API with all dependencies.")
-            return
-
-        print("✅ Connected to BioAnalyzer API")
-
-        print("✅ QA system ready! Ask your questions below.\n")
-
-        while True:
-            try:
-                user_input = input("BioAnalyzer Q&A> ").strip()
-
-                if user_input.lower() in ["quit", "exit", "q"]:
-                    print("👋 Goodbye!")
-                    break
-                elif user_input.lower() == "help":
-                    print(
-                        """
-📋 Available commands:
-   <question>                 Ask any question
-   help                       Show this help
-   quit                       Exit interactive mode
-
-💡 Examples:
-   "What is the microbiome?"
-   "Explain 16S rRNA sequencing"
-   "What are the differences between metagenomics and 16S sequencing?"
-                    """
-                    )
-                    continue
-                elif not user_input:
-                    continue
-
-                # Ask the question via API
-                print("\n🤔 Thinking...")
-                try:
-                    # Use API endpoint for Q&A (if available) or fallback to direct call
-                    api_response = requests.post(
-                        "http://localhost:8000/api/v1/qa",
-                        json={"question": user_input},
-                        timeout=60,
-                    )
-
-                    if api_response.status_code == 200:
-                        result = api_response.json()
-                        answer = result.get("answer", result.get("text", ""))
-                        confidence = result.get("confidence", 0.8)
-
-                        if answer:
-                            print(f"\n💡 Answer (confidence: {confidence:.2f}):")
-                            print("-" * 60)
-                            print(answer)
-                            print("-" * 60)
-                        else:
-                            print(
-                                "❌ No answer received. Please try rephrasing your question."
-                            )
-                    elif api_response.status_code == 404:
-                        # Q&A endpoint not available, try direct import as fallback
-                        print(
-                            "⚠️  Q&A API endpoint not available. Trying direct method..."
-                        )
-                        # Fallback would go here if we want to support it
-                        print("❌ Q&A endpoint not implemented in API yet.")
-                        print(
-                            "   Please use the web interface or wait for API endpoint."
-                        )
-                    else:
-                        error_detail = api_response.json().get(
-                            "detail", "Unknown error"
-                        )
-                        print(f"❌ API error: {error_detail}")
-                except requests.exceptions.RequestException as e:
-                    print(f"❌ Error connecting to API: {e}")
-                    print("   Make sure BioAnalyzer is running: BioAnalyzer start")
-                except Exception as e:
-                    print(f"❌ Error: {e}")
-
-                print()  # Empty line for readability
-
-            except KeyboardInterrupt:
-                print("\n👋 Goodbye!")
-                break
-            except Exception as e:
-                print(f"❌ Error: {e}")
-
-    async def ask_question(self, question: str) -> Optional[str]:
-        """
-        Ask a single question and return the answer via API.
-
-        Args:
-            question: The question to ask
-
-        Returns:
-            The answer text or None if error
-        """
-        import requests
-
-        api_available = False
-        try:
-            response = requests.get("http://localhost:8000/health", timeout=2)
-            if response.status_code == 200:
-                api_available = True
-        except:
-            pass
-
-        if not api_available:
-            print("⚠️  Docker API is not running.")
-            print("   Please start BioAnalyzer first: BioAnalyzer start")
-            return None
-
-        try:
-            print("🤔 Thinking...")
-            # Use API endpoint for Q&A
-            api_response = requests.post(
-                "http://localhost:8000/api/v1/qa",
-                json={"question": question},
-                timeout=60,
-            )
-
-            if api_response.status_code == 200:
-                result = api_response.json()
-                answer = result.get("answer", result.get("text", ""))
-                confidence = result.get("confidence", 0.8)
-
-                if answer:
-                    print(f"\n💡 Answer (confidence: {confidence:.2f}):")
-                    print("-" * 60)
-                    print(answer)
-                    print("-" * 60)
-                    return answer
-                else:
-                    print("❌ No answer received.")
-                    return None
-            elif api_response.status_code == 404:
-                print("⚠️  Q&A API endpoint not available yet.")
-                print(
-                    "   Please use: BioAnalyzer start (then access via web interface)"
-                )
-                return None
-            else:
-                error_detail = api_response.json().get("detail", "Unknown error")
-                print(f"❌ API error: {error_detail}")
-                return None
-
-        except requests.exceptions.RequestException as e:
-            print(f"❌ Error connecting to API: {e}")
-            print("   Make sure BioAnalyzer is running: BioAnalyzer start")
-            return None
-        except Exception as e:
-            print(f"❌ Error: {e}")
-            return None
-
-    async def retrieve_papers(
-        self,
-        pmids: List[str],
-        output_format: str = "table",
-        output_file: Optional[str] = None,
-        save_to_file: bool = False,
-    ):
-        """Retrieve papers and return results."""
-        try:
-            retriever = self._get_pubmed_retriever()
-            results = self._fetch_papers_data(retriever, pmids)
-            self._process_retrieval_results(
-                results, output_format, output_file, save_to_file
-            )
-        except Exception as e:
-            self._handle_retrieval_error(e)
-
-    def _get_pubmed_retriever(self):
-        """Get a PubMed retriever instance."""
-        try:
-            from app.services.standalone_pubmed_retriever import (
-                StandalonePubMedRetriever,
-            )
-
-            return StandalonePubMedRetriever()
-        except ImportError:
-            # Fallback to inline implementation
-            return self._create_standalone_retriever()
-
-    def _fetch_papers_data(self, retriever, pmids: List[str]) -> List[Dict[str, Any]]:
-        """Fetch paper data for all PMIDs."""
-        total = len(pmids)
-        print(f"📥 Retrieving {total} paper(s)...")
-
-        results = []
+        request_timeout = int(os.getenv("BIOANALYZER_ANALYZE_TIMEOUT", "180"))
+        results, total = [], len(pmids)
+        print(f"🔬 Analysing {total} paper(s)...")
         for i, pmid in enumerate(pmids, 1):
-            paper_data = self._fetch_single_paper(retriever, pmid)
-            self._log_retrieval_progress(i, total, paper_data)
-            results.append(paper_data)
+            print(f"[{i}/{total}] PMID: {pmid}")
+            try:
+                r = requests.get(
+                    f"http://localhost:8000/api/v1/analyze/{pmid}",
+                    params={"refresh": "true"} if refresh else None,
+                    timeout=request_timeout,
+                )
+                if r.status_code == 200:
+                    results.append(r.json())
+                    print(f"✅ Done")
+                else:
+                    print(f"❌ {r.json().get('detail','Unknown error')}")
+            except Exception as e:
+                print(f"❌ {e}")
 
-        return results
-
-    def _fetch_single_paper(self, retriever, pmid: str) -> Dict[str, Any]:
-        """Fetch data for a single paper."""
-        try:
-            return retriever.get_full_paper_data(pmid)
-        except Exception as e:
-            return {
-                "pmid": pmid,
-                "error": f"Retrieval failed: {str(e)}",
-                "retrieval_timestamp": time.time(),
-            }
-
-    def _log_retrieval_progress(
-        self, current: int, total: int, paper_data: Dict[str, Any]
-    ):
-        """Log the progress of paper retrieval."""
-        pmid = paper_data.get("pmid", "unknown")
-        print(f"[{current}/{total}] Retrieved PMID: {pmid}")
-
-        if "error" in paper_data:
-            print(f"❌ Retrieval failed for PMID {pmid}: {paper_data['error']}")
-        else:
-            print(f"✅ Successfully retrieved PMID {pmid}")
-            if paper_data.get("has_full_text"):
-                print("   📖 Full text available")
-            else:
-                print("   📄 Abstract only")
-
-    def _process_retrieval_results(
-        self,
-        results: List[Dict[str, Any]],
-        output_format: str,
-        output_file: Optional[str],
-        save_to_file: bool,
-    ):
-        """Process and output the retrieval results."""
         if not results:
             print("❌ No results obtained.")
             return
-
-        if save_to_file:
-            self._save_individual_papers(results)
-
+        content = render_results(results, fmt)
         if output_file:
-            self.save_retrieval_results(results, output_file, output_format)
+            Path(output_file).write_text(content, encoding="utf-8")
+            print(f"💾 Results saved to: {output_file}")
         else:
-            self.display_retrieval_results(results, output_format)
+            print(content)
 
-    def _save_individual_papers(self, results: List[Dict[str, Any]]):
-        """Save individual papers to separate files."""
-        for paper_data in results:
-            if "error" not in paper_data:
-                self._save_individual_paper(paper_data)
+    # ------------------------------------------------------------------
+    # URL analysis
+    # ------------------------------------------------------------------
 
-    def _handle_retrieval_error(self, error: Exception):
-        """Handle retrieval errors."""
-        print(f"❌ Error: {error}")
-        print("Please check your internet connection and try again.")
+    def handle_url_analysis(self, urls: List[str], file_path: Optional[str],
+                             embedding_model: str, llm_model: str, fmt: str,
+                             output_file: Optional[str], poll_interval: int, timeout: int):
+        all_urls = self._collect_urls(urls, file_path)
+        if not all_urls:
+            print("❌ No URLs provided.")
+            return
+        results = []
+        for i, url in enumerate(all_urls, 1):
+            print(f"\n[{i}/{len(all_urls)}] {url}")
+            job_id = self._start_url_job(url, embedding_model, llm_model)
+            if job_id:
+                result = self._poll_url_job(job_id, poll_interval, timeout)
+                if result:
+                    result["job_id"] = job_id
+                    results.append(result)
+        if not results:
+            print("❌ No URL analyses completed.")
+            return
+        content = self._render_url_results(results, fmt)
+        if output_file:
+            Path(output_file).write_text(content, encoding="utf-8")
+            print(f"💾 Saved to: {output_file}")
+        else:
+            print(content)
 
-    def _create_standalone_retriever(self):
-        """Create a fallback standalone PubMed retriever."""
-        import requests
-        from xml.etree import ElementTree
+    def _collect_urls(self, inline: List[str], file_path: Optional[str]) -> List[str]:
+        urls: List[str] = []
+        for v in inline or []:
+            urls.extend(v.split(",") if "," in v else [v])
+        if file_path:
+            try:
+                urls.extend(line.strip() for line in open(file_path, encoding="utf-8") if line.strip())
+            except Exception as e:
+                print(f"❌ Error reading URL file: {e}")
+        seen: set = set()
+        return [u.strip() for u in urls if u.strip() and u.strip() not in seen and not seen.add(u.strip())]  # type: ignore
 
-        class FallbackRetriever:
-            def __init__(self):
-                self.session = requests.Session()
-                self.session.headers.update(
-                    {"User-Agent": "BioAnalyzer/1.0 (contact: bioanalyzer@example.com)"}
-                )
+    def _start_url_job(self, url: str, emb: str, llm: str) -> Optional[str]:
+        try:
+            r = requests.post(self._build_api_url("/analyze-url"),
+                              json={"url": url, "embedding_model": emb, "llm_model": llm}, timeout=30)
+            if r.status_code == 200:
+                job_id = r.json().get("job_id")
+                print(f"🆔 Job ID: {job_id}")
+                return job_id
+            print(f"❌ {r.json().get('detail', r.text)}")
+        except requests.RequestException as e:
+            print(f"❌ Network error: {e}")
+        return None
 
-            def get_full_paper_data(self, pmid: str) -> Dict[str, Any]:
+    def _poll_url_job(self, job_id: str, interval: int, timeout: int) -> Optional[Dict]:
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            try:
+                status = requests.get(self._build_api_url(f"/analysis-status/{job_id}"), timeout=15).json()
+                print(f"   ⏳ {status.get('status')} ({status.get('progress','')})")
+                if status.get("status") == "completed":
+                    r = requests.get(self._build_api_url(f"/analysis-result/{job_id}"), timeout=30)
+                    return r.json() if r.status_code == 200 else None
+                if status.get("status") == "failed":
+                    print(f"❌ Failed: {status.get('error','')}")
+                    return None
+                time.sleep(max(1, interval))
+            except Exception as e:
+                print(f"❌ Poll error: {e}")
+                time.sleep(max(1, interval))
+        print(f"⚠️  Job {job_id} timed out.")
+        return None
+
+    def _render_url_results(self, results: List[Dict], fmt: str) -> str:
+        if fmt == "json":
+            return json.dumps(results, indent=2, ensure_ascii=False)
+        lines = ["\n" + "=" * 80, "🌐 BIOANALYZER - URL STUDY ANALYSIS RESULTS", "=" * 80]
+        for r in results:
+            lines += [f"\n🔗 {r.get('source_url','N/A')}", f"🆔 Job: {r.get('job_id','N/A')}",
+                      f"🧪 Experiments: {len(r.get('experiments',[]))}",
+                      f"✅ Curation Ready: {'Yes' if r.get('curation_ready') else 'No'}",
+                      f"⚠️  Missing: {', '.join(r.get('missing_fields',[])) or 'None'}", "-" * 60]
+            for exp in r.get("experiments", []):
+                m = exp.get("metadata", {})
+                lines += [f"   • {exp.get('title','Untitled')}",
+                          f"     Species: {m.get('host_species','N/A')}  Site: {m.get('body_site','N/A')}",
+                          f"     Condition: {m.get('condition','N/A')}  Seq: {m.get('sequencing_type','N/A')}",
+                          f"     Taxa: {m.get('taxa_level','N/A')}  N: {m.get('sample_size','N/A')}",
+                          f"     Signatures: {len(exp['signatures']) if exp.get('signatures') else 'None'}", ""]
+        return "\n".join(lines)
+
+    # ------------------------------------------------------------------
+    # Retrieval
+    # ------------------------------------------------------------------
+
+    async def retrieve_papers(self, pmids: List[str], fmt: str = "table",
+                               output_file: Optional[str] = None, save: bool = False):
+        retriever = self._get_retriever()
+        total = len(pmids)
+        print(f"📥 Retrieving {total} paper(s)...")
+        results = []
+        for i, pmid in enumerate(pmids, 1):
+            try:
+                data = retriever.get_full_paper_data(pmid)
+            except Exception as e:
+                data = {"pmid": pmid, "error": str(e), "retrieval_timestamp": time.time()}
+            print(f"[{i}/{total}] PMID {pmid}: {'✅' if 'error' not in data else '❌'}")
+            if save and "error" not in data:
+                self._save_paper(data)
+            results.append(data)
+
+        content = render_retrieval(results, fmt)
+        if output_file:
+            Path(output_file).write_text(content, encoding="utf-8")
+            print(f"💾 Saved to: {output_file}")
+        else:
+            print(content)
+
+    def _get_retriever(self):
+        try:
+            from app.services.standalone_pubmed_retriever import StandalonePubMedRetriever
+            return StandalonePubMedRetriever()
+        except ImportError:
+            return self._fallback_retriever()
+
+    def _fallback_retriever(self):
+        class _R:
+            def get_full_paper_data(self, pmid: str) -> Dict:
                 try:
                     url = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi"
-                    params = {
-                        "db": "pubmed",
-                        "id": pmid,
-                        "retmode": "xml",
-                        "email": "bioanalyzer@example.com",
-                        "tool": "BioAnalyzer",
-                    }
-
-                    response = self.session.get(url, params=params, timeout=10)
-                    response.raise_for_status()
-
-                    root = ElementTree.fromstring(response.text)
-                    article = root.find(".//PubmedArticle/MedlineCitation/Article")
-
-                    if article is None:
+                    r = requests.get(url, params={"db": "pubmed", "id": pmid, "retmode": "xml",
+                                                   "email": "bioanalyzer@example.com", "tool": "BioAnalyzer"},
+                                     timeout=10)
+                    r.raise_for_status()
+                    root = ElementTree.fromstring(r.text)
+                    art = root.find(".//PubmedArticle/MedlineCitation/Article")
+                    if art is None:
                         return {"pmid": pmid, "error": "No article found"}
-
-                    title = article.findtext("ArticleTitle", default="N/A")
-                    journal = article.findtext("Journal/Title", default="N/A")
-
-                    return {
-                        "pmid": pmid,
-                        "title": title,
-                        "abstract": "",
-                        "journal": journal,
-                        "authors": [],
-                        "publication_date": "",
-                        "full_text": "",
-                        "has_full_text": False,
-                        "retrieval_timestamp": time.time(),
-                    }
+                    return {"pmid": pmid, "title": art.findtext("ArticleTitle", "N/A"),
+                            "abstract": "", "journal": art.findtext("Journal/Title", "N/A"),
+                            "authors": [], "publication_date": "", "full_text": "",
+                            "has_full_text": False, "retrieval_timestamp": time.time()}
                 except Exception as e:
-                    return {
-                        "pmid": pmid,
-                        "error": f"Retrieval failed: {str(e)}",
-                        "retrieval_timestamp": time.time(),
-                    }
+                    return {"pmid": pmid, "error": str(e), "retrieval_timestamp": time.time()}
+        return _R()
 
-        return FallbackRetriever()
-
-    def _save_individual_paper(self, paper_data: Dict[str, Any]) -> str:
-        """Save individual paper data to a JSON file."""
+    def _save_paper(self, data: Dict) -> str:
         try:
-            pmid = paper_data.get("pmid", "unknown")
-            timestamp = time.strftime("%Y%m%d_%H%M%S")
-            filename = f"paper_data_{pmid}_{timestamp}.json"
-            filepath = Path("results") / filename
-            filepath.parent.mkdir(parents=True, exist_ok=True)
-
-            with open(filepath, "w", encoding="utf-8") as f:
-                json.dump(paper_data, f, indent=2, ensure_ascii=False)
-
-            print(f"   💾 Saved to: {filepath}")
-            return str(filepath)
-
+            pmid = data.get("pmid", "unknown")
+            fp = project_root / "results" / f"paper_{pmid}_{time.strftime('%Y%m%d_%H%M%S')}.json"
+            fp.parent.mkdir(parents=True, exist_ok=True)
+            fp.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+            print(f"   💾 {fp}")
+            return str(fp)
         except Exception as e:
-            print(f"   ❌ Error saving paper data: {e}")
+            print(f"   ❌ Save error: {e}")
             return ""
 
-    def display_retrieval_results(
-        self, results: List[Dict[str, Any]], output_format: str
-    ):
-        """Display retrieval results in the specified format."""
-        if output_format == "json":
-            print(json.dumps(results, indent=2, ensure_ascii=False))
-        elif output_format == "csv":
-            self.display_csv_retrieval_results(results)
-        else:
-            self.display_table_retrieval_results(results)
+    # ------------------------------------------------------------------
+    # Q&A
+    # ------------------------------------------------------------------
 
-    def display_table_retrieval_results(self, results: List[Dict[str, Any]]):
-        """Display retrieval results in table format."""
-        if not results:
-            print("No results to display.")
+    async def ask_question(self, question: str) -> Optional[str]:
+        if not self.check_backend_health():
+            print("⚠️  API not running. Start with: BioAnalyzer start")
+            return None
+        try:
+            print("🤔 Thinking...")
+            r = requests.post("http://localhost:8000/api/v1/qa",
+                              json={"question": question}, timeout=60)
+            if r.status_code == 200:
+                answer = r.json().get("answer") or r.json().get("text", "")
+                conf = r.json().get("confidence", 0.8)
+                if answer:
+                    print(f"\n💡 Answer (confidence: {conf:.2f}):\n{'-'*60}\n{answer}\n{'-'*60}")
+                    return answer
+            elif r.status_code == 404:
+                print("⚠️  Q&A endpoint not available yet.")
+            else:
+                print(f"❌ API error: {r.json().get('detail','Unknown')}")
+        except Exception as e:
+            print(f"❌ {e}")
+        return None
+
+    def interactive_qa(self):
+        self.print_banner()
+        if not self.check_backend_health():
+            print("⚠️  Start BioAnalyzer first: BioAnalyzer start")
             return
+        print("💬 Interactive Q&A  (type 'quit' to exit)\n")
+        while True:
+            try:
+                q = input("Q> ").strip()
+                if q.lower() in ("quit", "exit", "q"):
+                    break
+                if q:
+                    asyncio.run(self.ask_question(q))
+            except KeyboardInterrupt:
+                break
+        print("👋 Goodbye!")
 
-        print("\n" + "=" * 80)
-        print("📥 BIOANALYZER - PUBMED PAPER RETRIEVAL RESULTS")
-        print("=" * 80)
+    # ------------------------------------------------------------------
+    # Fields info
+    # ------------------------------------------------------------------
 
-        for result in results:
-            if "error" in result:
-                print(f"\n❌ PMID: {result.get('pmid', 'N/A')}")
-                print(f"Error: {result['error']}")
-                continue
+    def show_fields_info(self):
+        print("\n🧬 BioAnalyzer - BugSigDB Essential Fields\n" + "=" * 42)
+        descriptions = {
+            "host_species":    "Host organism (e.g. Human, Mouse, Rat)",
+            "body_site":       "Sample location (e.g. Gut, Oral, Skin)",
+            "condition":       "Disease, treatment, or exposure studied",
+            "sequencing_type": "Molecular method (e.g. 16S, metagenomics)",
+            "taxa_level":      "Taxonomic level (e.g. phylum, genus, species)",
+            "sample_size":     "Number of samples / participants",
+        }
+        for key, label in ANALYSIS_FIELDS.items():
+            print(f"  🔹 {label}: {descriptions[key]}")
+        print("\n✅ PRESENT  ⚠️ PARTIALLY_PRESENT  ❌ ABSENT\n")
 
-            print(f"\n📄 PMID: {result.get('pmid', 'N/A')}")
-            print(f"📝 Title: {result.get('title', 'N/A')}")
-            print(f"📰 Journal: {result.get('journal', 'N/A')}")
-            print(
-                f"👥 Authors: {', '.join(result.get('authors', [])[:3])}{' et al.' if len(result.get('authors', [])) > 3 else ''}"
-            )
-            print(f"📅 Publication Date: {result.get('publication_date', 'N/A')}")
-            print(
-                f"📖 Full Text: {'✅ Available' if result.get('has_full_text') else '❌ Not available'}"
-            )
+    # ------------------------------------------------------------------
+    # Settings
+    # ------------------------------------------------------------------
 
-            # Show abstract preview
-            abstract = result.get("abstract", "")
-            if abstract:
-                preview = abstract[:200] + "..." if len(abstract) > 200 else abstract
-                print(f"📋 Abstract Preview: {preview}")
-
-            # Show full text preview if available
-            if result.get("has_full_text"):
-                full_text = result.get("full_text", "")
-                if full_text:
-                    preview = (
-                        full_text[:300] + "..." if len(full_text) > 300 else full_text
-                    )
-                    print(f"📄 Full Text Preview: {preview}")
-
-            print("-" * 60)
-
-    def display_csv_retrieval_results(self, results: List[Dict[str, Any]]):
-        """Display retrieval results in CSV format."""
-        if not results:
-            print("No results to display.")
+    def handle_settings_command(self, args):
+        try:
+            from app.core.settings import SettingsManager, BioAnalyzerSettings
+        except ImportError as e:
+            print(f"❌ Failed to import settings module: {e}")
             return
-        print(self.get_csv_retrieval_content(results))
+        manager = SettingsManager()
+        cmd = args.settings_command
 
-    def save_retrieval_results(
-        self, results: List[Dict[str, Any]], filename: str, output_format: str
-    ):
-        """Save retrieval results to a file."""
-        if output_format == "json":
-            content = json.dumps(results, indent=2, ensure_ascii=False)
-        elif output_format == "csv":
-            content = self.get_csv_retrieval_content(results)
-        else:
-            content = self.get_table_retrieval_content(results)
+        if cmd == "view":
+            settings = manager.load()
+            out = (settings.model_dump_json(indent=2) if args.format == "json"
+                   else self._format_settings_table(settings))
+            if args.output:
+                Path(args.output).write_text(out)
+                print(f"✅ Written to {args.output}")
+            else:
+                print(out)
 
-        with open(filename, "w", encoding="utf-8") as f:
-            f.write(content)
+        elif cmd == "save":
+            settings = BioAnalyzerSettings.from_preset(args.preset) if args.preset else manager.load()
+            fp = Path(args.file) if args.file else manager.DEFAULT_SETTINGS_FILE
+            manager.save(settings, fp, args.format)
+            print(f"✅ Saved to {fp}")
 
-        print(f"💾 Retrieval results saved to: {filename}")
+        elif cmd == "load":
+            fp = Path(args.file)
+            if not fp.exists():
+                print(f"❌ File not found: {fp}")
+                return
+            settings = BioAnalyzerSettings.from_file(fp)
+            print(f"✅ Loaded from {fp}")
+            if args.apply:
+                settings.apply_to_environment()
+                print("✅ Applied to environment")
 
-    def get_csv_retrieval_content(self, results: List[Dict[str, Any]]) -> str:
-        """Get CSV content for retrieval results."""
-        import io
+        elif cmd == "preset":
+            settings = BioAnalyzerSettings.from_preset(args.name)
+            if args.save:
+                manager.save(settings)
+                print(f"✅ Preset '{args.name}' saved")
+            else:
+                print(self._format_settings_table(settings))
 
-        output = io.StringIO()
-        writer = csv.writer(output)
+        elif cmd == "migrate":
+            old = Path(args.file)
+            if not old.exists():
+                print(f"❌ Not found: {old}")
+                return
+            out = Path(args.output) if args.output else old.with_suffix(".new" + old.suffix)
+            manager.migrate_settings(old, out)
+            print(f"✅ Migrated → {out}")
 
-        # Header
-        headers = [
-            "PMID",
-            "Title",
-            "Journal",
-            "Authors",
-            "Publication Date",
-            "Has Full Text",
-            "Abstract Length",
-            "Full Text Length",
-            "Error",
-        ]
-        writer.writerow(headers)
+    def _format_settings_table(self, settings: "BioAnalyzerSettings") -> str:
+        s = settings
+        lines = ["=" * 60, "BioAnalyzer Settings", "=" * 60,
+                 f"Version: {s.version}  |  Env: {s.environment.value}",
+                 f"\n🔌 API  timeout={s.api.timeout}s  analysis={s.api.analysis_timeout}s  "
+                 f"gemini={s.api.gemini_timeout}s  max_req={s.api.max_concurrent_requests}",
+                 f"🤖 LLM  provider={s.llm.provider or 'auto'}  model={s.llm.model or 'default'}",
+                 f"📚 RAG  enabled={s.rag.enabled}  top_k={s.rag.top_k_chunks}  "
+                 f"rerank={s.rag.rerank_method.value}  cache={s.rag.use_cache}",
+                 f"💾 Cache  enabled={s.cache.enabled}  ttl={s.cache.validity_hours}h  "
+                 f"max={s.cache.max_size}  dir={s.cache.directory}",
+                 f"📝 Log  level={s.logging.level.value}  dir={s.logging.directory}",
+                 "=" * 60]
+        return "\n".join(lines)
 
-        # Data rows
-        for result in results:
-            row = [
-                result.get("pmid", ""),
-                result.get("title", ""),
-                result.get("journal", ""),
-                "; ".join(result.get("authors", [])),
-                result.get("publication_date", ""),
-                "Yes" if result.get("has_full_text") else "No",
-                len(result.get("abstract", "")),
-                len(result.get("full_text", "")),
-                result.get("error", ""),
-            ]
-            writer.writerow(row)
+    # ------------------------------------------------------------------
+    # Banner / help
+    # ------------------------------------------------------------------
 
-        return output.getvalue()
+    def print_banner(self):
+        print("\n🧬 ============================================= 🧬")
+        print("   BioAnalyzer - Curatable Signature Analysis Tool")
+        print("🧬 ============================================= 🧬\n")
 
-    def get_table_retrieval_content(self, results: List[Dict[str, Any]]) -> str:
-        """Get table content for retrieval results."""
-        content = "BIOANALYZER - PUBMED PAPER RETRIEVAL RESULTS\n"
-        content += "=" * 50 + "\n\n"
+    def print_help(self):
+        self.print_banner()
+        print("""📋 COMMANDS
+  build / start / stop / restart / status
+  run table [--port N]
+  analyze <pmid|pmids>  [--file F] [--format table|json|csv|curator_desk_csv|xml] [-o FILE]
+  analyze-url <url>     [--file F] [--format table|json] [-o FILE]
+  retrieve <pmid|pmids> [--file F] [--format table|json|csv] [-o FILE] [--save]
+  qa [question]         [--interactive]
+  fields
+  settings view|save|load|preset|migrate
 
-        for result in results:
-            if "error" in result:
-                content += f"PMID: {result.get('pmid', 'N/A')}\n"
-                content += f"Error: {result['error']}\n\n"
-                continue
+📖 Examples
+  BioAnalyzer analyze 12345678
+  BioAnalyzer analyze --file PMID.xls --format csv -o results.csv
+  BioAnalyzer analyze-url https://example.com/study
+  BioAnalyzer retrieve 12345678,87654321 --save
+  BioAnalyzer qa "What is 16S sequencing?"
+  BioAnalyzer settings preset balanced --save
 
-            content += f"PMID: {result.get('pmid', 'N/A')}\n"
-            content += f"Title: {result.get('title', 'N/A')}\n"
-            content += f"Journal: {result.get('journal', 'N/A')}\n"
-            content += f"Authors: {', '.join(result.get('authors', [])[:3])}{' et al.' if len(result.get('authors', [])) > 3 else ''}\n"
-            content += f"Publication Date: {result.get('publication_date', 'N/A')}\n"
-            content += f"Full Text: {'Available' if result.get('has_full_text') else 'Not available'}\n"
+🔧 API: http://localhost:8000  |  Docs: http://localhost:8000/docs
+""")
 
-            abstract = result.get("abstract", "")
-            if abstract:
-                content += f"Abstract: {abstract[:200]}{'...' if len(abstract) > 200 else ''}\n"
 
-            content += "\n" + "-" * 40 + "\n\n"
+# ---------------------------------------------------------------------------
+# Argument parser
+# ---------------------------------------------------------------------------
 
-        return content
+def _build_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(description="BioAnalyzer CLI",
+                                formatter_class=argparse.RawDescriptionHelpFormatter)
+    sub = p.add_subparsers(dest="command")
 
+    sub.add_parser("help")
+    sub.add_parser("build")
+    start = sub.add_parser("start")
+    start.add_argument("--interactive", "-i", action="store_true")
+    sub.add_parser("stop")
+    sub.add_parser("restart")
+    sub.add_parser("status")
+    sub.add_parser("fields")
+
+    run = sub.add_parser("run")
+    run_sub = run.add_subparsers(dest="run_command")
+    rt = run_sub.add_parser("table")
+    rt.add_argument("--port", "-p", type=int, default=8501)
+
+    # analyze
+    an = sub.add_parser("analyze")
+    an.add_argument("pmids", nargs="*")
+    an.add_argument("--file", "-f")
+    an.add_argument("--format", choices=["table", "json", "csv", "curator_desk_csv", "xml"], default="table")
+    an.add_argument("--output", "-o")
+    an.add_argument("--refresh", action="store_true", help="Bypass cache and recompute analysis")
+    an.add_argument("--verbose", "-v", action="store_true")
+
+    # analyze-url
+    au = sub.add_parser("analyze-url")
+    au.add_argument("urls", nargs="*")
+    au.add_argument("--file", "-f")
+    au.add_argument("--embedding-model", default="gemini/text-embedding-004")
+    au.add_argument("--llm-model", default="gemini/gemini-2.0-flash")
+    au.add_argument("--format", choices=["table", "json"], default="table")
+    au.add_argument("--output", "-o")
+    au.add_argument("--poll-interval", type=int, default=5)
+    au.add_argument("--timeout", type=int, default=300)
+    au.add_argument("--verbose", "-v", action="store_true")
+
+    # retrieve
+    ret = sub.add_parser("retrieve")
+    ret.add_argument("pmids", nargs="*")
+    ret.add_argument("--file", "-f")
+    ret.add_argument("--format", choices=["table", "json", "csv"], default="table")
+    ret.add_argument("--output", "-o")
+    ret.add_argument("--save", "-s", action="store_true")
+    ret.add_argument("--verbose", "-v", action="store_true")
+
+    # qa
+    qa = sub.add_parser("qa")
+    qa.add_argument("question", nargs="?")
+    qa.add_argument("--interactive", "-i", action="store_true")
+
+    # settings
+    st = sub.add_parser("settings")
+    st_sub = st.add_subparsers(dest="settings_command")
+
+    sv = st_sub.add_parser("view")
+    sv.add_argument("--format", choices=["json", "yaml", "table"], default="table")
+    sv.add_argument("--output", "-o")
+
+    ss = st_sub.add_parser("save")
+    ss.add_argument("--file", "-f")
+    ss.add_argument("--format", choices=["json", "yaml"], default="json")
+    ss.add_argument("--preset", choices=["fast", "balanced", "high_quality", "development", "production"])
+
+    sl = st_sub.add_parser("load")
+    sl.add_argument("--file", "-f", required=True)
+    sl.add_argument("--apply", action="store_true")
+
+    sp = st_sub.add_parser("preset")
+    sp.add_argument("name", choices=["fast", "balanced", "high_quality", "development", "production"])
+    sp.add_argument("--save", "-s", action="store_true")
+
+    sm = st_sub.add_parser("migrate")
+    sm.add_argument("--file", "-f", required=True)
+    sm.add_argument("--output", "-o")
+
+    return p
+
+
+def _dedup(pmids: List[str]) -> List[str]:
+    seen: set = set()
+    return [p for p in pmids if p not in seen and not seen.add(p)]  # type: ignore
+
+
+def _expand_pmids(raw: List[str]) -> List[str]:
+    out: List[str] = []
+    for p in raw or []:
+        out.extend(x.strip() for x in p.split(",") if x.strip())
+    return out
+
+
+# ---------------------------------------------------------------------------
+# Entry point
+# ---------------------------------------------------------------------------
 
 def main():
-    """Main CLI function."""
-    parser = argparse.ArgumentParser(
-        description="BioAnalyzer - User-Friendly BugSigDB Analysis Tool",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-  BioAnalyzer help                    # Show help
-  BioAnalyzer build                   # Build containers
-  BioAnalyzer start                   # Start application
-  BioAnalyzer run table               # Run curator table (Streamlit)
-  BioAnalyzer analyze 12345678        # Analyze single paper
-  BioAnalyzer analyze 12345678,87654321  # Analyze multiple papers
-  BioAnalyzer analyze --file PMID.xls --format csv -o results.csv  # Excel PMIDs → CSV
-  BioAnalyzer retrieve 12345678       # Retrieve single paper
-  BioAnalyzer retrieve 12345678,87654321 --save  # Retrieve multiple papers and save
-  BioAnalyzer fields                  # Show field information
-  BioAnalyzer qa "What is 16S sequencing?"  # Ask a question
-  BioAnalyzer qa --interactive         # Interactive Q&A mode
-  BioAnalyzer status                  # Check status
-  BioAnalyzer stop                    # Stop application
-        """,
-    )
-
-    subparsers = parser.add_subparsers(dest="command", help="Available commands")
-
-    # Help command
-    help_parser = subparsers.add_parser("help", help="Show help information")
-
-    # Build command
-    build_parser = subparsers.add_parser("build", help="Build Docker containers")
-
-    # Start command
-    start_parser = subparsers.add_parser("start", help="Start the application")
-    start_parser.add_argument(
-        "--interactive", "-i", action="store_true", help="Start in interactive mode"
-    )
-
-    # Stop command
-    stop_parser = subparsers.add_parser("stop", help="Stop the application")
-
-    # Restart command
-    restart_parser = subparsers.add_parser("restart", help="Restart the application")
-
-    # Run command (optional components)
-    run_parser = subparsers.add_parser("run", help="Run optional components")
-    run_subparsers = run_parser.add_subparsers(
-        dest="run_command", help="Component to run"
-    )
-    run_table_parser = run_subparsers.add_parser(
-        "table", help="Run curator table (sortable/searchable predictions)"
-    )
-    run_table_parser.add_argument(
-        "--port",
-        "-p",
-        type=int,
-        default=8501,
-        help="Port for Streamlit (default: 8501)",
-    )
-
-    # Status command
-    status_parser = subparsers.add_parser("status", help="Check system status")
-
-    # Analyze command
-    analyze_parser = subparsers.add_parser("analyze", help="Analyze papers")
-    analyze_parser.add_argument("pmids", nargs="*", help="PubMed IDs to analyze")
-    analyze_parser.add_argument(
-        "--file",
-        "-f",
-        help="File with PMIDs: .txt (lines or comma-separated), .csv (first column), .xls/.xlsx (auto-detect PMID column; requires Docker image from build)",
-    )
-    analyze_parser.add_argument(
-        "--format",
-        choices=["table", "json", "csv", "curator_desk_csv", "xml"],
-        default="table",
-        help="Output format",
-    )
-    analyze_parser.add_argument("--output", "-o", help="Output file")
-    analyze_parser.add_argument(
-        "--verbose", "-v", action="store_true", help="Verbose output"
-    )
-
-    # Analyze URL command
-    analyze_url_parser = subparsers.add_parser("analyze-url", help="Analyze study URLs")
-    analyze_url_parser.add_argument("urls", nargs="*", help="Study URLs to analyze")
-    analyze_url_parser.add_argument("--file", "-f", help="File containing study URLs")
-    analyze_url_parser.add_argument(
-        "--embedding-model",
-        default="gemini/text-embedding-004",
-        help="Embedding model identifier",
-    )
-    analyze_url_parser.add_argument(
-        "--llm-model", default="gemini/gemini-2.0-flash", help="LLM model identifier"
-    )
-    analyze_url_parser.add_argument(
-        "--format",
-        choices=["table", "json"],
-        default="table",
-        help="Output format for results",
-    )
-    analyze_url_parser.add_argument("--output", "-o", help="File to save results")
-    analyze_url_parser.add_argument(
-        "--poll-interval", type=int, default=5, help="Seconds between status polls"
-    )
-    analyze_url_parser.add_argument(
-        "--timeout",
-        type=int,
-        default=300,
-        help="Time in seconds before giving up on a job",
-    )
-    analyze_url_parser.add_argument(
-        "--verbose", "-v", action="store_true", help="Verbose output"
-    )
-
-    # Fields command
-    fields_parser = subparsers.add_parser("fields", help="Show field information")
-
-    # Q&A command
-    qa_parser = subparsers.add_parser(
-        "qa", help="Ask questions and get AI-powered answers"
-    )
-    qa_parser.add_argument(
-        "question",
-        nargs="?",
-        help="Question to ask (optional, will start interactive mode if not provided)",
-    )
-    qa_parser.add_argument(
-        "--interactive", "-i", action="store_true", help="Start interactive Q&A mode"
-    )
-
-    # Retrieve command
-    retrieve_parser = subparsers.add_parser(
-        "retrieve", help="Retrieve full paper text and metadata"
-    )
-    retrieve_parser.add_argument("pmids", nargs="*", help="PubMed IDs to retrieve")
-    retrieve_parser.add_argument("--file", "-f", help="File containing PMIDs")
-    retrieve_parser.add_argument(
-        "--format",
-        choices=["table", "json", "csv", "xml"],
-        default="table",
-        help="Output format",
-    )
-    retrieve_parser.add_argument("--output", "-o", help="Output file")
-    retrieve_parser.add_argument(
-        "--save", "-s", action="store_true", help="Save individual paper data to files"
-    )
-    retrieve_parser.add_argument(
-        "--verbose", "-v", action="store_true", help="Verbose output"
-    )
-
-    # Settings command
-    settings_parser = subparsers.add_parser(
-        "settings", help="Manage BioAnalyzer settings"
-    )
-    settings_subparsers = settings_parser.add_subparsers(
-        dest="settings_command", help="Settings commands"
-    )
-
-    # Settings view command
-    settings_view_parser = settings_subparsers.add_parser(
-        "view", help="View current settings"
-    )
-    settings_view_parser.add_argument(
-        "--format",
-        choices=["json", "yaml", "table"],
-        default="table",
-        help="Output format",
-    )
-    settings_view_parser.add_argument("--output", "-o", help="Output file (optional)")
-
-    # Settings save command
-    settings_save_parser = settings_subparsers.add_parser(
-        "save", help="Save current settings to file"
-    )
-    settings_save_parser.add_argument(
-        "--file",
-        "-f",
-        help="Settings file path (default: ~/.bioanalyzer/settings.json)",
-    )
-    settings_save_parser.add_argument(
-        "--format", choices=["json", "yaml"], default="json", help="File format"
-    )
-    settings_save_parser.add_argument(
-        "--preset",
-        choices=["fast", "balanced", "high_quality", "development", "production"],
-        help="Save preset configuration",
-    )
-
-    # Settings load command
-    settings_load_parser = settings_subparsers.add_parser(
-        "load", help="Load settings from file"
-    )
-    settings_load_parser.add_argument(
-        "--file", "-f", required=True, help="Settings file path"
-    )
-    settings_load_parser.add_argument(
-        "--apply", action="store_true", help="Apply loaded settings to environment"
-    )
-
-    # Settings preset command
-    settings_preset_parser = settings_subparsers.add_parser(
-        "preset", help="Apply preset configuration"
-    )
-    settings_preset_parser.add_argument(
-        "name",
-        choices=["fast", "balanced", "high_quality", "development", "production"],
-        help="Preset name",
-    )
-    settings_preset_parser.add_argument(
-        "--save", "-s", action="store_true", help="Save preset to settings file"
-    )
-
-    # Settings migrate command
-    settings_migrate_parser = settings_subparsers.add_parser(
-        "migrate", help="Migrate old settings to new format"
-    )
-    settings_migrate_parser.add_argument(
-        "--file", "-f", required=True, help="Old settings file path"
-    )
-    settings_migrate_parser.add_argument(
-        "--output", "-o", help="Output file for migrated settings"
-    )
-
+    parser = _build_parser()
     args = parser.parse_args()
-
     cli = BioAnalyzerCLI()
-    cli.verbose = args.verbose if hasattr(args, "verbose") else False
+    cli.verbose = getattr(args, "verbose", False)
+    cmd = args.command
 
-    if not args.command or args.command == "help":
+    if not cmd or cmd == "help":
         cli.print_help()
-        return
-
-    if args.command == "build":
+    elif cmd == "build":
         cli.build_containers()
-        return
-
-    if args.command == "start":
-        if args.interactive:
-            cli.start_application()
-            cli.interactive_analysis()
-        else:
-            cli.start_application()
-        return
-
-    if args.command == "stop":
+    elif cmd == "start":
+        cli.start_application()
+        if getattr(args, "interactive", False):
+            asyncio.run(cli.ask_question(""))  # placeholder hook
+    elif cmd == "stop":
         cli.stop_application()
-        return
-
-    if args.command == "restart":
+    elif cmd == "restart":
         cli.restart_application()
-        return
-
-    if args.command == "run":
-        if getattr(args, "run_command", None) == "table":
-            port = getattr(args, "port", 8501)
-            cli.run_table(port=port)
-        else:
-            print("Usage: BioAnalyzer run table   # Run curator table (Streamlit)")
-        return
-
-    if args.command == "status":
+    elif cmd == "status":
         cli.get_system_status()
-        return
-
-    if args.command == "fields":
+    elif cmd == "fields":
         cli.show_fields_info()
-        return
-
-    if args.command == "qa":
+    elif cmd == "run":
+        if getattr(args, "run_command", None) == "table":
+            cli.run_table(port=getattr(args, "port", 8501))
+        else:
+            print("Usage: BioAnalyzer run table")
+    elif cmd == "qa":
         if args.interactive or not args.question:
             cli.interactive_qa()
         else:
             asyncio.run(cli.ask_question(args.question))
-        return
-
-    if args.command == "retrieve":
-        pmids = []
-
-        # Get PMIDs from different sources
-        if args.pmids:
-            # Handle comma-separated PMIDs
-            for pmid in args.pmids:
-                if "," in pmid:
-                    pmids.extend([p.strip() for p in pmid.split(",") if p.strip()])
-                else:
-                    pmids.append(pmid)
-
+    elif cmd == "analyze":
+        pmids = _dedup(_expand_pmids(args.pmids))
         if args.file:
             try:
-                file_pmids = cli.load_pmids_from_file(args.file)
-                pmids.extend(file_pmids)
+                loaded = cli.load_pmids_from_file(args.file)
+                print(f"📁 Loaded {len(loaded)} PMID(s) from {args.file}")
+                pmids = _dedup(pmids + loaded)
             except Exception as e:
-                print(f"❌ Error reading file: {e}")
+                print(f"❌ {e}")
                 return
-
         if not pmids:
-            print("❌ Error: No PMIDs provided.")
-            print("Usage: BioAnalyzer retrieve <pmid1> [pmid2] ...")
-            print("   or: BioAnalyzer retrieve <pmid1,pmid2,pmid3>")
-            print("   or: BioAnalyzer retrieve --file <file>")
+            print("❌ No PMIDs provided. Use: BioAnalyzer analyze <pmid> or --file <file>")
             return
-
-        # Remove duplicates while preserving order
-        seen = set()
-        unique_pmids = []
-        for pmid in pmids:
-            if pmid not in seen:
-                seen.add(pmid)
-                unique_pmids.append(pmid)
-
-        asyncio.run(
-            cli.retrieve_papers(unique_pmids, args.format, args.output, args.save)
-        )
-        return
-
-    if args.command == "analyze-url":
-        cli.handle_url_analysis(
-            urls=args.urls,
-            file_path=args.file,
-            embedding_model=args.embedding_model,
-            llm_model=args.llm_model,
-            output_format=args.format,
-            output_file=args.output,
-            poll_interval=args.poll_interval,
-            timeout=args.timeout,
-        )
-        return
-
-    if args.command == "analyze":
-        pmids = []
-
-        # Get PMIDs from different sources
-        if args.pmids:
-            # Handle comma-separated PMIDs
-            for pmid in args.pmids:
-                if "," in pmid:
-                    pmids.extend([p.strip() for p in pmid.split(",") if p.strip()])
-                else:
-                    pmids.append(pmid)
-
+        asyncio.run(cli.analyze_papers(pmids, args.format, args.output, args.refresh))
+    elif cmd == "analyze-url":
+        cli.handle_url_analysis(args.urls, args.file, args.embedding_model, args.llm_model,
+                                args.format, args.output, args.poll_interval, args.timeout)
+    elif cmd == "retrieve":
+        pmids = _dedup(_expand_pmids(args.pmids))
         if args.file:
             try:
-                file_pmids = cli.load_pmids_from_file(args.file)
-                if not file_pmids:
-                    print(
-                        f"❌ Error: File '{args.file}' is empty or contains no valid PMIDs."
-                    )
-                    print(
-                        "   Please add PMIDs to the file (one per line or comma-separated)."
-                    )
-                    return
-                pmids.extend(file_pmids)
-                print(f"📁 Loaded {len(file_pmids)} PMID(s) from {args.file}")
-            except FileNotFoundError:
-                print(f"❌ Error: File '{args.file}' not found.")
-                return
+                pmids = _dedup(pmids + cli.load_pmids_from_file(args.file))
             except Exception as e:
-                print(f"❌ Error reading file '{args.file}': {e}")
+                print(f"❌ {e}")
                 return
-
         if not pmids:
-            print("❌ Error: No PMIDs provided.")
-            print("Usage: BioAnalyzer analyze <pmid1> [pmid2] ...")
-            print("   or: BioAnalyzer analyze <pmid1,pmid2,pmid3>")
-            print("   or: BioAnalyzer analyze --file <file>")
+            print("❌ No PMIDs provided.")
             return
-
-        # Remove duplicates while preserving order
-        seen = set()
-        unique_pmids = []
-        for pmid in pmids:
-            if pmid not in seen:
-                seen.add(pmid)
-                unique_pmids.append(pmid)
-
-        asyncio.run(cli.analyze_papers(unique_pmids, args.format, args.output))
-        return
-
-    if args.command == "settings":
+        asyncio.run(cli.retrieve_papers(pmids, args.format, args.output, args.save))
+    elif cmd == "settings":
         cli.handle_settings_command(args)
-        return
 
 
 if __name__ == "__main__":
