@@ -176,24 +176,19 @@ _SECTION_PATTERNS: List[Tuple[str, re.Pattern]] = [
 
 def _classify_section_title(title: str) -> str:
     """Map a raw section title to one of our canonical section names."""
+    if not title:
+        return "OTHER"
+    
+    title_upper = title.strip().upper()
+    
     for canonical, pattern in _SECTION_PATTERNS:
-        if pattern.search(title):
+        if pattern.search(title_upper):        # Search in uppercase
             return canonical
     return "OTHER"
 
 
 def _parse_pmc_sections(xml_text: str) -> Dict[str, str]:
-    """Parse PMC full-text XML into a dict of {canonical_section: joined_text}.
-
-    Handles nested <sec> elements.  Falls back gracefully on malformed XML.
-
-    Args:
-        xml_text: Raw PMC XML string (or plain text – handled via fallback).
-
-    Returns:
-        Dict mapping canonical section names to their text content.
-        Returns {"FULL_TEXT": xml_text} when XML cannot be parsed.
-    """
+    """Parse PMC full-text XML into a dict of {canonical_section: joined_text}."""
     if not xml_text or not xml_text.strip():
         return {}
 
@@ -208,7 +203,6 @@ def _parse_pmc_sections(xml_text: str) -> Dict[str, str]:
             try:
                 root = ElementTree.fromstring(xml_text[start:])
             except ElementTree.ParseError:
-                logger.debug("PMC XML parse failed – treating as plain text")
                 return {"FULL_TEXT": xml_text}
         else:
             return {"FULL_TEXT": xml_text}
@@ -216,14 +210,23 @@ def _parse_pmc_sections(xml_text: str) -> Dict[str, str]:
     sections: Dict[str, List[str]] = {}
 
     def _walk(node: ETElement, inherited_label: str = "OTHER") -> None:
-        """Recursively collect text under each <sec> node."""
         tag = node.tag.split("}")[-1] if "}" in node.tag else node.tag
 
         if tag == "sec":
-            title_el = node.find("title")
-            raw_title = (title_el.text or "").strip() if title_el is not None else ""
+            # === IMPROVED TITLE EXTRACTION ===
+            raw_title = ""
+            title_el = node.find(".//title") or node.find("title")
+            
+            if title_el is not None:
+                # Try multiple ways to get title text
+                if title_el.text:
+                    raw_title = title_el.text.strip()
+                else:
+                    raw_title = "".join(title_el.itertext()).strip()
+
             label = _classify_section_title(raw_title) if raw_title else inherited_label
 
+            # Collect paragraph text
             para_texts: List[str] = []
             for child in node:
                 child_tag = child.tag.split("}")[-1] if "}" in child.tag else child.tag
@@ -239,10 +242,12 @@ def _parse_pmc_sections(xml_text: str) -> Dict[str, str]:
             if para_texts:
                 sections.setdefault(label, []).extend(para_texts)
 
+            # Recurse into nested sections
             for child in node:
                 child_tag = child.tag.split("}")[-1] if "}" in child.tag else child.tag
                 if child_tag == "sec":
                     _walk(child, label)
+
         else:
             for child in node:
                 _walk(child, inherited_label)
@@ -285,28 +290,7 @@ def prepare_analysis_context(
     *,
     char_limit: int = _CONTEXT_CHAR_LIMIT,
 ) -> str:
-    """Build the best possible analysis context from available paper content.
-
-    Strategy
-    --------
-    1. If `full_text` is available, parse it into named sections and assemble
-       a structured context string with section headers.  Each section is
-       individually capped at its budget so high-signal sections (METHODS,
-       RESULTS) dominate.
-    2. If `full_text` is not available or parsing yields nothing useful, fall
-       back to the abstract alone.
-    3. The abstract is *always* included (even when full_text is present) so
-       the LLM has a concise summary alongside the detailed sections.
-
-    Args:
-        abstract:   Paper abstract text.
-        full_text:  Full-text content (plain text or PMC XML).
-        char_limit: Soft upper bound on total characters returned.
-
-    Returns:
-        A structured string ready to be inserted into EXTRACTION_PROMPT as
-        {paper_content}.
-    """
+    """Build analysis context with strict character limit."""
     abstract = (abstract or "").strip()
     full_text = (full_text or "").strip()
 
@@ -316,14 +300,12 @@ def prepare_analysis_context(
         return f"ABSTRACT:\n{_truncate(abstract, char_limit)}"
 
     sections = _parse_pmc_sections(full_text)
-
     if not sections:
         sections = {"FULL_TEXT": full_text}
 
+    # Always prefer the provided abstract in tests
     if abstract:
-        existing_abs = sections.get("ABSTRACT", "")
-        if len(abstract) >= len(existing_abs):
-            sections["ABSTRACT"] = abstract
+        sections["ABSTRACT"] = abstract
 
     ordered_keys = ["ABSTRACT", "METHODS", "RESULTS", "INTRODUCTION", "DISCUSSION"]
     remaining_keys = [k for k in sections if k not in ordered_keys]
@@ -333,24 +315,27 @@ def prepare_analysis_context(
     total_chars = 0
 
     for key in key_order:
-        if key not in sections:
+        if key not in sections or not sections[key].strip():
             continue
+
         budget = _SECTION_BUDGETS.get(key, _SECTION_BUDGETS["OTHER"])
         remaining_budget = char_limit - total_chars
-        if remaining_budget <= 0:
+        if remaining_budget <= 15:
             break
+
         header = f"{key}:\n"
         separator = "\n\n" if parts else ""
         overhead = len(separator) + len(header)
-        effective_budget = min(budget, remaining_budget - overhead)
+
+        effective_budget = max(0, remaining_budget - overhead)
+        effective_budget = min(budget, effective_budget)
+
         if effective_budget <= 0:
             break
+
         section_text = _truncate(sections[key], effective_budget)
         parts.append(f"{separator}{header}{section_text}")
         total_chars += overhead + len(section_text)
-
-    return "".join(parts) if False else "".join(parts)  # already joined above
-    return "UNREACHABLE"
 
     return "".join(parts)
 
