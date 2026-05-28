@@ -17,10 +17,21 @@ Usage:
 
 from __future__ import annotations
 
-import asyncio, csv, io, json, logging, os, re, subprocess, sys, time
 import argparse
+import asyncio
+import csv
+import grp
+import io
+import json
+import logging
+import os
+import pwd
+import re
+import subprocess
+import sys
+import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 from xml.etree import ElementTree
 
 if TYPE_CHECKING:
@@ -112,21 +123,21 @@ def _render_table(results: List[Dict[str, Any]]) -> str:
     ]
     for r in results:
         lines += [
-            f"\n📄 PMID: {r.get('pmid','N/A')}",
-            f"📝 Title: {r.get('title','N/A')}",
-            f"📰 Journal: {r.get('journal','N/A')}",
+            f"\n📄 PMID: {r.get('pmid', 'N/A')}",
+            f"📝 Title: {r.get('title', 'N/A')}",
+            f"📰 Journal: {r.get('journal', 'N/A')}",
             "-" * 60,
         ]
         for key, label in ANALYSIS_FIELDS.items():
             fd = r.get("fields", {}).get(key, {})
             icon = STATUS_ICONS.get(fd.get("status", ""), "❓")
             lines.append(
-                f"{icon} {label:20} | {fd.get('status','UNKNOWN'):20} | "
-                f"{str(fd.get('value','N/A')):30} | {fd.get('confidence', 0.0):.2f}"
+                f"{icon} {label:20} | {fd.get('status', 'UNKNOWN'):20} | "
+                f"{str(fd.get('value', 'N/A')):30} | {fd.get('confidence', 0.0):.2f}"
             )
         lines += [
             "-" * 60,
-            f"📋 Summary: {r.get('curation_summary','N/A')}",
+            f"📋 Summary: {r.get('curation_summary ', 'N/A')}",
             f"⏱️  Time: {r.get('processing_time', 0):.2f}s",
             "",
         ]
@@ -243,24 +254,24 @@ def _render_xml(results: List[Dict[str, Any]]) -> str:
         fields = r.get("fields", {})
         lines += [
             "  <Analysis>",
-            f"    <PMID>{r.get('pmid','')}</PMID>",
-            f"    <Title>{r.get('title','')}</Title>",
-            f"    <Journal>{r.get('journal','')}</Journal>",
-            f"    <ProcessingTime>{r.get('processing_time',0)}</ProcessingTime>",
+            f"    <PMID>{r.get('pmid', 'N/A')}</PMID>",
+            f"    <Title>{r.get('title', 'N/A')}</Title>",
+            f"    <Journal>{r.get('journal' , 'N/A')}</Journal>",
+            f"    <ProcessingTime>{r.get('processing_time', 0)}</ProcessingTime>",
             "    <Fields>",
         ]
         for key, tag in xml_field_names.items():
             fd = fields.get(key, {})
             lines += [
                 f"      <{tag}>",
-                f"        <Status>{fd.get('status','UNKNOWN')}</Status>",
-                f"        <Value><![CDATA[{fd.get('value','N/A')}]]></Value>",
-                f"        <Confidence>{fd.get('confidence',0.0):.2f}</Confidence>",
+                f"        <Status>{fd.get('status', 'UNKNOWN')}</Status>",
+                f"        <Value><![CDATA[{fd.get('value', 'N/A')}]]></Value>",
+                f"        <Confidence>{fd.get('confidence', 0.0):.2f}</Confidence>",
                 f"      </{tag}>",
             ]
         lines += [
             "    </Fields>",
-            f"    <Summary><![CDATA[{r.get('curation_summary','')}]]></Summary>",
+            f"    <Summary><![CDATA[{r.get('curation_summary' , '')}]]></Summary>",
             "  </Analysis>",
         ]
     lines.append("</BioAnalyzerResults>")
@@ -288,16 +299,16 @@ def _render_retrieval_table(results: List[Dict[str, Any]]) -> str:
     ]
     for r in results:
         if "error" in r:
-            lines += [f"\n❌ PMID: {r.get('pmid','N/A')}", f"Error: {r['error']}"]
+            lines += [f"\n❌ PMID: {r.get('pmid' , 'N/A')}", f"Error: {r['error']}"]
             continue
         authors = r.get("authors", [])
         author_str = ", ".join(authors[:3]) + (" et al." if len(authors) > 3 else "")
         lines += [
-            f"\n📄 PMID: {r.get('pmid','N/A')}",
-            f"📝 Title: {r.get('title','N/A')}",
-            f"📰 Journal: {r.get('journal','N/A')}",
+            f"\n📄 PMID: {r.get('pmid' , 'N/A')}",
+            f"📝 Title: {r.get('title' , 'N/A')}",
+            f"📰 Journal: {r.get('journal' , 'N/A')}",
             f"👥 Authors: {author_str}",
-            f"📅 Publication Date: {r.get('publication_date','N/A')}",
+            f"📅 Publication Date: {r.get('publication_date', 'N/A')}",
             f"📖 Full Text: {'✅ Available' if r.get('has_full_text') else '❌ Not available'}",
         ]
         abstract = r.get("abstract", "")
@@ -526,8 +537,6 @@ class BioAnalyzerCLI:
                 capture_output=True,
             )
 
-        import pwd, grp
-
         env = os.environ.copy()
         try:
             env["UID"] = str(pwd.getpwuid(os.getuid()).pw_uid)
@@ -717,8 +726,9 @@ print(json.dumps(out))
         output_file: Optional[str] = None,
     ) -> List[str]:
         """Run a PubMed esearch and return PMIDs (spec discovery query by default)."""
+        from app.pubmed_queries import (RECOMMENDED_DISCOVERY_QUERY,
+                                        SEARCH_PRESETS)
         from app.services.data_retrieval import PubMedRetriever
-        from app.pubmed_queries import RECOMMENDED_DISCOVERY_QUERY, SEARCH_PRESETS
 
         if query:
             term = query.strip()
@@ -783,7 +793,7 @@ print(json.dumps(out))
                     results.append(r.json())
                     print(f"✅ Done")
                 else:
-                    print(f"❌ {r.json().get('detail','Unknown error')}")
+                    print(f"❌ {r.json().get('detail', 'Unknown error')}")
             except Exception as e:
                 print(f"❌ {e}")
 
@@ -874,14 +884,14 @@ print(json.dumps(out))
                 status = requests.get(
                     self._build_api_url(f"/analysis-status/{job_id}"), timeout=15
                 ).json()
-                print(f"   ⏳ {status.get('status')} ({status.get('progress','')})")
+                print(f"   ⏳ {status.get('status')} ({status.get('progress', '')})")
                 if status.get("status") == "completed":
                     r = requests.get(
                         self._build_api_url(f"/analysis-result/{job_id}"), timeout=30
                     )
                     return r.json() if r.status_code == 200 else None
                 if status.get("status") == "failed":
-                    print(f"❌ Failed: {status.get('error','')}")
+                    print(f"❌ Failed: {status.get('error', '')}")
                     return None
                 time.sleep(max(1, interval))
             except Exception as e:
@@ -900,20 +910,20 @@ print(json.dumps(out))
         ]
         for r in results:
             lines += [
-                f"\n🔗 {r.get('source_url','N/A')}",
-                f"🆔 Job: {r.get('job_id','N/A')}",
-                f"🧪 Experiments: {len(r.get('experiments',[]))}",
+                f"\n🔗 {r.get('source_url', 'N/A')}",
+                f"🆔 Job: {r.get('job_id', 'N/A')}",
+                f"🧪 Experiments: {len(r.get('experiments', []))}",
                 f"✅ Curation Ready: {'Yes' if r.get('curation_ready') else 'No'}",
-                f"⚠️  Missing: {', '.join(r.get('missing_fields',[])) or 'None'}",
+                f"⚠️  Missing: {', '.join(r.get('missing_fields', [])) or 'None'}",
                 "-" * 60,
             ]
             for exp in r.get("experiments", []):
                 m = exp.get("metadata", {})
                 lines += [
-                    f"   • {exp.get('title','Untitled')}",
-                    f"     Species: {m.get('host_species','N/A')}  Site: {m.get('body_site','N/A')}",
-                    f"     Condition: {m.get('condition','N/A')}  Seq: {m.get('sequencing_type','N/A')}",
-                    f"     Taxa: {m.get('taxa_level','N/A')}  N: {m.get('sample_size','N/A')}",
+                    f"   • {exp.get('title', 'Untitled')}",
+                    f"     Species: {m.get('host_species', 'N/A')}  Site: {m.get('body_site', 'N/A')}",
+                    f"     Condition: {m.get('condition', 'N/A')}  Seq: {m.get('sequencing_type', 'N/A')}",
+                    f"     Taxa: {m.get('taxa_level', 'N/A')}  N: {m.get('sample_size', 'N/A')}",
                     f"     Signatures: {len(exp['signatures']) if exp.get('signatures') else 'None'}",
                     "",
                 ]
@@ -957,9 +967,8 @@ print(json.dumps(out))
 
     def _get_retriever(self):
         try:
-            from app.services.standalone_pubmed_retriever import (
-                StandalonePubMedRetriever,
-            )
+            from app.services.standalone_pubmed_retriever import \
+                StandalonePubMedRetriever
 
             return StandalonePubMedRetriever()
         except ImportError:
@@ -1050,7 +1059,7 @@ print(json.dumps(out))
             elif r.status_code == 404:
                 print("⚠️  Q&A endpoint not available yet.")
             else:
-                print(f"❌ API error: {r.json().get('detail','Unknown')}")
+                print(f"❌ API error: {r.json().get('detail', 'Unknown')}")
         except Exception as e:
             print(f"❌ {e}")
         return None
@@ -1096,7 +1105,7 @@ print(json.dumps(out))
 
     def handle_settings_command(self, args):
         try:
-            from app.core.settings import SettingsManager, BioAnalyzerSettings
+            from app.core.settings import BioAnalyzerSettings, SettingsManager
         except ImportError as e:
             print(f"❌ Failed to import settings module: {e}")
             return
