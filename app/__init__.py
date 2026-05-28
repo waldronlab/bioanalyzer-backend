@@ -21,12 +21,14 @@ from .utils.config import *
 def get_app():
     """Lazy loader for the FastAPI application instance."""
     from .api.app import app as _app  # noqa: PLC0415
+
     return _app
 
 
 _has_fastapi: bool = False
 try:
     import fastapi as _fastapi  # noqa: F401
+
     _has_fastapi = True
 except ImportError:
     pass

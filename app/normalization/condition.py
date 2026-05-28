@@ -95,7 +95,9 @@ def normalize_condition(raw_text: str) -> NormalizedTerm:
         return NormalizedTerm(label, efo_id, "PRESENT", 1.0)
 
     clean_term = _extract_clean_disease_name(raw_text)
-    hit = ols_search(clean_term or raw_text.strip(), "efo", "EFO", mapping_confidence=0.9)
+    hit = ols_search(
+        clean_term or raw_text.strip(), "efo", "EFO", mapping_confidence=0.9
+    )
     if hit:
         label, efo_id, conf = hit
         return NormalizedTerm(label, efo_id, "PRESENT", conf)

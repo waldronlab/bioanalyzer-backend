@@ -10,11 +10,13 @@ class DummyResponse:
 
 def test_check_backend_health_success(monkeypatch):
     """check_backend_health should return True when /health returns 200."""
+
     def _fake_get(url, timeout=5):
         assert url.endswith("/health")
         return DummyResponse(200)
 
     import requests
+
     monkeypatch.setattr(requests, "get", _fake_get)
     cli = BioAnalyzerCLI()
     assert cli.check_backend_health() is True
@@ -22,10 +24,12 @@ def test_check_backend_health_success(monkeypatch):
 
 def test_check_backend_health_failure(monkeypatch):
     """check_backend_health should return False on network errors."""
+
     def _fake_get(url, timeout=5):
         raise RuntimeError("boom")
 
     import requests
+
     monkeypatch.setattr(requests, "get", _fake_get)
     cli = BioAnalyzerCLI()
     assert cli.check_backend_health() is False

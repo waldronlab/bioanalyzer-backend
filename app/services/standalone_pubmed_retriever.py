@@ -38,8 +38,8 @@ class PubMedRetrieverError(Exception):
 class StandalonePubMedRetriever:
     """Retrieve PubMed metadata and PMC full-text without the full service stack."""
 
-    BASE_URL         = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
-    DEFAULT_TIMEOUT  = 10
+    BASE_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
+    DEFAULT_TIMEOUT = 10
     RATE_LIMIT_DELAY = 0.34  # NCBI-recommended minimum inter-request delay (seconds)
 
     def __init__(
@@ -48,9 +48,11 @@ class StandalonePubMedRetriever:
         email: str = "bioanalyzer@example.com",
     ) -> None:
         self.api_key = api_key
-        self.email   = email
+        self.email = email
         self.session = requests.Session()
-        self.session.headers.update({"User-Agent": f"BioAnalyzer/1.0 (contact: {email})"})
+        self.session.headers.update(
+            {"User-Agent": f"BioAnalyzer/1.0 (contact: {email})"}
+        )
 
     # ------------------------------------------------------------------
     # Core HTTP layer
@@ -63,24 +65,28 @@ class StandalonePubMedRetriever:
 
         Returns the response body as a string, or None when all attempts fail.
         """
-        url    = f"{self.BASE_URL}/{endpoint}"
+        url = f"{self.BASE_URL}/{endpoint}"
         params = {
             **params,
             "email": self.email,
-            "tool":  "BioAnalyzer",
+            "tool": "BioAnalyzer",
             **({"api_key": self.api_key} if self.api_key else {}),
         }
 
         for attempt in range(retries):
             try:
                 time.sleep(self.RATE_LIMIT_DELAY)
-                response = self.session.get(url, params=params, timeout=self.DEFAULT_TIMEOUT)
+                response = self.session.get(
+                    url, params=params, timeout=self.DEFAULT_TIMEOUT
+                )
                 response.raise_for_status()
                 return response.text
             except requests.RequestException as e:
-                logger.warning(f"NCBI request failed (attempt {attempt + 1}/{retries}): {e}")
+                logger.warning(
+                    f"NCBI request failed (attempt {attempt + 1}/{retries}): {e}"
+                )
                 if attempt < retries - 1:
-                    time.sleep(2 ** attempt)
+                    time.sleep(2**attempt)
 
         logger.error(f"All {retries} attempts failed for {endpoint}")
         return None
@@ -102,7 +108,7 @@ class StandalonePubMedRetriever:
             return {"error": "PubMed unreachable or invalid response."}
 
         try:
-            root    = ElementTree.fromstring(xml_data)
+            root = ElementTree.fromstring(xml_data)
             article = root.find(".//PubmedArticle/MedlineCitation/Article")
         except ElementTree.ParseError as e:
             logger.error(f"XML parse error for PMID {pmid}: {e}")
@@ -126,13 +132,13 @@ class StandalonePubMedRetriever:
         )
 
         return {
-            "pmid":             pmid,
-            "title":            article.findtext("ArticleTitle", "N/A"),
-            "abstract":         " ".join(
+            "pmid": pmid,
+            "title": article.findtext("ArticleTitle", "N/A"),
+            "abstract": " ".join(
                 t.text for t in article.findall(".//AbstractText") if t.text
             ),
-            "journal":          article.findtext("Journal/Title", "N/A"),
-            "authors":          authors,
+            "journal": article.findtext("Journal/Title", "N/A"),
+            "authors": authors,
             "publication_date": pub_date,
         }
 
@@ -202,7 +208,7 @@ class StandalonePubMedRetriever:
             if "error" in metadata:
                 return metadata
 
-            pmc_id    = self._get_pmc_id_from_pmid(pmid)
+            pmc_id = self._get_pmc_id_from_pmid(pmid)
             full_text = self._fetch_pmc_xml(pmc_id) if pmc_id else ""
 
             if not pmc_id:
@@ -210,19 +216,27 @@ class StandalonePubMedRetriever:
 
             result = {
                 **metadata,
-                "full_text":           full_text,
-                "has_full_text":       bool(full_text.strip()),
+                "full_text": full_text,
+                "has_full_text": bool(full_text.strip()),
                 "retrieval_timestamp": time.time(),
             }
-            logger.info(f"Retrieved PMID {pmid} (full_text={'yes' if full_text else 'no'})")
+            logger.info(
+                f"Retrieved PMID {pmid} (full_text={'yes' if full_text else 'no'})"
+            )
             return result
 
         except Exception as e:
             logger.error(f"Error retrieving PMID {pmid}: {e}")
             return {
-                "pmid": pmid, "error": f"Failed to retrieve paper data: {e}",
-                "title": "", "abstract": "", "journal": "", "authors": [],
-                "publication_date": "", "full_text": "", "has_full_text": False,
+                "pmid": pmid,
+                "error": f"Failed to retrieve paper data: {e}",
+                "title": "",
+                "abstract": "",
+                "journal": "",
+                "authors": [],
+                "publication_date": "",
+                "full_text": "",
+                "has_full_text": False,
                 "retrieval_timestamp": time.time(),
             }
 
@@ -242,4 +256,3 @@ class StandalonePubMedRetriever:
         except ElementTree.ParseError as e:
             logger.error(f"Error parsing search results: {e}")
             return []
-            

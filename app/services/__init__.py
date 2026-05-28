@@ -13,12 +13,15 @@ Contains business logic services for data retrieval, classification, and process
 def __getattr__(name: str):
     if name == "PubMedRetriever":
         from .data_retrieval import PubMedRetriever
+
         return PubMedRetriever
     if name == "analyze_paper_simple":
         from .bugsigdb_analyzer import analyze_paper_simple
+
         return analyze_paper_simple
     if name == "CacheManager":
         from .cache_manager import CacheManager
+
         return CacheManager
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 

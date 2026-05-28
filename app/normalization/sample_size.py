@@ -104,6 +104,8 @@ def normalize_sample_size(raw_value: Any) -> NormalizedTerm:
 
     match = re.search(r"\b(\d[\d,]*)\b", value)
     if match:
-        return NormalizedTerm(str(int(match.group(1).replace(",", ""))), "", "PRESENT", 0.9)
+        return NormalizedTerm(
+            str(int(match.group(1).replace(",", ""))), "", "PRESENT", 0.9
+        )
 
     return NormalizedTerm(value, "", "PARTIALLY_PRESENT", 0.5)

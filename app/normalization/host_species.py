@@ -110,7 +110,9 @@ def normalize_host_species(raw_text: str) -> NormalizedTerm:
         ids = search_resp.json().get("esearchresult", {}).get("idlist", [])
         _rate_limit_delay()
         if ids:
-            summary_params = _with_api_key({"db": "taxonomy", "id": ids[0], "retmode": "json"})
+            summary_params = _with_api_key(
+                {"db": "taxonomy", "id": ids[0], "retmode": "json"}
+            )
             summary_resp = requests.get(
                 NCBI_TAX_SUMMARY_URL, params=summary_params, timeout=5
             )

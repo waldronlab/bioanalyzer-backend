@@ -1,4 +1,5 @@
 import pytest
+
 pytest.importorskip("defusedxml")
 
 from unittest.mock import MagicMock
@@ -12,6 +13,7 @@ def test_search_pubmed_returns_pmids(monkeypatch):
     mock_cls = MagicMock(return_value=mock_retriever)
 
     import app.services.data_retrieval as dr
+
     monkeypatch.setattr(dr, "PubMedRetriever", mock_cls)
     monkeypatch.setenv("NCBI_API_KEY", "test-key")
 
