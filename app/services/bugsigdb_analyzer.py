@@ -2,8 +2,12 @@ import logging
 import re
 import json
 import asyncio
+from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
-from xml.etree import ElementTree
+
+import pytz
+from defusedxml import ElementTree
+from xml.etree.ElementTree import Element as ETElement
 
 from app.normalization.body_site import normalize_body_site
 from app.normalization.condition import normalize_condition
@@ -21,9 +25,21 @@ from app.utils.config import (
     ANALYSIS_TIMEOUT,
     CACHE_VALIDITY_HOURS,
 )
-from app.api.utils.api_utils import get_current_timestamp
+
+# REMOVED: from app.api.utils.api_utils import get_current_timestamp
+# Reason: caused a circular import chain:
+#   bugsigdb_analyzer -> app.api.utils.api_utils
+#   -> app.api.__init__ -> app.api.app -> app.api.routers.bugsigdb_analysis
+#   -> bugsigdb_analyzer  (already being initialized)
+# The function below (_current_timestamp) is the local equivalent and is used
+# throughout this file — the api_utils import was dead code.
 
 logger = logging.getLogger(__name__)
+
+
+def _current_timestamp() -> str:
+    """Get current timestamp in ISO format using UTC."""
+    return datetime.now(pytz.UTC).isoformat()
 
 # ---------------------------------------------------------------------------
 # Singleton service instances
@@ -142,12 +158,9 @@ Rules:
 
 
 # ---------------------------------------------------------------------------
-# PMC XML section parser  (Problem 3 fix)
+# PMC XML section parser
 # ---------------------------------------------------------------------------
 
-# Section title keywords mapped to canonical names.
-# The regex is intentionally broad to handle variations like
-# "Materials and Methods", "Patients and Methods", "Statistical Analysis", etc.
 _SECTION_PATTERNS: List[Tuple[str, re.Pattern]] = [
     ("ABSTRACT",      re.compile(r"abstract",                         re.I)),
     ("INTRODUCTION",  re.compile(r"intro(?:duction)?|background",     re.I)),
@@ -181,14 +194,12 @@ def _parse_pmc_sections(xml_text: str) -> Dict[str, str]:
     if not xml_text or not xml_text.strip():
         return {}
 
-    # Quick check: if it does not look like XML, return as-is
     if not xml_text.lstrip().startswith("<"):
         return {"FULL_TEXT": xml_text}
 
     try:
         root = ElementTree.fromstring(xml_text)
     except ElementTree.ParseError:
-        # Strip everything up to first '<' and retry once
         start = xml_text.find("<")
         if start > 0:
             try:
@@ -201,7 +212,7 @@ def _parse_pmc_sections(xml_text: str) -> Dict[str, str]:
 
     sections: Dict[str, List[str]] = {}
 
-    def _walk(node: ElementTree.Element, inherited_label: str = "OTHER") -> None:
+    def _walk(node: ETElement, inherited_label: str = "OTHER") -> None:
         """Recursively collect text under each <sec> node."""
         tag = node.tag.split("}")[-1] if "}" in node.tag else node.tag
 
@@ -210,7 +221,6 @@ def _parse_pmc_sections(xml_text: str) -> Dict[str, str]:
             raw_title = (title_el.text or "").strip() if title_el is not None else ""
             label = _classify_section_title(raw_title) if raw_title else inherited_label
 
-            # Collect all paragraph text directly inside this <sec>
             para_texts: List[str] = []
             for child in node:
                 child_tag = child.tag.split("}")[-1] if "}" in child.tag else child.tag
@@ -218,8 +228,7 @@ def _parse_pmc_sections(xml_text: str) -> Dict[str, str]:
                     text = "".join(child.itertext()).strip()
                     if text:
                         para_texts.append(text)
-                elif child_tag != "sec":
-                    # Non-section, non-paragraph inline content (tables, figures captions)
+                elif child_tag not in ("sec", "title"):
                     inline = "".join(child.itertext()).strip()
                     if inline:
                         para_texts.append(inline)
@@ -227,7 +236,6 @@ def _parse_pmc_sections(xml_text: str) -> Dict[str, str]:
             if para_texts:
                 sections.setdefault(label, []).extend(para_texts)
 
-            # Recurse into nested sections with parent label as fallback
             for child in node:
                 child_tag = child.tag.split("}")[-1] if "}" in child.tag else child.tag
                 if child_tag == "sec":
@@ -242,22 +250,18 @@ def _parse_pmc_sections(xml_text: str) -> Dict[str, str]:
 
 
 # ---------------------------------------------------------------------------
-# Text preparation  (Problem 2 & 4 fix)
+# Text preparation
 # ---------------------------------------------------------------------------
 
-# Maximum characters fed to the prompt.  Gemini-1.5-Flash handles ~1M tokens
-# but we keep this conservative to control latency and cost.
 _CONTEXT_CHAR_LIMIT = 8_000
 
-# Per-section character budgets (must sum to ≤ _CONTEXT_CHAR_LIMIT).
-# Sections most relevant to our target fields get the largest budgets.
 _SECTION_BUDGETS: Dict[str, int] = {
-    "ABSTRACT":     1_200,   # Always include; condition / species often here
-    "METHODS":      3_000,   # sequencing_type, sample_size, body_site
-    "RESULTS":      2_000,   # differential abundance, sample_size confirmation
-    "INTRODUCTION": 800,     # condition context
-    "DISCUSSION":   600,     # sometimes contains summary stats
-    "OTHER":        400,     # miscellaneous
+    "ABSTRACT":     1_200,
+    "METHODS":      3_000,
+    "RESULTS":      2_000,
+    "INTRODUCTION": 800,
+    "DISCUSSION":   600,
+    "OTHER":        400,
 }
 
 
@@ -266,7 +270,6 @@ def _truncate(text: str, max_chars: int) -> str:
     if len(text) <= max_chars:
         return text
     cut = text[:max_chars]
-    # Try to end on a sentence boundary
     last_period = cut.rfind(".")
     if last_period > max_chars * 0.7:
         cut = cut[: last_period + 1]
@@ -304,34 +307,21 @@ def prepare_analysis_context(
     abstract = (abstract or "").strip()
     full_text = (full_text or "").strip()
 
-    # ------------------------------------------------------------------
-    # Fast path: no full text available → use abstract only
-    # ------------------------------------------------------------------
     if not full_text:
         if not abstract:
             return ""
         return f"ABSTRACT:\n{_truncate(abstract, char_limit)}"
 
-    # ------------------------------------------------------------------
-    # Parse full text into sections
-    # ------------------------------------------------------------------
     sections = _parse_pmc_sections(full_text)
 
-    # If parsing produced nothing useful, treat full_text as plain text
     if not sections:
         sections = {"FULL_TEXT": full_text}
 
-    # Inject abstract into sections dict (overrides any parsed abstract
-    # only when the explicit abstract argument is richer)
     if abstract:
         existing_abs = sections.get("ABSTRACT", "")
         if len(abstract) >= len(existing_abs):
             sections["ABSTRACT"] = abstract
 
-    # ------------------------------------------------------------------
-    # Assemble the context string respecting per-section budgets
-    # ------------------------------------------------------------------
-    # Order: Abstract first, then high-signal sections, then the rest
     ordered_keys = ["ABSTRACT", "METHODS", "RESULTS", "INTRODUCTION", "DISCUSSION"]
     remaining_keys = [k for k in sections if k not in ordered_keys]
     key_order = ordered_keys + remaining_keys
@@ -346,16 +336,24 @@ def prepare_analysis_context(
         remaining_budget = char_limit - total_chars
         if remaining_budget <= 0:
             break
-        effective_budget = min(budget, remaining_budget)
+        header = f"{key}:\n"
+        separator = "\n\n" if parts else ""
+        overhead = len(separator) + len(header)
+        effective_budget = min(budget, remaining_budget - overhead)
+        if effective_budget <= 0:
+            break
         section_text = _truncate(sections[key], effective_budget)
-        parts.append(f"{key}:\n{section_text}")
-        total_chars += len(section_text)
+        parts.append(f"{separator}{header}{section_text}")
+        total_chars += overhead + len(section_text)
 
-    return "\n\n".join(parts)
+    return "".join(parts) if False else "".join(parts)  # already joined above
+    return "UNREACHABLE"
+
+    return "".join(parts)
 
 
 # ---------------------------------------------------------------------------
-# Core LLM extraction helpers (unchanged signatures, updated to use new prompt)
+# Core LLM extraction helpers
 # ---------------------------------------------------------------------------
 
 def extract_year(pub_date_text: Any) -> Optional[int]:
@@ -365,16 +363,48 @@ def extract_year(pub_date_text: Any) -> Optional[int]:
 
 
 def _build_field_result(
-    value: Any, status: str, confidence: Optional[float] = None
+    value: Any,
+    status: str,
+    confidence: Optional[float] = None,
+    *,
+    ontology_id: str = "",
+    mapping_confidence: Optional[float] = None,
 ) -> Dict[str, Any]:
     if confidence is None:
         confidence = 0.85 if status == "PRESENT" else (0.65 if status == "PARTIALLY_PRESENT" else 0.0)
+    map_conf = (
+        float(mapping_confidence)
+        if mapping_confidence is not None
+        else float(confidence)
+    )
     return {
         "value": "" if status == "ABSENT" else ("" if value is None else str(value)),
         "status": status,
         "confidence": float(confidence),
+        "ontology_id": ontology_id or "",
+        "mapping_confidence": map_conf,
         "reason_if_missing": "" if status != "ABSENT" else "Information not found in the paper",
     }
+
+
+def _build_field_result_from_term(term: Any) -> Dict[str, Any]:
+    """Build API field dict from a NormalizedTerm."""
+    from app.normalization.types import NormalizedTerm
+
+    if not isinstance(term, NormalizedTerm):
+        raise TypeError("expected NormalizedTerm")
+    conf = (
+        0.85
+        if term.status == "PRESENT"
+        else (0.65 if term.status == "PARTIALLY_PRESENT" else 0.0)
+    )
+    return _build_field_result(
+        term.label,
+        term.status,
+        confidence=conf,
+        ontology_id=term.ontology_id,
+        mapping_confidence=term.mapping_confidence,
+    )
 
 
 def _is_low_quality_cached_result(analysis_data: Dict[str, Any]) -> bool:
@@ -405,12 +435,10 @@ def _parse_json_object(raw_text: str) -> Dict[str, Any]:
     """Robustly extract a JSON object from an LLM response string."""
     if not raw_text:
         return {}
-    # Try direct parse first (ideal case: model returned clean JSON)
     try:
         return json.loads(raw_text)
     except json.JSONDecodeError:
         pass
-    # Fallback: locate first '{' … last '}'
     start = raw_text.find("{")
     end = raw_text.rfind("}") + 1
     if start != -1 and end > start:
@@ -418,7 +446,6 @@ def _parse_json_object(raw_text: str) -> Dict[str, Any]:
             return json.loads(raw_text[start:end])
         except json.JSONDecodeError:
             pass
-    # Handle fenced JSON blocks
     fenced = re.search(r"```(?:json)?\s*(\{.*\})\s*```", raw_text, flags=re.S)
     if fenced:
         try:
@@ -435,7 +462,6 @@ def _heuristic_payload_from_text(text: str) -> Dict[str, Any]:
         return {}
     lower = t.lower()
 
-    # host species
     host_species_raw = None
     if re.search(
         r"\b(human|humans|men|women|participants?|subjects?|volunteers?|patients?|athletes?|controls?)\b",
@@ -447,7 +473,6 @@ def _heuristic_payload_from_text(text: str) -> Dict[str, Any]:
     elif re.search(r"\b(rat|rats)\b", lower):
         host_species_raw = "rat"
 
-    # body site
     body_site_raw = None
     if re.search(r"\b(fecal|faecal|feces|faeces|stool)\b", lower):
         body_site_raw = "fecal samples"
@@ -456,7 +481,6 @@ def _heuristic_payload_from_text(text: str) -> Dict[str, Any]:
     elif re.search(r"\b(skin|dermal|cutaneous)\b", lower):
         body_site_raw = "skin"
 
-    # condition
     condition_raw = None
     disease_phrase = re.search(
         r"\bpatients?\s+with\s+([a-z][a-z0-9\-\s]{2,80}?(?:syndrome|disease|disorder|infection|cancer|diabetes))\b",
@@ -482,7 +506,6 @@ def _heuristic_payload_from_text(text: str) -> Dict[str, Any]:
                 condition_raw = term
                 break
 
-    # sequencing type
     sequencing_type_raw = None
     if "16s" in lower:
         sequencing_type_raw = "16S rRNA gene sequencing"
@@ -493,7 +516,6 @@ def _heuristic_payload_from_text(text: str) -> Dict[str, Any]:
     elif "sequencing" in lower:
         sequencing_type_raw = "sequencing"
 
-    # sample size
     sample_size_raw: Optional[int] = None
     n_match = re.search(r"\bn\s*=\s*(\d{1,5})\b", lower)
     if n_match:
@@ -545,6 +567,8 @@ def _postprocess_field_results(
             {
                 "value": "Homo sapiens",
                 "status": "PRESENT",
+                "ontology_id": "NCBITaxon:9606",
+                "mapping_confidence": 1.0,
                 "confidence": max(float(host.get("confidence", 0.0) or 0.0), 0.75),
                 "reason_if_missing": "",
             }
@@ -559,12 +583,14 @@ def _postprocess_field_results(
     if disease_phrase:
         disease = disease_phrase.group(1).strip()
         if condition.get("status") in {"ABSENT", "PRESENT"}:
-            cond_val, cond_status = normalize_condition(disease)
-            if cond_status != "ABSENT":
+            cond_term = normalize_condition(disease)
+            if cond_term.status != "ABSENT":
                 condition.update(
                     {
-                        "value": cond_val,
-                        "status": cond_status,
+                        "value": cond_term.label,
+                        "status": cond_term.status,
+                        "ontology_id": cond_term.ontology_id,
+                        "mapping_confidence": cond_term.mapping_confidence,
                         "confidence": max(float(condition.get("confidence", 0.0) or 0.0), 0.75),
                         "reason_if_missing": "",
                     }
@@ -581,11 +607,7 @@ async def _extract_structured_metadata(
     journal: str,
     year: Any,
 ) -> Dict[str, Any]:
-    """Send one unified extraction call to the LLM and return parsed JSON.
-
-    Uses the upgraded EXTRACTION_PROMPT which is section-aware and does not
-    anchor on 'abstract-only' reasoning.
-    """
+    """Send one unified extraction call to the LLM and return parsed JSON."""
     unified_qa = get_unified_qa()
     if unified_qa is None:
         return {}
@@ -606,23 +628,19 @@ async def _extract_structured_metadata(
 
 
 def _field_results_from_unified_payload(payload: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
-    """Map unified prompt JSON payload to internal field structure.
-
-    Unchanged from previous version – normalisers and return shape are stable.
-    """
-    host_val,   host_status   = normalize_host_species(payload.get("host_species_raw"))
-    body_val,   body_status   = normalize_body_site(payload.get("body_site_raw"))
-    cond_val,   cond_status   = normalize_condition(payload.get("condition_raw"))
-    seq_val,    seq_status    = normalize_sequencing_type(payload.get("sequencing_type_raw"))
-    sample_val, sample_status = normalize_sample_size(payload.get("sample_size_raw"))
+    """Map unified prompt JSON payload to internal field structure."""
+    host_term = normalize_host_species(payload.get("host_species_raw"))
+    body_term = normalize_body_site(payload.get("body_site_raw"))
+    cond_term = normalize_condition(payload.get("condition_raw"))
+    seq_term = normalize_sequencing_type(payload.get("sequencing_type_raw"))
+    sample_term = normalize_sample_size(payload.get("sample_size_raw"))
 
     field_results = {
-        "host_species":    _build_field_result(host_val,   host_status),
-        "body_site":       _build_field_result(body_val,   body_status),
-        "condition":       _build_field_result(cond_val,   cond_status),
-        "sequencing_type": _build_field_result(seq_val,    seq_status),
-        "sample_size":     _build_field_result(sample_val, sample_status),
-        # Kept for backward compatibility with existing API consumers
+        "host_species":    _build_field_result_from_term(host_term),
+        "body_site":       _build_field_result_from_term(body_term),
+        "condition":       _build_field_result_from_term(cond_term),
+        "sequencing_type": _build_field_result_from_term(seq_term),
+        "sample_size":     _build_field_result_from_term(sample_term),
         "taxa_level":      create_empty_field_result("taxa_level"),
     }
     if payload.get("_source") == "heuristic":
@@ -649,18 +667,16 @@ def _normalize_extracted_fields(field_results: Dict[str, Dict[str, Any]]) -> Dic
     }
     for key, normalizer in mappings.items():
         current = dict(normalized.get(key) or {})
-        value, status = normalizer(current.get("value"))
-        current["value"] = value if status != "ABSENT" else ""
-        current["status"] = status
+        term = normalizer(current.get("value") or "")
+        current["value"] = term.label if term.status != "ABSENT" else ""
+        current["status"] = term.status
+        current["ontology_id"] = term.ontology_id
+        current["mapping_confidence"] = term.mapping_confidence
         current["confidence"] = float(current.get("confidence", 0.0) or 0.0)
         normalized[key] = current
 
     return normalized
 
-
-# ---------------------------------------------------------------------------
-# _avg_confidence helper (DRY – used in both analyze functions)
-# ---------------------------------------------------------------------------
 
 def _avg_confidence(field_results: Dict[str, Dict[str, Any]]) -> float:
     if not field_results:
@@ -668,10 +684,6 @@ def _avg_confidence(field_results: Dict[str, Dict[str, Any]]) -> float:
     values = [float(f.get("confidence", 0.0)) for f in field_results.values()]
     return sum(values) / len(values)
 
-
-# ---------------------------------------------------------------------------
-# _resolve_diff_abundance helper (DRY – same logic in both analyze functions)
-# ---------------------------------------------------------------------------
 
 def _resolve_diff_abundance(
     payload: Dict[str, Any], fallback_text: str
@@ -687,7 +699,7 @@ def _resolve_diff_abundance(
 
 
 # ---------------------------------------------------------------------------
-# analyze_paper_simple  (updated to use prepare_analysis_context)
+# analyze_paper_simple
 # ---------------------------------------------------------------------------
 
 async def analyze_paper_simple(
@@ -742,15 +754,13 @@ async def analyze_paper_simple(
         full_text = texts.get("full_text", "")
         year      = extract_year(texts.get("publication_date", ""))
 
-        # ── NEW: single, section-aware context builder ────────────────────
         analysis_text = prepare_analysis_context(abstract, full_text)
-        # ─────────────────────────────────────────────────────────────────
 
         if not analysis_text.strip():
             logger.warning(f"No analysable text found for PMID {pmid}")
             return None
 
-        payload       = await _extract_structured_metadata(
+        payload = await _extract_structured_metadata(
             context_text=analysis_text,
             title=title,
             journal=texts.get("journal", ""),
@@ -777,7 +787,7 @@ async def analyze_paper_simple(
             "differential_abundance_confidence": diff_abund_conf,
             "in_bugsigdb":                     is_in_bugsigdb(pmid),
             "fields":                          field_results,
-            "analysis_timestamp":              get_current_timestamp(),
+            "analysis_timestamp":              _current_timestamp(),
             "model_used":                      DEFAULT_MODEL,
         }
 
@@ -813,7 +823,7 @@ async def analyze_paper_simple(
 
 
 # ---------------------------------------------------------------------------
-# analyze_paper_with_rag  (updated to use prepare_analysis_context)
+# analyze_paper_with_rag
 # ---------------------------------------------------------------------------
 
 async def analyze_paper_with_rag(
@@ -821,11 +831,7 @@ async def analyze_paper_with_rag(
     rag_config: Optional[Dict] = None,
     use_rag: bool = True,
 ) -> Optional[Dict]:
-    """Analyse a paper with optional RAG augmentation.
-
-    When RAG is enabled, section-aware chunks are created from the structured
-    full-text and the most relevant sections are retrieved before prompting.
-    """
+    """Analyse a paper with optional RAG augmentation."""
     import time
 
     start_time = time.time()
@@ -838,7 +844,6 @@ async def analyze_paper_with_rag(
             logger.error("PubMedRetriever not available – check NCBI_API_KEY")
             return None
 
-        # Normalise rag_config to a plain dict
         if hasattr(rag_config, "model_dump"):
             rag_config_dict = rag_config.model_dump(exclude_none=True)
         elif hasattr(rag_config, "dict"):
@@ -864,23 +869,17 @@ async def analyze_paper_with_rag(
         full_text = texts.get("full_text", "")
         year      = extract_year(texts.get("publication_date", ""))
 
-        # ── NEW: section-aware context builder ───────────────────────────
         analysis_text = prepare_analysis_context(abstract, full_text)
-        # ─────────────────────────────────────────────────────────────────
 
         if not analysis_text.strip():
             logger.warning(f"No analysable text found for PMID {pmid}")
             return None
 
-        # ── RAG chunking (section-aware) ─────────────────────────────────
         chunks = None
         if use_rag_final and full_text and len(full_text) > 1_000:
             try:
                 from app.utils.chunking import ChunkingService
 
-                # Prefer chunking the *structured* analysis_text so chunk
-                # boundaries align with section boundaries rather than
-                # arbitrary character offsets inside raw XML.
                 chunker = ChunkingService(chunk_chars=3_000, overlap=100)
                 chunks = await chunker.chunk_markdown(
                     markdown=analysis_text,
@@ -892,8 +891,7 @@ async def analyze_paper_with_rag(
                 logger.warning(f"Chunking failed: {chunk_error}")
                 chunks = None
 
-        # ── RAG context retrieval ─────────────────────────────────────────
-        context_for_prompt = analysis_text  # default: use full prepared context
+        context_for_prompt = analysis_text
         if use_rag_final and chunks:
             try:
                 from app.services.advanced_rag import AdvancedRAGService
@@ -920,7 +918,7 @@ async def analyze_paper_with_rag(
 
         processing_time = time.time() - start_time
 
-        payload       = await _extract_structured_metadata(
+        payload = await _extract_structured_metadata(
             context_text=context_for_prompt,
             title=title,
             journal=texts.get("journal", ""),
@@ -947,7 +945,7 @@ async def analyze_paper_with_rag(
             "differential_abundance_confidence": diff_abund_conf,
             "in_bugsigdb":                     is_in_bugsigdb(pmid),
             "fields":                          field_results,
-            "analysis_timestamp":              get_current_timestamp(),
+            "analysis_timestamp":              _current_timestamp(),
             "model_used":                      DEFAULT_MODEL,
             "processing_time":                 processing_time,
             "rag_enabled":                     use_rag_final,
@@ -955,7 +953,6 @@ async def analyze_paper_with_rag(
             "rag_config_used":                 rag_config_dict if use_rag_final else None,
         }
 
-        # ── RAG statistics (unchanged logic, just de-duplicated) ──────────
         if use_rag_final and chunks:
             result["rag_stats"] = _collect_rag_stats(
                 chunks=chunks,
@@ -996,7 +993,7 @@ def _collect_rag_stats(
     rag_config_dict: Optional[Dict],
     processing_time: float,
 ) -> Dict[str, Any]:
-    """Collect RAG metrics into the rag_stats dict (extracted from analyze_paper_with_rag)."""
+    """Collect RAG metrics into the rag_stats dict."""
     _rc = rag_config_dict or {}
     rag_metrics: Dict[str, Any] = {}
 
@@ -1033,7 +1030,7 @@ def _collect_rag_stats(
 
 
 # ---------------------------------------------------------------------------
-# analyze_single_field  (unchanged logic – kept for backward compatibility)
+# analyze_single_field  (kept for backward compatibility)
 # ---------------------------------------------------------------------------
 
 async def analyze_single_field(
@@ -1044,12 +1041,7 @@ async def analyze_single_field(
     chunks: Optional[List] = None,
     rag_config: Optional[Dict] = None,
 ) -> Dict:
-    """Extract a single field value from text using the LLM.
-
-    This per-field path is retained for callers that need granular extraction.
-    The unified EXTRACTION_PROMPT path (analyze_paper_simple / _with_rag) is
-    preferred for full-paper analysis because it is faster (one LLM call vs six).
-    """
+    """Extract a single field value from text using the LLM."""
     try:
         context_text = _build_single_field_context(text, field_name, question, chunks, rag_config)
         return await _query_single_field(context_text, field_name, question, pmid)
@@ -1137,7 +1129,6 @@ Respond ONLY with a JSON object (no markdown):
         else chat_call
     )
 
-    # Fallback if UnifiedQA router error
     answer_text = response.get("text", "")
     if answer_text.startswith("Error:") and (
         "Paper-QA" in answer_text or "router" in answer_text.lower()
@@ -1162,7 +1153,6 @@ Respond ONLY with a JSON object (no markdown):
             "reason_if_missing": parsed.get("reason_if_missing", ""),
         }
 
-    # Confidence-based fallback when JSON parsing fails
     confidence = response.get("confidence", 0.0)
     if not answer_text or confidence < 0.3:
         return create_empty_field_result(field_name)
@@ -1192,16 +1182,14 @@ def create_empty_field_result(field_name: str) -> Dict:
         "value":             None,
         "status":            "ABSENT",
         "confidence":        0.0,
+        "ontology_id":       "",
+        "mapping_confidence": 0.0,
         "reason_if_missing": "Analysis failed or timed out",
     }
 
 
 def detect_differential_abundance(text: str) -> Tuple[bool, float]:
-    """Heuristic differential abundance detector (unchanged).
-
-    Used as a triage filter and fallback when the LLM payload is missing the
-    has_differential_abundance field.  Kept lightweight (no LLM call).
-    """
+    """Heuristic differential abundance detector."""
     if not text or not str(text).strip():
         return False, 0.0
 

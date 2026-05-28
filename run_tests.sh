@@ -1,27 +1,26 @@
 #!/bin/bash
-# Script to run tests in Docker container
+# Run pytest inside Docker (same environment as production / CI).
 
-echo "🧪 Running BioAnalyzer tests in Docker container..."
+set -euo pipefail
 
-# Check if container is running
-if ! docker ps | grep -q bioanalyzer-api; then
-    echo "📦 Container not running. Building and starting..."
-    docker build -t bioanalyzer-package . || exit 1
-    docker run -d --name bioanalyzer-api-test \
-        -v "$(pwd)/tests:/app/tests" \
-        -v "$(pwd)/app:/app/app" \
-        bioanalyzer-package \
-        tail -f /dev/null
-    sleep 2
+IMAGE="${BIOANALYZER_IMAGE:-bioanalyzer-package}"
+ROOT="$(cd "$(dirname "$0")" && pwd)"
+
+echo "🧪 Running BioAnalyzer tests in Docker (${IMAGE})..."
+
+if ! docker image inspect "${IMAGE}" >/dev/null 2>&1; then
+    echo "📦 Building image..."
+    docker build -t "${IMAGE}" "${ROOT}"
 fi
 
-# Run tests with PYTHONPATH set
 echo "🚀 Running pytest..."
-docker exec -e PYTHONPATH=/app bioanalyzer-api-test pytest tests/ -v "$@"
-
-# Optional: Run with coverage
-if [[ "$1" == "--cov" ]]; then
-    echo "📊 Running with coverage..."
-    docker exec bioanalyzer-api-test pytest tests/ --cov=app --cov-report=html --cov-report=term "$@"
-fi
+docker run --rm \
+    -e PYTHONPATH=/app \
+    -e GEMINI_API_KEY="${GEMINI_API_KEY:-test_key_1234567890abcdef}" \
+    -e NCBI_API_KEY="${NCBI_API_KEY:-test-key}" \
+    -e EMAIL="${EMAIL:-test@example.com}" \
+    -v "${ROOT}:/app" \
+    -w /app \
+    "${IMAGE}" \
+    pytest tests/ -v "$@"
 

@@ -64,6 +64,10 @@ def _field_val(fields: dict, key: str, attr: str = "value") -> str:
     return str(fields.get(key, {}).get(attr, "") or "")
 
 
+def _field_ontology_id(fields: dict, key: str) -> str:
+    return str(fields.get(key, {}).get("ontology_id", "") or "")
+
+
 def _status_normalise(value: Any) -> str:
     s = str(value).strip().upper() if value else ""
     return s if s in {"PRESENT", "PARTIALLY_PRESENT", "ABSENT"} else "ABSENT"
@@ -130,10 +134,15 @@ def _render_csv(results: List[Dict[str, Any]]) -> str:
 
 
 def _render_curator_desk_csv(results: List[Dict[str, Any]]) -> str:
-    columns = ["PMID", "Title", "Journal", "Year", "Host Species", "Host Species Status",
-               "Body Site", "Body Site Status", "Condition", "Condition Status",
-               "Sequencing Type", "Sequencing Type Status", "Sample Size", "Sample Size Status",
-               "has_differential_abundance", "differential_abundance_confidence", "in_bugsigdb"]
+    columns = [
+        "PMID", "Title", "Journal", "Year",
+        "Host Species", "Host Species ID", "Host Species Status",
+        "Body Site", "Body Site ID", "Body Site Status",
+        "Condition", "Condition ID", "Condition Status",
+        "Sequencing Type", "Sequencing Type Status",
+        "Sample Size", "Sample Size Status",
+        "has_differential_abundance", "differential_abundance_confidence", "in_bugsigdb",
+    ]
     out = io.StringIO()
     w = csv.DictWriter(out, fieldnames=columns, extrasaction="ignore")
     w.writeheader()
@@ -153,10 +162,13 @@ def _render_curator_desk_csv(results: List[Dict[str, Any]]) -> str:
             "Title": r.get("title", ""), "Journal": r.get("journal", ""),
             "Year": _extract_year(r.get("year") or r.get("publication_date", "")),
             "Host Species":           _field_val(fields, "host_species"),
+            "Host Species ID":        _field_ontology_id(fields, "host_species"),
             "Host Species Status":    _status_normalise(_field_val(fields, "host_species", "status")),
             "Body Site":              _field_val(fields, "body_site"),
+            "Body Site ID":           _field_ontology_id(fields, "body_site"),
             "Body Site Status":       _status_normalise(_field_val(fields, "body_site", "status")),
             "Condition":              _field_val(fields, "condition"),
+            "Condition ID":           _field_ontology_id(fields, "condition"),
             "Condition Status":       _status_normalise(_field_val(fields, "condition", "status")),
             "Sequencing Type":        _field_val(fields, "sequencing_type"),
             "Sequencing Type Status": _status_normalise(_field_val(fields, "sequencing_type", "status")),
@@ -525,6 +537,59 @@ print(json.dumps(out))
             capture_output=True, text=True, check=True)
         return json.loads(result.stdout.strip())
 
+    def get_curator_desk_csv_content(self, results: List[Dict[str, Any]]) -> str:
+        """Serialize analysis results to curator-desk CSV (includes ontology ID columns)."""
+        return render_results(results, "curator_desk_csv")
+
+    # ------------------------------------------------------------------
+    # PubMed discovery search
+    # ------------------------------------------------------------------
+
+    def search_pubmed(
+        self,
+        query: Optional[str] = None,
+        preset: str = "discovery",
+        max_results: int = 100,
+        fmt: str = "txt",
+        output_file: Optional[str] = None,
+    ) -> List[str]:
+        """Run a PubMed esearch and return PMIDs (spec discovery query by default)."""
+        from app.services.data_retrieval import PubMedRetriever
+        from app.pubmed_queries import RECOMMENDED_DISCOVERY_QUERY, SEARCH_PRESETS
+
+        if query:
+            term = query.strip()
+        else:
+            term = SEARCH_PRESETS.get(preset, RECOMMENDED_DISCOVERY_QUERY)
+
+        api_key = os.environ.get("NCBI_API_KEY") or self._env_file_values().get("NCBI_API_KEY", "")
+        retriever = PubMedRetriever(api_key=api_key or None)
+        print(f"🔍 PubMed search (preset={preset}, max={max_results})...")
+        pmids = retriever.search(term, max_results=max_results)
+        if not pmids:
+            print("❌ No PMIDs returned.")
+            return []
+
+        print(f"✅ Found {len(pmids)} PMID(s)")
+        if fmt == "json":
+            content = json.dumps({"query": term, "preset": preset, "pmids": pmids}, indent=2)
+        elif fmt == "csv":
+            out = io.StringIO()
+            w = csv.writer(out)
+            w.writerow(["PMID"])
+            for p in pmids:
+                w.writerow([p])
+            content = out.getvalue()
+        else:
+            content = "\n".join(pmids) + "\n"
+
+        if output_file:
+            Path(output_file).write_text(content, encoding="utf-8")
+            print(f"💾 PMIDs saved to: {output_file}")
+        else:
+            print(content)
+        return pmids
+
     # ------------------------------------------------------------------
     # Analysis commands
     # ------------------------------------------------------------------
@@ -871,6 +936,7 @@ print(json.dumps(out))
         print("""📋 COMMANDS
   build / start / stop / restart / status
   run table [--port N]
+  search [--preset discovery|broad|precision] [-n N] [-o FILE] [--query Q]
   analyze <pmid|pmids>  [--file F] [--format table|json|csv|curator_desk_csv|xml] [-o FILE]
   analyze-url <url>     [--file F] [--format table|json] [-o FILE]
   retrieve <pmid|pmids> [--file F] [--format table|json|csv] [-o FILE] [--save]
@@ -879,6 +945,8 @@ print(json.dumps(out))
   settings view|save|load|preset|migrate
 
 📖 Examples
+  BioAnalyzer search --preset discovery -n 50 -o pmids.txt
+  BioAnalyzer analyze --file pmids.txt --format curator_desk_csv -o predictions.csv
   BioAnalyzer analyze 12345678
   BioAnalyzer analyze --file PMID.xls --format csv -o results.csv
   BioAnalyzer analyze-url https://example.com/study
@@ -912,6 +980,19 @@ def _build_parser() -> argparse.ArgumentParser:
     run_sub = run.add_subparsers(dest="run_command")
     rt = run_sub.add_parser("table")
     rt.add_argument("--port", "-p", type=int, default=8501)
+
+    # search (PubMed discovery)
+    sr = sub.add_parser("search", help="PubMed esearch using spec discovery query presets")
+    sr.add_argument("--query", "-q", help="Custom PubMed query (overrides --preset)")
+    sr.add_argument(
+        "--preset",
+        choices=["discovery", "broad", "precision"],
+        default="discovery",
+        help="Query preset from curator-desk spec (default: discovery)",
+    )
+    sr.add_argument("--max-results", "-n", type=int, default=100)
+    sr.add_argument("--format", choices=["txt", "json", "csv"], default="txt")
+    sr.add_argument("--output", "-o")
 
     # analyze
     an = sub.add_parser("analyze")
@@ -1025,6 +1106,14 @@ def main():
             cli.interactive_qa()
         else:
             asyncio.run(cli.ask_question(args.question))
+    elif cmd == "search":
+        cli.search_pubmed(
+            query=getattr(args, "query", None),
+            preset=getattr(args, "preset", "discovery"),
+            max_results=getattr(args, "max_results", 100),
+            fmt=getattr(args, "format", "txt"),
+            output_file=getattr(args, "output", None),
+        )
     elif cmd == "analyze":
         pmids = _dedup(_expand_pmids(args.pmids))
         if args.file:

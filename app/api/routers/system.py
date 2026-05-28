@@ -116,9 +116,7 @@ async def get_config() -> ConfigResponse:
     except Exception as e:
         safe_error = mask_exception_message(e)
         logger.error(f"Error getting config: {safe_error}")
-        raise HTTPException(
-            status_code=500, detail=f"Error getting configuration: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/health/gemini")
@@ -173,7 +171,7 @@ async def gemini_health_check():
         return {
             "status": "unhealthy",
             "api_key_configured": bool(GEMINI_API_KEY),
-            "error": str(e),
+            "error": "An internal error occurred. Please try again later.",
             "timestamp": get_current_timestamp(),
         }
 
@@ -259,7 +257,7 @@ async def get_metrics():
     except Exception as e:
         safe_error = mask_exception_message(e)
         logger.error(f"Error getting metrics: {safe_error}")
-        raise HTTPException(status_code=500, detail=f"Error getting metrics: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/status")
@@ -323,9 +321,7 @@ async def get_system_status():
     except Exception as e:
         safe_error = mask_exception_message(e)
         logger.error(f"Error getting system status: {safe_error}")
-        raise HTTPException(
-            status_code=500, detail=f"Error getting system status: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/version")
@@ -355,7 +351,7 @@ async def get_version():
     except Exception as e:
         safe_error = mask_exception_message(e)
         logger.error(f"Error getting version: {safe_error}")
-        raise HTTPException(status_code=500, detail=f"Error getting version: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/ping")
@@ -432,6 +428,4 @@ async def ask_question(request: Dict[str, Any]):
     except Exception as e:
         safe_error = mask_exception_message(e)
         logger.error(f"Error in Q&A endpoint: {safe_error}")
-        raise HTTPException(
-            status_code=500, detail=f"Error processing question: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail="Internal server error")

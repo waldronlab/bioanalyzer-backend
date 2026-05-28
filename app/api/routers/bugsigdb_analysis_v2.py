@@ -123,7 +123,7 @@ async def analyze_paper(
     except Exception as e:
         safe_error = mask_exception_message(e)
         logger.error(f"Error in v2 analysis for PMID {pmid}: {safe_error}")
-        raise HTTPException(status_code=500, detail=f"Analysis error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/analyze")
@@ -165,7 +165,7 @@ async def analyze_paper_post(request: AnalysisRequestV2) -> PaperAnalysisResultV
     except Exception as e:
         safe_error = mask_exception_message(e)
         logger.error(f"Error in v2 POST analysis for PMID {request.pmid}: {safe_error}")
-        raise HTTPException(status_code=500, detail=f"Analysis error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/analyze/batch")
@@ -220,7 +220,7 @@ async def analyze_papers_batch(
     except Exception as e:
         safe_error = mask_exception_message(e)
         logger.error(f"Error in batch analysis: {safe_error}")
-        raise HTTPException(status_code=500, detail=f"Batch analysis error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/rag/config")
@@ -251,9 +251,7 @@ async def get_rag_config() -> RAGConfigResponse:
     except Exception as e:
         safe_error = mask_exception_message(e)
         logger.error(f"Error getting RAG config: {safe_error}")
-        raise HTTPException(
-            status_code=500, detail=f"Error getting RAG config: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/fields")
