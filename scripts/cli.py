@@ -726,8 +726,7 @@ print(json.dumps(out))
         output_file: Optional[str] = None,
     ) -> List[str]:
         """Run a PubMed esearch and return PMIDs (spec discovery query by default)."""
-        from app.pubmed_queries import (RECOMMENDED_DISCOVERY_QUERY,
-                                        SEARCH_PRESETS)
+        from app.pubmed_queries import RECOMMENDED_DISCOVERY_QUERY, SEARCH_PRESETS
         from app.services.data_retrieval import PubMedRetriever
 
         if query:
@@ -967,8 +966,9 @@ print(json.dumps(out))
 
     def _get_retriever(self):
         try:
-            from app.services.standalone_pubmed_retriever import \
-                StandalonePubMedRetriever
+            from app.services.standalone_pubmed_retriever import (
+                StandalonePubMedRetriever,
+            )
 
             return StandalonePubMedRetriever()
         except ImportError:
