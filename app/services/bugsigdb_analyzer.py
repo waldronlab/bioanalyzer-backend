@@ -178,11 +178,11 @@ def _classify_section_title(title: str) -> str:
     """Map a raw section title to one of our canonical section names."""
     if not title:
         return "OTHER"
-    
+
     title_upper = title.strip().upper()
-    
+
     for canonical, pattern in _SECTION_PATTERNS:
-        if pattern.search(title_upper):        # Search in uppercase
+        if pattern.search(title_upper):  # Search in uppercase
             return canonical
     return "OTHER"
 
@@ -216,7 +216,7 @@ def _parse_pmc_sections(xml_text: str) -> Dict[str, str]:
             # === IMPROVED TITLE EXTRACTION ===
             raw_title = ""
             title_el = node.find(".//title") or node.find("title")
-            
+
             if title_el is not None:
                 # Try multiple ways to get title text
                 if title_el.text:
