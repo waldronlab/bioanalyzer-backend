@@ -353,6 +353,15 @@ class BioAnalyzerCLI:
             time.sleep(max(0.5, interval))
         return False
 
+    def _wait_for_backend_health(self, timeout: int = 60, interval: float = 2) -> bool:
+        deadline = time.time() + timeout
+        print(f"⏳ Waiting for API health (timeout: {timeout}s)...")
+        while time.time() < deadline:
+            if self.check_backend_health():
+                return True
+            time.sleep(max(0.01, interval))
+        return False
+
     # ------------------------------------------------------------------
     # Lifecycle commands
     # ------------------------------------------------------------------
@@ -564,6 +573,9 @@ print(json.dumps(out))
             print(f"💾 Results saved to: {output_file}")
         else:
             print(content)
+
+    def get_curator_desk_csv_content(self, results: List[Dict[str, Any]]) -> str:
+        return _render_curator_desk_csv(results)
 
     # ------------------------------------------------------------------
     # URL analysis

@@ -3,7 +3,7 @@ import re
 import json
 import asyncio
 from typing import Any, Dict, List, Optional, Tuple
-from xml.etree import ElementTree
+from defusedxml import ElementTree
 
 from app.normalization.body_site import normalize_body_site
 from app.normalization.condition import normalize_condition
