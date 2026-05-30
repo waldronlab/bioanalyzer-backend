@@ -52,6 +52,7 @@ def get_unified_qa() -> Optional[UnifiedQA]:
             logger.error(f"UnifiedQA init failed: {e}")
             try:
                 from app.models.gemini_qa import GeminiQA
+
                 _unified_qa = GeminiQA(api_key=GEMINI_API_KEY)
                 logger.info("Fallback to GeminiQA successful")
             except Exception as e2:
@@ -75,16 +76,17 @@ def get_cache_manager() -> CacheManager:
         _cache_manager = CacheManager()
     return _cache_manager
 
+
 # ---------------------------------------------------------------------------
 # Field definitions (unchanged – kept for reference)
 # ---------------------------------------------------------------------------
 
 ESSENTIAL_FIELDS: Dict[str, str] = {
-    "host_species":    "What host species is being studied in this research?",
-    "body_site":       "What body site or anatomical location was sampled for microbiome analysis?",
-    "condition":       "What disease, treatment, or condition is being studied?",
+    "host_species": "What host species is being studied in this research?",
+    "body_site": "What body site or anatomical location was sampled for microbiome analysis?",
+    "condition": "What disease, treatment, or condition is being studied?",
     "sequencing_type": "What sequencing method or molecular technique was used?",
-    "sample_size":     "How many samples or participants were included in the study?",
+    "sample_size": "How many samples or participants were included in the study?",
 }
 
 EXTRACTION_PROMPT = """\
@@ -149,12 +151,12 @@ Rules:
 # The regex is intentionally broad to handle variations like
 # "Materials and Methods", "Patients and Methods", "Statistical Analysis", etc.
 _SECTION_PATTERNS: List[Tuple[str, re.Pattern]] = [
-    ("ABSTRACT",      re.compile(r"abstract",                         re.I)),
-    ("INTRODUCTION",  re.compile(r"intro(?:duction)?|background",     re.I)),
-    ("METHODS",       re.compile(r"method|material|patient|protocol|statistical", re.I)),
-    ("RESULTS",       re.compile(r"result|finding",                   re.I)),
-    ("DISCUSSION",    re.compile(r"discussion|conclusion|summary",    re.I)),
-    ("SUPPLEMENTARY", re.compile(r"supplement|appendix",              re.I)),
+    ("ABSTRACT", re.compile(r"abstract", re.I)),
+    ("INTRODUCTION", re.compile(r"intro(?:duction)?|background", re.I)),
+    ("METHODS", re.compile(r"method|material|patient|protocol|statistical", re.I)),
+    ("RESULTS", re.compile(r"result|finding", re.I)),
+    ("DISCUSSION", re.compile(r"discussion|conclusion|summary", re.I)),
+    ("SUPPLEMENTARY", re.compile(r"supplement|appendix", re.I)),
 ]
 
 
@@ -252,12 +254,12 @@ _CONTEXT_CHAR_LIMIT = 8_000
 # Per-section character budgets (must sum to ≤ _CONTEXT_CHAR_LIMIT).
 # Sections most relevant to our target fields get the largest budgets.
 _SECTION_BUDGETS: Dict[str, int] = {
-    "ABSTRACT":     1_200,   # Always include; condition / species often here
-    "METHODS":      3_000,   # sequencing_type, sample_size, body_site
-    "RESULTS":      2_000,   # differential abundance, sample_size confirmation
-    "INTRODUCTION": 800,     # condition context
-    "DISCUSSION":   600,     # sometimes contains summary stats
-    "OTHER":        400,     # miscellaneous
+    "ABSTRACT": 1_200,  # Always include; condition / species often here
+    "METHODS": 3_000,  # sequencing_type, sample_size, body_site
+    "RESULTS": 2_000,  # differential abundance, sample_size confirmation
+    "INTRODUCTION": 800,  # condition context
+    "DISCUSSION": 600,  # sometimes contains summary stats
+    "OTHER": 400,  # miscellaneous
 }
 
 
@@ -358,6 +360,7 @@ def prepare_analysis_context(
 # Core LLM extraction helpers (unchanged signatures, updated to use new prompt)
 # ---------------------------------------------------------------------------
 
+
 def extract_year(pub_date_text: Any) -> Optional[int]:
     """Extract 4-digit year from a publication date string."""
     match = re.search(r"\b(19|20)\d{2}\b", str(pub_date_text))
@@ -368,12 +371,18 @@ def _build_field_result(
     value: Any, status: str, confidence: Optional[float] = None
 ) -> Dict[str, Any]:
     if confidence is None:
-        confidence = 0.85 if status == "PRESENT" else (0.65 if status == "PARTIALLY_PRESENT" else 0.0)
+        confidence = (
+            0.85
+            if status == "PRESENT"
+            else (0.65 if status == "PARTIALLY_PRESENT" else 0.0)
+        )
     return {
         "value": "" if status == "ABSENT" else ("" if value is None else str(value)),
         "status": status,
         "confidence": float(confidence),
-        "reason_if_missing": "" if status != "ABSENT" else "Information not found in the paper",
+        "reason_if_missing": (
+            "" if status != "ABSENT" else "Information not found in the paper"
+        ),
     }
 
 
@@ -521,9 +530,11 @@ def _heuristic_payload_from_text(text: str) -> Dict[str, Any]:
                 lower,
             )
         ),
-        "differential_abundance_confidence": 0.6
-        if re.search(r"\b(significant|differential|p\s*[<=>]\s*0?\.\d+)\b", lower)
-        else 0.0,
+        "differential_abundance_confidence": (
+            0.6
+            if re.search(r"\b(significant|differential|p\s*[<=>]\s*0?\.\d+)\b", lower)
+            else 0.0
+        ),
         "_source": "heuristic",
     }
 
@@ -565,7 +576,9 @@ def _postprocess_field_results(
                     {
                         "value": cond_val,
                         "status": cond_status,
-                        "confidence": max(float(condition.get("confidence", 0.0) or 0.0), 0.75),
+                        "confidence": max(
+                            float(condition.get("confidence", 0.0) or 0.0), 0.75
+                        ),
                         "reason_if_missing": "",
                     }
                 )
@@ -605,47 +618,61 @@ async def _extract_structured_metadata(
     return _parse_json_object(response.get("text", ""))
 
 
-def _field_results_from_unified_payload(payload: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+def _field_results_from_unified_payload(
+    payload: Dict[str, Any]
+) -> Dict[str, Dict[str, Any]]:
     """Map unified prompt JSON payload to internal field structure.
 
     Unchanged from previous version – normalisers and return shape are stable.
     """
-    host_val,   host_status   = normalize_host_species(payload.get("host_species_raw"))
-    body_val,   body_status   = normalize_body_site(payload.get("body_site_raw"))
-    cond_val,   cond_status   = normalize_condition(payload.get("condition_raw"))
-    seq_val,    seq_status    = normalize_sequencing_type(payload.get("sequencing_type_raw"))
+    host_val, host_status = normalize_host_species(payload.get("host_species_raw"))
+    body_val, body_status = normalize_body_site(payload.get("body_site_raw"))
+    cond_val, cond_status = normalize_condition(payload.get("condition_raw"))
+    seq_val, seq_status = normalize_sequencing_type(payload.get("sequencing_type_raw"))
     sample_val, sample_status = normalize_sample_size(payload.get("sample_size_raw"))
 
     field_results = {
-        "host_species":    _build_field_result(host_val,   host_status),
-        "body_site":       _build_field_result(body_val,   body_status),
-        "condition":       _build_field_result(cond_val,   cond_status),
-        "sequencing_type": _build_field_result(seq_val,    seq_status),
-        "sample_size":     _build_field_result(sample_val, sample_status),
+        "host_species": _build_field_result(host_val, host_status),
+        "body_site": _build_field_result(body_val, body_status),
+        "condition": _build_field_result(cond_val, cond_status),
+        "sequencing_type": _build_field_result(seq_val, seq_status),
+        "sample_size": _build_field_result(sample_val, sample_status),
         # Kept for backward compatibility with existing API consumers
-        "taxa_level":      create_empty_field_result("taxa_level"),
+        "taxa_level": create_empty_field_result("taxa_level"),
     }
     if payload.get("_source") == "heuristic":
-        for key in ("host_species", "body_site", "condition", "sequencing_type", "sample_size"):
+        for key in (
+            "host_species",
+            "body_site",
+            "condition",
+            "sequencing_type",
+            "sample_size",
+        ):
             field = field_results.get(key, {})
             status = field.get("status")
             if status == "PRESENT":
-                field["confidence"] = min(float(field.get("confidence", 0.0) or 0.0), 0.75)
+                field["confidence"] = min(
+                    float(field.get("confidence", 0.0) or 0.0), 0.75
+                )
             elif status == "PARTIALLY_PRESENT":
-                field["confidence"] = min(float(field.get("confidence", 0.0) or 0.0), 0.6)
+                field["confidence"] = min(
+                    float(field.get("confidence", 0.0) or 0.0), 0.6
+                )
     return field_results
 
 
-def _normalize_extracted_fields(field_results: Dict[str, Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+def _normalize_extracted_fields(
+    field_results: Dict[str, Dict[str, Any]]
+) -> Dict[str, Dict[str, Any]]:
     """Re-normalise field values (idempotent pass for post-processing)."""
     normalized = dict(field_results or {})
 
     mappings = {
-        "host_species":    normalize_host_species,
-        "body_site":       normalize_body_site,
-        "condition":       normalize_condition,
+        "host_species": normalize_host_species,
+        "body_site": normalize_body_site,
+        "condition": normalize_condition,
         "sequencing_type": normalize_sequencing_type,
-        "sample_size":     normalize_sample_size,
+        "sample_size": normalize_sample_size,
     }
     for key, normalizer in mappings.items():
         current = dict(normalized.get(key) or {})
@@ -662,6 +689,7 @@ def _normalize_extracted_fields(field_results: Dict[str, Dict[str, Any]]) -> Dic
 # _avg_confidence helper (DRY – used in both analyze functions)
 # ---------------------------------------------------------------------------
 
+
 def _avg_confidence(field_results: Dict[str, Dict[str, Any]]) -> float:
     if not field_results:
         return 0.0
@@ -672,6 +700,7 @@ def _avg_confidence(field_results: Dict[str, Dict[str, Any]]) -> float:
 # ---------------------------------------------------------------------------
 # _resolve_diff_abundance helper (DRY – same logic in both analyze functions)
 # ---------------------------------------------------------------------------
+
 
 def _resolve_diff_abundance(
     payload: Dict[str, Any], fallback_text: str
@@ -689,6 +718,7 @@ def _resolve_diff_abundance(
 # ---------------------------------------------------------------------------
 # analyze_paper_simple  (updated to use prepare_analysis_context)
 # ---------------------------------------------------------------------------
+
 
 async def analyze_paper_simple(
     pmid: str, force_refresh: bool = False
@@ -708,8 +738,12 @@ async def analyze_paper_simple(
 
         cached = cache_manager.get_analysis_result(pmid)
         low_quality_cached: Optional[Dict[str, Any]] = None
-        if (not force_refresh) and cached and cache_manager.is_cache_valid(
-            cached.get("timestamp", ""), max_age_hours=CACHE_VALIDITY_HOURS
+        if (
+            (not force_refresh)
+            and cached
+            and cache_manager.is_cache_valid(
+                cached.get("timestamp", ""), max_age_hours=CACHE_VALIDITY_HOURS
+            )
         ):
             cached_analysis = cached.get("analysis_data") or {}
             if _is_low_quality_cached_result(cached_analysis):
@@ -737,10 +771,10 @@ async def analyze_paper_simple(
                 return low_quality_cached
             return None
 
-        title     = texts.get("title", "")
-        abstract  = texts.get("abstract", "")
+        title = texts.get("title", "")
+        abstract = texts.get("abstract", "")
         full_text = texts.get("full_text", "")
-        year      = extract_year(texts.get("publication_date", ""))
+        year = extract_year(texts.get("publication_date", ""))
 
         # ── NEW: single, section-aware context builder ────────────────────
         analysis_text = prepare_analysis_context(abstract, full_text)
@@ -750,7 +784,7 @@ async def analyze_paper_simple(
             logger.warning(f"No analysable text found for PMID {pmid}")
             return None
 
-        payload       = await _extract_structured_metadata(
+        payload = await _extract_structured_metadata(
             context_text=analysis_text,
             title=title,
             journal=texts.get("journal", ""),
@@ -764,21 +798,23 @@ async def analyze_paper_simple(
             payload = _heuristic_payload_from_text(analysis_text)
         field_results = _field_results_from_unified_payload(payload)
         field_results = _postprocess_field_results(field_results, analysis_text)
-        has_diff_abund, diff_abund_conf = _resolve_diff_abundance(payload, analysis_text)
+        has_diff_abund, diff_abund_conf = _resolve_diff_abundance(
+            payload, analysis_text
+        )
 
         result = {
-            "pmid":                            pmid,
-            "title":                           title,
-            "authors":                         texts.get("authors", []),
-            "journal":                         texts.get("journal", ""),
-            "publication_date":                texts.get("publication_date", ""),
-            "year":                            year if year is not None else "",
-            "has_differential_abundance":      has_diff_abund,
+            "pmid": pmid,
+            "title": title,
+            "authors": texts.get("authors", []),
+            "journal": texts.get("journal", ""),
+            "publication_date": texts.get("publication_date", ""),
+            "year": year if year is not None else "",
+            "has_differential_abundance": has_diff_abund,
             "differential_abundance_confidence": diff_abund_conf,
-            "in_bugsigdb":                     is_in_bugsigdb(pmid),
-            "fields":                          field_results,
-            "analysis_timestamp":              get_current_timestamp(),
-            "model_used":                      DEFAULT_MODEL,
+            "in_bugsigdb": is_in_bugsigdb(pmid),
+            "fields": field_results,
+            "analysis_timestamp": get_current_timestamp(),
+            "model_used": DEFAULT_MODEL,
         }
 
         logger.info(f"Simple analysis completed for PMID {pmid}")
@@ -788,10 +824,10 @@ async def analyze_paper_simple(
                 pmid=pmid,
                 analysis_data=result,
                 metadata={
-                    "title":            title,
-                    "journal":          texts.get("journal", ""),
+                    "title": title,
+                    "journal": texts.get("journal", ""),
                     "publication_date": texts.get("publication_date", ""),
-                    "authors":          texts.get("authors", []),
+                    "authors": texts.get("authors", []),
                 },
                 source=DEFAULT_MODEL,
                 confidence=_avg_confidence(field_results),
@@ -816,6 +852,7 @@ async def analyze_paper_simple(
 # analyze_paper_with_rag  (updated to use prepare_analysis_context)
 # ---------------------------------------------------------------------------
 
+
 async def analyze_paper_with_rag(
     pmid: str,
     rag_config: Optional[Dict] = None,
@@ -831,7 +868,7 @@ async def analyze_paper_with_rag(
     start_time = time.time()
 
     try:
-        cache_manager    = get_cache_manager()
+        cache_manager = get_cache_manager()
         pubmed_retriever = get_pubmed_retriever()
 
         if pubmed_retriever is None:
@@ -859,10 +896,10 @@ async def analyze_paper_with_rag(
             logger.warning(f"No content found for PMID {pmid}")
             return None
 
-        title     = texts.get("title", "")
-        abstract  = texts.get("abstract", "")
+        title = texts.get("title", "")
+        abstract = texts.get("abstract", "")
         full_text = texts.get("full_text", "")
-        year      = extract_year(texts.get("publication_date", ""))
+        year = extract_year(texts.get("publication_date", ""))
 
         # ── NEW: section-aware context builder ───────────────────────────
         analysis_text = prepare_analysis_context(abstract, full_text)
@@ -887,7 +924,9 @@ async def analyze_paper_with_rag(
                     doc_name=f"PMID_{pmid}",
                     doc_key=pmid,
                 )
-                logger.info(f"Created {len(chunks)} section-aware chunks for PMID {pmid}")
+                logger.info(
+                    f"Created {len(chunks)} section-aware chunks for PMID {pmid}"
+                )
             except Exception as chunk_error:
                 logger.warning(f"Chunking failed: {chunk_error}")
                 chunks = None
@@ -916,11 +955,13 @@ async def analyze_paper_with_rag(
                     max_sources=_rc.get("max_sources"),
                 )
             except Exception as rag_error:
-                logger.warning(f"RAG context retrieval failed, using prepared context: {rag_error}")
+                logger.warning(
+                    f"RAG context retrieval failed, using prepared context: {rag_error}"
+                )
 
         processing_time = time.time() - start_time
 
-        payload       = await _extract_structured_metadata(
+        payload = await _extract_structured_metadata(
             context_text=context_for_prompt,
             title=title,
             journal=texts.get("journal", ""),
@@ -934,25 +975,27 @@ async def analyze_paper_with_rag(
             payload = _heuristic_payload_from_text(analysis_text)
         field_results = _field_results_from_unified_payload(payload)
         field_results = _postprocess_field_results(field_results, analysis_text)
-        has_diff_abund, diff_abund_conf = _resolve_diff_abundance(payload, analysis_text)
+        has_diff_abund, diff_abund_conf = _resolve_diff_abundance(
+            payload, analysis_text
+        )
 
         result: Dict[str, Any] = {
-            "pmid":                            pmid,
-            "title":                           title,
-            "authors":                         texts.get("authors", []),
-            "journal":                         texts.get("journal", ""),
-            "publication_date":                texts.get("publication_date", ""),
-            "year":                            year if year is not None else "",
-            "has_differential_abundance":      has_diff_abund,
+            "pmid": pmid,
+            "title": title,
+            "authors": texts.get("authors", []),
+            "journal": texts.get("journal", ""),
+            "publication_date": texts.get("publication_date", ""),
+            "year": year if year is not None else "",
+            "has_differential_abundance": has_diff_abund,
             "differential_abundance_confidence": diff_abund_conf,
-            "in_bugsigdb":                     is_in_bugsigdb(pmid),
-            "fields":                          field_results,
-            "analysis_timestamp":              get_current_timestamp(),
-            "model_used":                      DEFAULT_MODEL,
-            "processing_time":                 processing_time,
-            "rag_enabled":                     use_rag_final,
-            "rag_stats":                       None,
-            "rag_config_used":                 rag_config_dict if use_rag_final else None,
+            "in_bugsigdb": is_in_bugsigdb(pmid),
+            "fields": field_results,
+            "analysis_timestamp": get_current_timestamp(),
+            "model_used": DEFAULT_MODEL,
+            "processing_time": processing_time,
+            "rag_enabled": use_rag_final,
+            "rag_stats": None,
+            "rag_config_used": rag_config_dict if use_rag_final else None,
         }
 
         # ── RAG statistics (unchanged logic, just de-duplicated) ──────────
@@ -971,10 +1014,10 @@ async def analyze_paper_with_rag(
                 pmid=pmid,
                 analysis_data=result,
                 metadata={
-                    "title":            title,
-                    "journal":          texts.get("journal", ""),
+                    "title": title,
+                    "journal": texts.get("journal", ""),
                     "publication_date": texts.get("publication_date", ""),
-                    "authors":          texts.get("authors", []),
+                    "authors": texts.get("authors", []),
                 },
                 source=DEFAULT_MODEL,
                 confidence=_avg_confidence(field_results),
@@ -1014,27 +1057,28 @@ def _collect_rag_stats(
         pass
 
     return {
-        "chunks_processed":         len(chunks),
-        "chunks_ranked":            rag_metrics.get("chunks_reranked", len(chunks)),
-        "chunks_summarized":        min(_rc.get("top_k_chunks", 10), len(chunks)),
-        "avg_relevance_score":      rag_metrics.get("avg_relevance_score", 0.75),
-        "max_relevance_score":      rag_metrics.get("max_relevance_score", 0.0),
-        "min_relevance_score":      rag_metrics.get("min_relevance_score", 0.0),
-        "avg_confidence":           _avg_confidence(field_results),
-        "rerank_method":            _rc.get("rerank_method", "hybrid"),
-        "summary_length":           _rc.get("summary_length", "medium"),
-        "evidence_k":               _rc.get("evidence_k"),
-        "max_sources":              _rc.get("max_sources"),
-        "use_10_scale":             _rc.get("use_10_scale", True),
-        "rerank_processing_time":   rag_metrics.get("processing_time", 0.0),
+        "chunks_processed": len(chunks),
+        "chunks_ranked": rag_metrics.get("chunks_reranked", len(chunks)),
+        "chunks_summarized": min(_rc.get("top_k_chunks", 10), len(chunks)),
+        "avg_relevance_score": rag_metrics.get("avg_relevance_score", 0.75),
+        "max_relevance_score": rag_metrics.get("max_relevance_score", 0.0),
+        "min_relevance_score": rag_metrics.get("min_relevance_score", 0.0),
+        "avg_confidence": _avg_confidence(field_results),
+        "rerank_method": _rc.get("rerank_method", "hybrid"),
+        "summary_length": _rc.get("summary_length", "medium"),
+        "evidence_k": _rc.get("evidence_k"),
+        "max_sources": _rc.get("max_sources"),
+        "use_10_scale": _rc.get("use_10_scale", True),
+        "rerank_processing_time": rag_metrics.get("processing_time", 0.0),
         "avg_chunk_processing_time": rag_metrics.get("avg_chunk_processing_time", 0.0),
-        "processing_time":          processing_time,
+        "processing_time": processing_time,
     }
 
 
 # ---------------------------------------------------------------------------
 # analyze_single_field  (unchanged logic – kept for backward compatibility)
 # ---------------------------------------------------------------------------
+
 
 async def analyze_single_field(
     text: str,
@@ -1051,7 +1095,9 @@ async def analyze_single_field(
     preferred for full-paper analysis because it is faster (one LLM call vs six).
     """
     try:
-        context_text = _build_single_field_context(text, field_name, question, chunks, rag_config)
+        context_text = _build_single_field_context(
+            text, field_name, question, chunks, rag_config
+        )
         return await _query_single_field(context_text, field_name, question, pmid)
     except asyncio.TimeoutError:
         logger.warning(f"Field {field_name} timed out for PMID {pmid}")
@@ -1078,6 +1124,7 @@ async def _build_single_field_context(
 
         if _rc.get("enabled", True):
             from app.services.contextual_summarization import SummarizationConfig
+
             svc = AdvancedRAGService(
                 summary_provider=_rc.get("summary_provider"),
                 summary_model=_rc.get("summary_model"),
@@ -1105,7 +1152,9 @@ async def _build_single_field_context(
         logger.info(f"RAG context for field {field_name}: {len(ctx)} chars")
         return ctx
     except Exception as rag_error:
-        logger.warning(f"RAG failed for field {field_name}, using plain text: {rag_error}")
+        logger.warning(
+            f"RAG failed for field {field_name}, using plain text: {rag_error}"
+        )
         return text[:2_000]
 
 
@@ -1145,6 +1194,7 @@ Respond ONLY with a JSON object (no markdown):
         logger.info(f"Falling back to GeminiQA for field {field_name}")
         try:
             from app.models.gemini_qa import GeminiQA
+
             response = await asyncio.wait_for(
                 GeminiQA(api_key=GEMINI_API_KEY).chat(prompt), timeout=ANALYSIS_TIMEOUT
             )
@@ -1156,9 +1206,11 @@ Respond ONLY with a JSON object (no markdown):
     parsed = _parse_json_object(answer_text)
     if parsed:
         return {
-            "value":            parsed.get("value"),
-            "status":           parsed.get("status", "ABSENT"),
-            "confidence":       float(parsed.get("confidence", response.get("confidence", 0.0))),
+            "value": parsed.get("value"),
+            "status": parsed.get("status", "ABSENT"),
+            "confidence": float(
+                parsed.get("confidence", response.get("confidence", 0.0))
+            ),
             "reason_if_missing": parsed.get("reason_if_missing", ""),
         }
 
@@ -1167,7 +1219,12 @@ Respond ONLY with a JSON object (no markdown):
     if not answer_text or confidence < 0.3:
         return create_empty_field_result(field_name)
 
-    if confidence >= 0.8 and answer_text.lower() not in {"not found", "not available", "none", "n/a"}:
+    if confidence >= 0.8 and answer_text.lower() not in {
+        "not found",
+        "not available",
+        "none",
+        "n/a",
+    }:
         status = "PRESENT"
     elif confidence >= 0.4:
         status = "PARTIALLY_PRESENT"
@@ -1175,10 +1232,12 @@ Respond ONLY with a JSON object (no markdown):
         status = "ABSENT"
 
     return {
-        "value":             answer_text if status != "ABSENT" else None,
-        "status":            status,
-        "confidence":        confidence,
-        "reason_if_missing": "" if status != "ABSENT" else "Information not found in the paper",
+        "value": answer_text if status != "ABSENT" else None,
+        "status": status,
+        "confidence": confidence,
+        "reason_if_missing": (
+            "" if status != "ABSENT" else "Information not found in the paper"
+        ),
     }
 
 
@@ -1186,12 +1245,13 @@ Respond ONLY with a JSON object (no markdown):
 # Utility functions
 # ---------------------------------------------------------------------------
 
+
 def create_empty_field_result(field_name: str) -> Dict:
     """Return a safe empty result when field extraction fails."""
     return {
-        "value":             None,
-        "status":            "ABSENT",
-        "confidence":        0.0,
+        "value": None,
+        "status": "ABSENT",
+        "confidence": 0.0,
         "reason_if_missing": "Analysis failed or timed out",
     }
 
@@ -1211,18 +1271,26 @@ def detect_differential_abundance(text: str) -> Tuple[bool, float]:
         r"\bdifferential(?:ly)? abundant\b",
         r"\bdifferential abundance\b",
         r"\bsignificant(?:ly)? (?:different|difference)\b",
-        r"\benriched\b", r"\bdepleted\b",
-        r"\bup-?regulated\b", r"\bdown-?regulated\b",
-        r"\bfdr\b", r"\badjusted p(?:-|\s*)value\b",
+        r"\benriched\b",
+        r"\bdepleted\b",
+        r"\bup-?regulated\b",
+        r"\bdown-?regulated\b",
+        r"\bfdr\b",
+        r"\badjusted p(?:-|\s*)value\b",
     ]
     medium_patterns = [
-        r"\bcompared to\b", r"\bversus\b|\bvs\.\b|\bvs\b",
-        r"\bdifference(?:s)? in\b", r"\bassociated with\b",
+        r"\bcompared to\b",
+        r"\bversus\b|\bvs\.\b|\bvs\b",
+        r"\bdifference(?:s)? in\b",
+        r"\bassociated with\b",
         r"\bincrease(?:d)?\b|\bdecrease(?:d)?\b",
     ]
     weak_patterns = [
-        r"\b(relative )?abundance\b", r"\bcomposition\b", r"\bdysbiosis\b",
-        r"\b(beta|alpha) diversity\b", r"\bcommunity structure\b",
+        r"\b(relative )?abundance\b",
+        r"\bcomposition\b",
+        r"\bdysbiosis\b",
+        r"\b(beta|alpha) diversity\b",
+        r"\bcommunity structure\b",
     ]
 
     def _count(patterns: List[str]) -> int:
@@ -1230,7 +1298,7 @@ def detect_differential_abundance(text: str) -> Tuple[bool, float]:
 
     strong = _count(strong_patterns)
     medium = _count(medium_patterns)
-    weak   = _count(weak_patterns)
+    weak = _count(weak_patterns)
 
     score = 0.0
     if strong:
