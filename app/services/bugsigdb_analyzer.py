@@ -215,7 +215,12 @@ def _parse_pmc_sections(xml_text: str) -> Dict[str, str]:
         if tag == "sec":
             # === IMPROVED TITLE EXTRACTION ===
             raw_title = ""
-            title_el = node.find(".//title") or node.find("title")
+            ns_prefix = ""
+            if "}" in node.tag:
+                ns_prefix = node.tag.split("}")[0] + "}"
+            title_el = node.find(f".//{ns_prefix}title") or node.find(
+                f"{ns_prefix}title"
+            )
 
             if title_el is not None:
                 # Try multiple ways to get title text
@@ -277,11 +282,15 @@ def _truncate(text: str, max_chars: int) -> str:
     """Truncate text to max_chars, breaking at a sentence boundary when possible."""
     if len(text) <= max_chars:
         return text
-    cut = text[:max_chars]
+    suffix = " [truncated]"
+    if max_chars <= len(suffix):
+        return text[:max_chars]
+    limit = max_chars - len(suffix)
+    cut = text[:limit]
     last_period = cut.rfind(".")
-    if last_period > max_chars * 0.7:
+    if last_period > limit * 0.7:
         cut = cut[: last_period + 1]
-    return cut + " [truncated]"
+    return cut + suffix
 
 
 def prepare_analysis_context(
