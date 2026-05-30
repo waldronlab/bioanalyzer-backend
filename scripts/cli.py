@@ -17,7 +17,16 @@ Usage:
 
 from __future__ import annotations
 
-import asyncio, csv, io, json, logging, os, re, subprocess, sys, time
+import asyncio
+import csv
+import io
+import json
+import logging
+import os
+import re
+import subprocess
+import sys
+import time
 import argparse
 from pathlib import Path
 from typing import Any, Dict, List, Optional, TYPE_CHECKING
@@ -525,7 +534,8 @@ class BioAnalyzerCLI:
                 capture_output=True,
             )
 
-        import pwd, grp
+        import pwd
+        import grp
 
         env = os.environ.copy()
         try:
