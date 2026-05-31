@@ -18,6 +18,7 @@ services:
       - ./cache:/app/cache
       - ./logs:/app/logs
       - ./results:/app/results
+      - ./models:/app/models 
       - ./tests:/app/tests
       - ./app:/app/app
     healthcheck:

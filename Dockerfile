@@ -26,7 +26,7 @@ COPY setup.py pyproject.toml README.md ./
 RUN pip install --no-cache-dir --no-deps .
 
 # Prepare runtime directories
-RUN mkdir -p cache logs results
+RUN mkdir -p cache logs results models data
 RUN chmod +x scripts/cli.py || true
 RUN chmod +x scripts/*.py || true
 
@@ -48,7 +48,9 @@ COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/pytho
 COPY --from=builder /usr/local/bin /usr/local/bin
 COPY --from=builder /app /app
 
-RUN mkdir -p cache logs results
+# Create all runtime directories and make them writable by any user (fixes UID/GID mismatch)
+RUN mkdir -p /app/cache /app/logs /app/results /app/models /app/data \
+    && chmod -R 777 /app/cache /app/logs /app/results /app/models /app/data
 
 EXPOSE 8000
 
@@ -66,6 +68,8 @@ ENV PYTHONPATH=/app
 
 WORKDIR /app
 
+# Directories already created + chmod'd in runtime stage above; nothing extra needed
+
 # Install test + dev dependencies
 RUN pip install --no-cache-dir \
     pytest \
@@ -76,5 +80,5 @@ RUN pip install --no-cache-dir \
     mypy \
     defusedxml
 
-# Default command for running tests
-CMD ["pytest", "-v"]
+# Default command for running the API server (allowing tests via exec)
+CMD ["python", "scripts/main.py", "--host", "0.0.0.0", "--port", "8000"]
