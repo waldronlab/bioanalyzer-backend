@@ -27,7 +27,7 @@ def _handle_analysis_error(pmid: str, e: Exception) -> None:
     """Handle analysis errors consistently."""
     safe_error = mask_exception_message(e)
     logger.error(f"Error in analysis for PMID {pmid}: {safe_error}")
-    raise HTTPException(status_code=500, detail=f"Analysis error: {str(e)}")
+    raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/analyze/{pmid}")

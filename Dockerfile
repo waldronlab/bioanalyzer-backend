@@ -1,60 +1,80 @@
-FROM python:3.11-slim
-
-# Set working directory
+FROM python:3.11-slim AS builder
 
 WORKDIR /app
 
-# Ensure Python can find your app
-
-ENV PYTHONPATH="/app:/app/app"
-
-# Install system dependencies
-
+# System dependencies
 RUN apt-get update && apt-get install -y \
-    gcc g++ curl git \
+    gcc g++ git \
     && rm -rf /var/lib/apt/lists/*
 
-# Upgrade pip tools
-
+# Upgrade packaging tools
 RUN pip install --upgrade pip setuptools wheel
 
-# Copy dependency files first (better Docker caching)
+# Copy dependency files first (better caching)
 COPY config/requirements.txt ./config/requirements.txt
-COPY pyproject.toml README.md ./
+COPY pyproject.toml setup.py README.md ./
 
-# Install dependencies from centralized requirements file
+# Install Python dependencies
 RUN pip install --no-cache-dir -r config/requirements.txt
 
-# Install package metadata/entrypoints without re-installing dependencies
+# Copy application code
+COPY app ./app
+COPY scripts ./scripts
+COPY setup.py pyproject.toml README.md ./
+
+# Install project itself
 RUN pip install --no-cache-dir --no-deps .
 
-# Copy the rest of the application
-
-COPY . .
-
-# (Optional) Install in editable mode for dev/CLI usage
-
-# You can remove this in production if not needed
-
-RUN pip install --no-cache-dir --no-deps -e .[dev]
-
-# Create required directories
-
+# Prepare runtime directories
 RUN mkdir -p cache logs results
-
-# Ensure scripts are executable
-
 RUN chmod +x scripts/cli.py || true
 RUN chmod +x scripts/*.py || true
 
-# Expose API port
+
+# -----------------------------
+# RUNTIME IMAGE
+# -----------------------------
+FROM python:3.11-slim AS runtime
+
+WORKDIR /app
+ENV PYTHONPATH=/app
+
+RUN apt-get update && apt-get install -y \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy installed packages + app from builder
+COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
+COPY --from=builder /usr/local/bin /usr/local/bin
+COPY --from=builder /app /app
+
+RUN mkdir -p cache logs results
 
 EXPOSE 8000
 
-# Healthcheck
-
 HEALTHCHECK CMD curl -f http://localhost:8000/health || exit 1
 
-# Start application
-
 CMD ["python", "scripts/main.py", "--host", "0.0.0.0", "--port", "8000"]
+
+
+# -----------------------------
+# TEST IMAGE
+# -----------------------------
+FROM runtime AS test
+
+ENV PYTHONPATH=/app
+
+WORKDIR /app
+
+# Install test + dev dependencies
+RUN pip install --no-cache-dir \
+    pytest \
+    pytest-cov \
+    pytest-asyncio \
+    black \
+    flake8 \
+    mypy \
+    defusedxml
+
+# Default command for running tests
+CMD ["pytest", "-v"]

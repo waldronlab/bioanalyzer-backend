@@ -9,16 +9,28 @@ __version__ = "1.0.0"
 __author__ = "WaldronLab"
 __description__ = "A comprehensive tool for identifying curatable microbiome signatures"
 
-# Import main components for easy access
-# Lazy import to avoid requiring FastAPI when only using models
+from .utils.config import *
+
+# api.app is NOT imported here. Eagerly importing it triggers services/__init__.py
+# → data_retrieval → defusedxml/FastAPI which may not be present in lightweight
+# test environments, and freezes sys.modules['app'] before subpackages like
+# app.normalization are registered.
+# Use get_app() below, or import directly: from app.api.app import app
+
+
+def get_app():
+    """Lazy loader for the FastAPI application instance."""
+    from .api.app import app as _app  # noqa: PLC0415
+
+    return _app
+
+
+_has_fastapi: bool = False
 try:
-    from .api.app import app
+    import fastapi as _fastapi  # noqa: F401
 
     _has_fastapi = True
 except ImportError:
-    app = None
-    _has_fastapi = False
+    pass
 
-from .utils.config import *
-
-__all__ = ["app"] + [name for name in dir() if not name.startswith("_")]
+__all__ = ["get_app", "__version__"]

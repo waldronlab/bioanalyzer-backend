@@ -17,19 +17,21 @@ Usage:
 
 from __future__ import annotations
 
+import argparse
 import asyncio
 import csv
+import grp
 import io
 import json
 import logging
 import os
+import pwd
 import re
 import subprocess
 import sys
 import time
-import argparse
 from pathlib import Path
-from typing import Any, Dict, List, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 from xml.etree import ElementTree
 
 if TYPE_CHECKING:
@@ -76,6 +78,10 @@ def _field_val(fields: dict, key: str, attr: str = "value") -> str:
     return str(fields.get(key, {}).get(attr, "") or "")
 
 
+def _field_ontology_id(fields: dict, key: str) -> str:
+    return str(fields.get(key, {}).get("ontology_id", "") or "")
+
+
 def _status_normalise(value: Any) -> str:
     s = str(value).strip().upper() if value else ""
     return s if s in {"PRESENT", "PARTIALLY_PRESENT", "ABSENT"} else "ABSENT"
@@ -117,21 +123,21 @@ def _render_table(results: List[Dict[str, Any]]) -> str:
     ]
     for r in results:
         lines += [
-            f"\n📄 PMID: {r.get('pmid','N/A')}",
-            f"📝 Title: {r.get('title','N/A')}",
-            f"📰 Journal: {r.get('journal','N/A')}",
+            f"\n📄 PMID: {r.get('pmid', 'N/A')}",
+            f"📝 Title: {r.get('title', 'N/A')}",
+            f"📰 Journal: {r.get('journal', 'N/A')}",
             "-" * 60,
         ]
         for key, label in ANALYSIS_FIELDS.items():
             fd = r.get("fields", {}).get(key, {})
             icon = STATUS_ICONS.get(fd.get("status", ""), "❓")
             lines.append(
-                f"{icon} {label:20} | {fd.get('status','UNKNOWN'):20} | "
-                f"{str(fd.get('value','N/A')):30} | {fd.get('confidence', 0.0):.2f}"
+                f"{icon} {label:20} | {fd.get('status', 'UNKNOWN'):20} | "
+                f"{str(fd.get('value', 'N/A')):30} | {fd.get('confidence', 0.0):.2f}"
             )
         lines += [
             "-" * 60,
-            f"📋 Summary: {r.get('curation_summary','N/A')}",
+            f"📋 Summary: {r.get('curation_summary ', 'N/A')}",
             f"⏱️  Time: {r.get('processing_time', 0):.2f}s",
             "",
         ]
@@ -163,10 +169,13 @@ def _render_curator_desk_csv(results: List[Dict[str, Any]]) -> str:
         "Journal",
         "Year",
         "Host Species",
+        "Host Species ID",
         "Host Species Status",
         "Body Site",
+        "Body Site ID",
         "Body Site Status",
         "Condition",
+        "Condition ID",
         "Condition Status",
         "Sequencing Type",
         "Sequencing Type Status",
@@ -197,14 +206,17 @@ def _render_curator_desk_csv(results: List[Dict[str, Any]]) -> str:
                 "Journal": r.get("journal", ""),
                 "Year": _extract_year(r.get("year") or r.get("publication_date", "")),
                 "Host Species": _field_val(fields, "host_species"),
+                "Host Species ID": _field_ontology_id(fields, "host_species"),
                 "Host Species Status": _status_normalise(
                     _field_val(fields, "host_species", "status")
                 ),
                 "Body Site": _field_val(fields, "body_site"),
+                "Body Site ID": _field_ontology_id(fields, "body_site"),
                 "Body Site Status": _status_normalise(
                     _field_val(fields, "body_site", "status")
                 ),
                 "Condition": _field_val(fields, "condition"),
+                "Condition ID": _field_ontology_id(fields, "condition"),
                 "Condition Status": _status_normalise(
                     _field_val(fields, "condition", "status")
                 ),
@@ -242,24 +254,24 @@ def _render_xml(results: List[Dict[str, Any]]) -> str:
         fields = r.get("fields", {})
         lines += [
             "  <Analysis>",
-            f"    <PMID>{r.get('pmid','')}</PMID>",
-            f"    <Title>{r.get('title','')}</Title>",
-            f"    <Journal>{r.get('journal','')}</Journal>",
-            f"    <ProcessingTime>{r.get('processing_time',0)}</ProcessingTime>",
+            f"    <PMID>{r.get('pmid', 'N/A')}</PMID>",
+            f"    <Title>{r.get('title', 'N/A')}</Title>",
+            f"    <Journal>{r.get('journal' , 'N/A')}</Journal>",
+            f"    <ProcessingTime>{r.get('processing_time', 0)}</ProcessingTime>",
             "    <Fields>",
         ]
         for key, tag in xml_field_names.items():
             fd = fields.get(key, {})
             lines += [
                 f"      <{tag}>",
-                f"        <Status>{fd.get('status','UNKNOWN')}</Status>",
-                f"        <Value><![CDATA[{fd.get('value','N/A')}]]></Value>",
-                f"        <Confidence>{fd.get('confidence',0.0):.2f}</Confidence>",
+                f"        <Status>{fd.get('status', 'UNKNOWN')}</Status>",
+                f"        <Value><![CDATA[{fd.get('value', 'N/A')}]]></Value>",
+                f"        <Confidence>{fd.get('confidence', 0.0):.2f}</Confidence>",
                 f"      </{tag}>",
             ]
         lines += [
             "    </Fields>",
-            f"    <Summary><![CDATA[{r.get('curation_summary','')}]]></Summary>",
+            f"    <Summary><![CDATA[{r.get('curation_summary' , '')}]]></Summary>",
             "  </Analysis>",
         ]
     lines.append("</BioAnalyzerResults>")
@@ -287,16 +299,16 @@ def _render_retrieval_table(results: List[Dict[str, Any]]) -> str:
     ]
     for r in results:
         if "error" in r:
-            lines += [f"\n❌ PMID: {r.get('pmid','N/A')}", f"Error: {r['error']}"]
+            lines += [f"\n❌ PMID: {r.get('pmid' , 'N/A')}", f"Error: {r['error']}"]
             continue
         authors = r.get("authors", [])
         author_str = ", ".join(authors[:3]) + (" et al." if len(authors) > 3 else "")
         lines += [
-            f"\n📄 PMID: {r.get('pmid','N/A')}",
-            f"📝 Title: {r.get('title','N/A')}",
-            f"📰 Journal: {r.get('journal','N/A')}",
+            f"\n📄 PMID: {r.get('pmid' , 'N/A')}",
+            f"📝 Title: {r.get('title' , 'N/A')}",
+            f"📰 Journal: {r.get('journal' , 'N/A')}",
             f"👥 Authors: {author_str}",
-            f"📅 Publication Date: {r.get('publication_date','N/A')}",
+            f"📅 Publication Date: {r.get('publication_date', 'N/A')}",
             f"📖 Full Text: {'✅ Available' if r.get('has_full_text') else '❌ Not available'}",
         ]
         abstract = r.get("abstract", "")
@@ -534,9 +546,6 @@ class BioAnalyzerCLI:
                 capture_output=True,
             )
 
-        import pwd
-        import grp
-
         env = os.environ.copy()
         try:
             env["UID"] = str(pwd.getpwuid(os.getuid()).pw_uid)
@@ -709,6 +718,63 @@ print(json.dumps(out))
         )
         return json.loads(result.stdout.strip())
 
+    def get_curator_desk_csv_content(self, results: List[Dict[str, Any]]) -> str:
+        """Serialize analysis results to curator-desk CSV (includes ontology ID columns)."""
+        return render_results(results, "curator_desk_csv")
+
+    # ------------------------------------------------------------------
+    # PubMed discovery search
+    # ------------------------------------------------------------------
+
+    def search_pubmed(
+        self,
+        query: Optional[str] = None,
+        preset: str = "discovery",
+        max_results: int = 100,
+        fmt: str = "txt",
+        output_file: Optional[str] = None,
+    ) -> List[str]:
+        """Run a PubMed esearch and return PMIDs (spec discovery query by default)."""
+        from app.pubmed_queries import RECOMMENDED_DISCOVERY_QUERY, SEARCH_PRESETS
+        from app.services.data_retrieval import PubMedRetriever
+
+        if query:
+            term = query.strip()
+        else:
+            term = SEARCH_PRESETS.get(preset, RECOMMENDED_DISCOVERY_QUERY)
+
+        api_key = os.environ.get("NCBI_API_KEY") or self._env_file_values().get(
+            "NCBI_API_KEY", ""
+        )
+        retriever = PubMedRetriever(api_key=api_key or None)
+        print(f"🔍 PubMed search (preset={preset}, max={max_results})...")
+        pmids = retriever.search(term, max_results=max_results)
+        if not pmids:
+            print("❌ No PMIDs returned.")
+            return []
+
+        print(f"✅ Found {len(pmids)} PMID(s)")
+        if fmt == "json":
+            content = json.dumps(
+                {"query": term, "preset": preset, "pmids": pmids}, indent=2
+            )
+        elif fmt == "csv":
+            out = io.StringIO()
+            w = csv.writer(out)
+            w.writerow(["PMID"])
+            for p in pmids:
+                w.writerow([p])
+            content = out.getvalue()
+        else:
+            content = "\n".join(pmids) + "\n"
+
+        if output_file:
+            Path(output_file).write_text(content, encoding="utf-8")
+            print(f"💾 PMIDs saved to: {output_file}")
+        else:
+            print(content)
+        return pmids
+
     # ------------------------------------------------------------------
     # Analysis commands
     # ------------------------------------------------------------------
@@ -735,7 +801,7 @@ print(json.dumps(out))
                     results.append(r.json())
                     print(f"✅ Done")
                 else:
-                    print(f"❌ {r.json().get('detail','Unknown error')}")
+                    print(f"❌ {r.json().get('detail', 'Unknown error')}")
             except Exception as e:
                 print(f"❌ {e}")
 
@@ -829,14 +895,14 @@ print(json.dumps(out))
                 status = requests.get(
                     self._build_api_url(f"/analysis-status/{job_id}"), timeout=15
                 ).json()
-                print(f"   ⏳ {status.get('status')} ({status.get('progress','')})")
+                print(f"   ⏳ {status.get('status')} ({status.get('progress', '')})")
                 if status.get("status") == "completed":
                     r = requests.get(
                         self._build_api_url(f"/analysis-result/{job_id}"), timeout=30
                     )
                     return r.json() if r.status_code == 200 else None
                 if status.get("status") == "failed":
-                    print(f"❌ Failed: {status.get('error','')}")
+                    print(f"❌ Failed: {status.get('error', '')}")
                     return None
                 time.sleep(max(1, interval))
             except Exception as e:
@@ -855,20 +921,20 @@ print(json.dumps(out))
         ]
         for r in results:
             lines += [
-                f"\n🔗 {r.get('source_url','N/A')}",
-                f"🆔 Job: {r.get('job_id','N/A')}",
-                f"🧪 Experiments: {len(r.get('experiments',[]))}",
+                f"\n🔗 {r.get('source_url', 'N/A')}",
+                f"🆔 Job: {r.get('job_id', 'N/A')}",
+                f"🧪 Experiments: {len(r.get('experiments', []))}",
                 f"✅ Curation Ready: {'Yes' if r.get('curation_ready') else 'No'}",
-                f"⚠️  Missing: {', '.join(r.get('missing_fields',[])) or 'None'}",
+                f"⚠️  Missing: {', '.join(r.get('missing_fields', [])) or 'None'}",
                 "-" * 60,
             ]
             for exp in r.get("experiments", []):
                 m = exp.get("metadata", {})
                 lines += [
-                    f"   • {exp.get('title','Untitled')}",
-                    f"     Species: {m.get('host_species','N/A')}  Site: {m.get('body_site','N/A')}",
-                    f"     Condition: {m.get('condition','N/A')}  Seq: {m.get('sequencing_type','N/A')}",
-                    f"     Taxa: {m.get('taxa_level','N/A')}  N: {m.get('sample_size','N/A')}",
+                    f"   • {exp.get('title', 'Untitled')}",
+                    f"     Species: {m.get('host_species', 'N/A')}  Site: {m.get('body_site', 'N/A')}",
+                    f"     Condition: {m.get('condition', 'N/A')}  Seq: {m.get('sequencing_type', 'N/A')}",
+                    f"     Taxa: {m.get('taxa_level', 'N/A')}  N: {m.get('sample_size', 'N/A')}",
                     f"     Signatures: {len(exp['signatures']) if exp.get('signatures') else 'None'}",
                     "",
                 ]
@@ -1005,7 +1071,7 @@ print(json.dumps(out))
             elif r.status_code == 404:
                 print("⚠️  Q&A endpoint not available yet.")
             else:
-                print(f"❌ API error: {r.json().get('detail','Unknown')}")
+                print(f"❌ API error: {r.json().get('detail', 'Unknown')}")
         except Exception as e:
             print(f"❌ {e}")
         return None
@@ -1051,7 +1117,7 @@ print(json.dumps(out))
 
     def handle_settings_command(self, args):
         try:
-            from app.core.settings import SettingsManager, BioAnalyzerSettings
+            from app.core.settings import BioAnalyzerSettings, SettingsManager
         except ImportError as e:
             print(f"❌ Failed to import settings module: {e}")
             return
@@ -1147,6 +1213,7 @@ print(json.dumps(out))
             """📋 COMMANDS
   build / start / stop / restart / status
   run table [--port N]
+  search [--preset discovery|broad|precision] [-n N] [-o FILE] [--query Q]
   analyze <pmid|pmids>  [--file F] [--format table|json|csv|curator_desk_csv|xml] [-o FILE]
   analyze-url <url>     [--file F] [--format table|json] [-o FILE]
   retrieve <pmid|pmids> [--file F] [--format table|json|csv] [-o FILE] [--save]
@@ -1155,6 +1222,8 @@ print(json.dumps(out))
   settings view|save|load|preset|migrate
 
 📖 Examples
+  BioAnalyzer search --preset discovery -n 50 -o pmids.txt
+  BioAnalyzer analyze --file pmids.txt --format curator_desk_csv -o predictions.csv
   BioAnalyzer analyze 12345678
   BioAnalyzer analyze --file PMID.xls --format csv -o results.csv
   BioAnalyzer analyze-url https://example.com/study
@@ -1192,6 +1261,21 @@ def _build_parser() -> argparse.ArgumentParser:
     run_sub = run.add_subparsers(dest="run_command")
     rt = run_sub.add_parser("table")
     rt.add_argument("--port", "-p", type=int, default=8501)
+
+    # search (PubMed discovery)
+    sr = sub.add_parser(
+        "search", help="PubMed esearch using spec discovery query presets"
+    )
+    sr.add_argument("--query", "-q", help="Custom PubMed query (overrides --preset)")
+    sr.add_argument(
+        "--preset",
+        choices=["discovery", "broad", "precision"],
+        default="discovery",
+        help="Query preset from curator-desk spec (default: discovery)",
+    )
+    sr.add_argument("--max-results", "-n", type=int, default=100)
+    sr.add_argument("--format", choices=["txt", "json", "csv"], default="txt")
+    sr.add_argument("--output", "-o")
 
     # analyze
     an = sub.add_parser("analyze")
@@ -1318,6 +1402,14 @@ def main():
             cli.interactive_qa()
         else:
             asyncio.run(cli.ask_question(args.question))
+    elif cmd == "search":
+        cli.search_pubmed(
+            query=getattr(args, "query", None),
+            preset=getattr(args, "preset", "discovery"),
+            max_results=getattr(args, "max_results", 100),
+            fmt=getattr(args, "format", "txt"),
+            output_file=getattr(args, "output", None),
+        )
     elif cmd == "analyze":
         pmids = _dedup(_expand_pmids(args.pmids))
         if args.file:

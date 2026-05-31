@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Tuple
+from typing import Any
+
+from app.normalization.types import NormalizedTerm
 
 try:
     from word2number import w2n
@@ -77,31 +79,33 @@ def _simple_word_to_num(text: str) -> int | None:
     return total + current
 
 
-def normalize_sample_size(raw_value: Any) -> Tuple[str, str]:
-    """Return sample size as integer string and extraction status."""
+def normalize_sample_size(raw_value: Any) -> NormalizedTerm:
+    """Return sample size as integer string (no ontology ID)."""
     if raw_value is None or str(raw_value).strip() in ("", "null", "None"):
-        return "", "ABSENT"
+        return NormalizedTerm.absent()
 
     value = str(raw_value).strip()
     try:
         parsed = int(value.replace(",", ""))
-        return str(parsed), "PRESENT"
+        return NormalizedTerm(str(parsed), "", "PRESENT", 1.0)
     except ValueError:
         pass
 
     if w2n is not None:
         try:
             parsed = w2n.word_to_num(value)
-            return str(int(parsed)), "PRESENT"
+            return NormalizedTerm(str(int(parsed)), "", "PRESENT", 1.0)
         except Exception:
             pass
     else:
         parsed = _simple_word_to_num(value)
         if parsed is not None:
-            return str(parsed), "PRESENT"
+            return NormalizedTerm(str(parsed), "", "PRESENT", 1.0)
 
     match = re.search(r"\b(\d[\d,]*)\b", value)
     if match:
-        return str(int(match.group(1).replace(",", ""))), "PRESENT"
+        return NormalizedTerm(
+            str(int(match.group(1).replace(",", ""))), "", "PRESENT", 0.9
+        )
 
-    return value, "PARTIALLY_PRESENT"
+    return NormalizedTerm(value, "", "PARTIALLY_PRESENT", 0.5)
