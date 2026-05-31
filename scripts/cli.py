@@ -138,13 +138,26 @@ def _render_csv(results: List[Dict[str, Any]]) -> str:
 
 def _render_curator_desk_csv(results: List[Dict[str, Any]]) -> str:
     columns = [
-        "PMID", "Title", "Journal", "Year",
-        "Host Species", "Host Species ID", "Host Species Status",
-        "Body Site", "Body Site ID", "Body Site Status",
-        "Condition", "Condition ID", "Condition Status",
-        "Sequencing Type", "Sequencing Type Status",
-        "Sample Size", "Sample Size Status",
-        "has_differential_abundance", "differential_abundance_confidence", "in_bugsigdb",
+        "PMID",
+        "Title",
+        "Journal",
+        "Year",
+        "Host Species",
+        "Host Species ID",
+        "Host Species Status",
+        "Body Site",
+        "Body Site ID",
+        "Body Site Status",
+        "Condition",
+        "Condition ID",
+        "Condition Status",
+        "Sequencing Type",
+        "Sequencing Type Status",
+        "Sample Size",
+        "Sample Size Status",
+        "has_differential_abundance",
+        "differential_abundance_confidence",
+        "in_bugsigdb",
     ]
     out = io.StringIO()
     w = csv.DictWriter(out, fieldnames=columns, extrasaction="ignore")
@@ -160,28 +173,42 @@ def _render_curator_desk_csv(results: List[Dict[str, Any]]) -> str:
             conf = f"{float(r.get('differential_abundance_confidence', 0.0)):.2f}"
         except (TypeError, ValueError):
             conf = "0.00"
-        w.writerow({
-            "PMID": pmid,
-            "Title": r.get("title", ""),
-            "Journal": r.get("journal", ""),
-            "Year": _extract_year(r.get("year") or r.get("publication_date", "")),
-            "Host Species": _field_val(fields, "host_species"),
-            "Host Species ID": _field_ontology_id(fields, "host_species"),
-            "Host Species Status": _status_normalise(_field_val(fields, "host_species", "status")),
-            "Body Site": _field_val(fields, "body_site"),
-            "Body Site ID": _field_ontology_id(fields, "body_site"),
-            "Body Site Status": _status_normalise(_field_val(fields, "body_site", "status")),
-            "Condition": _field_val(fields, "condition"),
-            "Condition ID": _field_ontology_id(fields, "condition"),
-            "Condition Status": _status_normalise(_field_val(fields, "condition", "status")),
-            "Sequencing Type": _field_val(fields, "sequencing_type"),
-            "Sequencing Type Status": _status_normalise(_field_val(fields, "sequencing_type", "status")),
-            "Sample Size": _field_val(fields, "sample_size"),
-            "Sample Size Status": _status_normalise(_field_val(fields, "sample_size", "status")),
-            "has_differential_abundance": _bool_upper(r.get("has_differential_abundance")),
-            "differential_abundance_confidence": conf,
-            "in_bugsigdb": _bool_upper(r.get("in_bugsigdb")),
-        })
+        w.writerow(
+            {
+                "PMID": pmid,
+                "Title": r.get("title", ""),
+                "Journal": r.get("journal", ""),
+                "Year": _extract_year(r.get("year") or r.get("publication_date", "")),
+                "Host Species": _field_val(fields, "host_species"),
+                "Host Species ID": _field_ontology_id(fields, "host_species"),
+                "Host Species Status": _status_normalise(
+                    _field_val(fields, "host_species", "status")
+                ),
+                "Body Site": _field_val(fields, "body_site"),
+                "Body Site ID": _field_ontology_id(fields, "body_site"),
+                "Body Site Status": _status_normalise(
+                    _field_val(fields, "body_site", "status")
+                ),
+                "Condition": _field_val(fields, "condition"),
+                "Condition ID": _field_ontology_id(fields, "condition"),
+                "Condition Status": _status_normalise(
+                    _field_val(fields, "condition", "status")
+                ),
+                "Sequencing Type": _field_val(fields, "sequencing_type"),
+                "Sequencing Type Status": _status_normalise(
+                    _field_val(fields, "sequencing_type", "status")
+                ),
+                "Sample Size": _field_val(fields, "sample_size"),
+                "Sample Size Status": _status_normalise(
+                    _field_val(fields, "sample_size", "status")
+                ),
+                "has_differential_abundance": _bool_upper(
+                    r.get("has_differential_abundance")
+                ),
+                "differential_abundance_confidence": conf,
+                "in_bugsigdb": _bool_upper(r.get("in_bugsigdb")),
+            }
+        )
     return out.getvalue()
 
 
@@ -255,7 +282,9 @@ def _render_retrieval_table(results: List[Dict[str, Any]]) -> str:
         ]
         abstract = r.get("abstract", "")
         if abstract:
-            lines.append(f"📋 Abstract: {abstract[:200]}{'...' if len(abstract) > 200 else ''}")
+            lines.append(
+                f"📋 Abstract: {abstract[:200]}{'...' if len(abstract) > 200 else ''}"
+            )
         lines.append("-" * 60)
     return "\n".join(lines)
 
@@ -263,16 +292,33 @@ def _render_retrieval_table(results: List[Dict[str, Any]]) -> str:
 def _render_retrieval_csv(results: List[Dict[str, Any]]) -> str:
     out = io.StringIO()
     w = csv.writer(out)
-    w.writerow(["PMID", "Title", "Journal", "Authors", "Publication Date",
-                "Has Full Text", "Abstract Length", "Full Text Length", "Error"])
+    w.writerow(
+        [
+            "PMID",
+            "Title",
+            "Journal",
+            "Authors",
+            "Publication Date",
+            "Has Full Text",
+            "Abstract Length",
+            "Full Text Length",
+            "Error",
+        ]
+    )
     for r in results:
-        w.writerow([
-            r.get("pmid", ""), r.get("title", ""), r.get("journal", ""),
-            "; ".join(r.get("authors", [])), r.get("publication_date", ""),
-            "Yes" if r.get("has_full_text") else "No",
-            len(r.get("abstract", "")), len(r.get("full_text", "")),
-            r.get("error", ""),
-        ])
+        w.writerow(
+            [
+                r.get("pmid", ""),
+                r.get("title", ""),
+                r.get("journal", ""),
+                "; ".join(r.get("authors", [])),
+                r.get("publication_date", ""),
+                "Yes" if r.get("has_full_text") else "No",
+                len(r.get("abstract", "")),
+                len(r.get("full_text", "")),
+                r.get("error", ""),
+            ]
+        )
     return out.getvalue()
 
 
@@ -280,14 +326,22 @@ class BioAnalyzerCLI:
     """User-friendly Command Line Interface for BioAnalyzer."""
 
     REQUIRED_ENV = ["GEMINI_API_KEY", "NCBI_API_KEY", "EMAIL"]
-    OPTIONAL_ENV = ["API_TIMEOUT", "NCBI_RATE_LIMIT_DELAY", "USE_FULLTEXT", "LOG_LEVEL", "UVICORN_RELOAD"]
+    OPTIONAL_ENV = [
+        "API_TIMEOUT",
+        "NCBI_RATE_LIMIT_DELAY",
+        "USE_FULLTEXT",
+        "LOG_LEVEL",
+        "UVICORN_RELOAD",
+    ]
 
     def __init__(self):
         self.container_name = "bioanalyzer-package"
         self.image_name = "bioanalyzer-package"
         self.network_name = "bioanalyzer-network"
         self.verbose = False
-        self.api_base_url = os.getenv("BIOANALYZER_API_URL", "http://localhost:8000/api/v1")
+        self.api_base_url = os.getenv(
+            "BIOANALYZER_API_URL", "http://localhost:8000/api/v1"
+        )
 
     # ------------------------------------------------------------------
     # Environment helpers
@@ -316,7 +370,11 @@ class BioAnalyzerCLI:
 
     def _validate_environment(self) -> None:
         file_vals = self._env_file_values()
-        missing = [k for k in self.REQUIRED_ENV if not os.environ.get(k) and not file_vals.get(k)]
+        missing = [
+            k
+            for k in self.REQUIRED_ENV
+            if not os.environ.get(k) and not file_vals.get(k)
+        ]
         if missing:
             print("⚠️  Missing critical environment variables:")
             for k in missing:
@@ -330,7 +388,9 @@ class BioAnalyzerCLI:
     # ------------------------------------------------------------------
 
     def _run(self, cmd: List[str], **kwargs) -> subprocess.CompletedProcess:
-        return subprocess.run(cmd, capture_output=True, text=True, check=False, **kwargs)
+        return subprocess.run(
+            cmd, capture_output=True, text=True, check=False, **kwargs
+        )
 
     def check_docker(self) -> bool:
         try:
@@ -341,7 +401,9 @@ class BioAnalyzerCLI:
             return False
 
     def check_image(self) -> bool:
-        return self._run(["docker", "image", "inspect", self.image_name]).returncode == 0
+        return (
+            self._run(["docker", "image", "inspect", self.image_name]).returncode == 0
+        )
 
     def _compose_cmd(self) -> List[str]:
         if self._run(["which", "docker-compose"]).stdout.strip():
@@ -350,7 +412,9 @@ class BioAnalyzerCLI:
 
     def _is_container_running(self) -> bool:
         for name in [self.container_name, "bioanalyzer-package"]:
-            if self._run(["docker", "ps", "--filter", f"name={name}", "-q"]).stdout.strip():
+            if self._run(
+                ["docker", "ps", "--filter", f"name={name}", "-q"]
+            ).stdout.strip():
                 return True
         return False
 
@@ -369,7 +433,10 @@ class BioAnalyzerCLI:
 
     def check_backend_health(self) -> bool:
         try:
-            return requests.get("http://localhost:8000/health", timeout=5).status_code == 200
+            return (
+                requests.get("http://localhost:8000/health", timeout=5).status_code
+                == 200
+            )
         except Exception:
             return False
 
@@ -459,7 +526,9 @@ class BioAnalyzerCLI:
         if self._wait_for_health(60):
             print("✅ API running at http://localhost:8000")
             print("\n🎉 BioAnalyzer backend is running!")
-            print("🔧 API: http://localhost:8000  |  📖 Docs: http://localhost:8000/docs")
+            print(
+                "🔧 API: http://localhost:8000  |  📖 Docs: http://localhost:8000/docs"
+            )
             return True
         else:
             print("\n⚠️  Container started but health check timed out after 60s.")
@@ -509,14 +578,22 @@ class BioAnalyzerCLI:
             return False
         print(f"📋 Starting Curator Table → http://localhost:{port}  (Ctrl+C to stop)")
         cmd = [
-            "docker", "run", "--rm",
-            "-v", f"{project_root}:/app",
-            "-w", "/app",
-            "-p", f"{port}:8501",
+            "docker",
+            "run",
+            "--rm",
+            "-v",
+            f"{project_root}:/app",
+            "-w",
+            "/app",
+            "-p",
+            f"{port}:8501",
             *self._collect_env_flags(),
             self.image_name,
-            "streamlit", "run", "curator_table/app.py",
-            "--server.port=8501", "--server.address=0.0.0.0",
+            "streamlit",
+            "run",
+            "curator_table/app.py",
+            "--server.port=8501",
+            "--server.address=0.0.0.0",
         ]
         return subprocess.run(cmd, cwd=project_root).returncode == 0
 
@@ -526,7 +603,9 @@ class BioAnalyzerCLI:
         print(f"Docker:          {'✅ Available' if ok else '❌ Not Available'}")
         if not ok:
             return
-        print(f"Package Image:   {'✅ Built' if self.check_image() else '❌ Not Built'}")
+        print(
+            f"Package Image:   {'✅ Built' if self.check_image() else '❌ Not Built'}"
+        )
         running = self._is_container_running()
         print(f"Container:       {'✅ Running' if running else '❌ Stopped'}")
         healthy = self.check_backend_health()
@@ -546,7 +625,9 @@ class BioAnalyzerCLI:
             return self._read_excel_via_docker(file_path)
         if ext == ".csv":
             with open(file_path, encoding="utf-8") as f:
-                return [row[0].strip() for row in csv.reader(f) if row and row[0].strip()]
+                return [
+                    row[0].strip() for row in csv.reader(f) if row and row[0].strip()
+                ]
         pmids: List[str] = []
         with open(file_path, encoding="utf-8") as f:
             for line in f:
@@ -558,7 +639,9 @@ class BioAnalyzerCLI:
     def _read_excel_via_docker(self, file_path: str) -> List[str]:
         file_path_obj = Path(file_path).resolve()
         if not self.check_docker() or not self.check_image():
-            raise Exception("Docker image required to read Excel files. Run 'BioAnalyzer build'.")
+            raise Exception(
+                "Docker image required to read Excel files. Run 'BioAnalyzer build'."
+            )
         # Build the script as a plain string using concatenation to avoid
         # any quote or heredoc conflicts with the surrounding Python source.
         script = (
@@ -584,12 +667,21 @@ class BioAnalyzerCLI:
         )
         result = subprocess.run(
             [
-                "docker", "run", "--rm",
-                "-v", f"{file_path_obj.parent}:/workspace",
-                "-w", "/workspace",
-                self.image_name, "python", "-c", script,
+                "docker",
+                "run",
+                "--rm",
+                "-v",
+                f"{file_path_obj.parent}:/workspace",
+                "-w",
+                "/workspace",
+                self.image_name,
+                "python",
+                "-c",
+                script,
             ],
-            capture_output=True, text=True, check=True,
+            capture_output=True,
+            text=True,
+            check=True,
         )
         return json.loads(result.stdout.strip())
 
@@ -611,8 +703,14 @@ class BioAnalyzerCLI:
         from app.pubmed_queries import RECOMMENDED_DISCOVERY_QUERY, SEARCH_PRESETS
         from app.services.data_retrieval import PubMedRetriever
 
-        term = query.strip() if query else SEARCH_PRESETS.get(preset, RECOMMENDED_DISCOVERY_QUERY)
-        api_key = os.environ.get("NCBI_API_KEY") or self._env_file_values().get("NCBI_API_KEY", "")
+        term = (
+            query.strip()
+            if query
+            else SEARCH_PRESETS.get(preset, RECOMMENDED_DISCOVERY_QUERY)
+        )
+        api_key = os.environ.get("NCBI_API_KEY") or self._env_file_values().get(
+            "NCBI_API_KEY", ""
+        )
         retriever = PubMedRetriever(api_key=api_key or None)
         print(f"🔍 PubMed search (preset={preset}, max={max_results})...")
         pmids = retriever.search(term, max_results=max_results)
@@ -621,7 +719,9 @@ class BioAnalyzerCLI:
             return []
         print(f"✅ Found {len(pmids)} PMID(s)")
         if fmt == "json":
-            content = json.dumps({"query": term, "preset": preset, "pmids": pmids}, indent=2)
+            content = json.dumps(
+                {"query": term, "preset": preset, "pmids": pmids}, indent=2
+            )
         elif fmt == "csv":
             out = io.StringIO()
             w = csv.writer(out)
@@ -721,7 +821,11 @@ class BioAnalyzerCLI:
             urls.extend(v.split(",") if "," in v else [v])
         if file_path:
             try:
-                urls.extend(line.strip() for line in open(file_path, encoding="utf-8") if line.strip())
+                urls.extend(
+                    line.strip()
+                    for line in open(file_path, encoding="utf-8")
+                    if line.strip()
+                )
             except Exception as e:
                 print(f"❌ Error reading URL file: {e}")
         seen: set = set()
@@ -752,7 +856,9 @@ class BioAnalyzerCLI:
                 ).json()
                 print(f"   ⏳ {status.get('status')} ({status.get('progress', '')})")
                 if status.get("status") == "completed":
-                    r = requests.get(self._build_api_url(f"/analysis-result/{job_id}"), timeout=30)
+                    r = requests.get(
+                        self._build_api_url(f"/analysis-result/{job_id}"), timeout=30
+                    )
                     return r.json() if r.status_code == 200 else None
                 if status.get("status") == "failed":
                     print(f"❌ Failed: {status.get('error', '')}")
@@ -767,7 +873,11 @@ class BioAnalyzerCLI:
     def _render_url_results(self, results: List[Dict], fmt: str) -> str:
         if fmt == "json":
             return json.dumps(results, indent=2, ensure_ascii=False)
-        lines = ["\n" + "=" * 80, "🌐 BIOANALYZER - URL STUDY ANALYSIS RESULTS", "=" * 80]
+        lines = [
+            "\n" + "=" * 80,
+            "🌐 BIOANALYZER - URL STUDY ANALYSIS RESULTS",
+            "=" * 80,
+        ]
         for r in results:
             lines += [
                 f"\n🔗 {r.get('source_url', 'N/A')}",
@@ -808,7 +918,11 @@ class BioAnalyzerCLI:
             try:
                 data = retriever.get_full_paper_data(pmid)
             except Exception as e:
-                data = {"pmid": pmid, "error": str(e), "retrieval_timestamp": time.time()}
+                data = {
+                    "pmid": pmid,
+                    "error": str(e),
+                    "retrieval_timestamp": time.time(),
+                }
             print(f"[{i}/{total}] PMID {pmid}: {'✅' if 'error' not in data else '❌'}")
             if save and "error" not in data:
                 self._save_paper(data)
@@ -822,7 +936,10 @@ class BioAnalyzerCLI:
 
     def _get_retriever(self):
         try:
-            from app.services.standalone_pubmed_retriever import StandalonePubMedRetriever
+            from app.services.standalone_pubmed_retriever import (
+                StandalonePubMedRetriever,
+            )
+
             return StandalonePubMedRetriever()
         except ImportError:
             return self._fallback_retriever()
@@ -832,10 +949,17 @@ class BioAnalyzerCLI:
             def get_full_paper_data(self, pmid: str) -> Dict:
                 try:
                     url = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi"
-                    r = requests.get(url, params={
-                        "db": "pubmed", "id": pmid, "retmode": "xml",
-                        "email": "bioanalyzer@example.com", "tool": "BioAnalyzer",
-                    }, timeout=10)
+                    r = requests.get(
+                        url,
+                        params={
+                            "db": "pubmed",
+                            "id": pmid,
+                            "retmode": "xml",
+                            "email": "bioanalyzer@example.com",
+                            "tool": "BioAnalyzer",
+                        },
+                        timeout=10,
+                    )
                     r.raise_for_status()
                     root = ElementTree.fromstring(r.text)
                     art = root.find(".//PubmedArticle/MedlineCitation/Article")
@@ -846,20 +970,33 @@ class BioAnalyzerCLI:
                         "title": art.findtext("ArticleTitle", "N/A"),
                         "abstract": "",
                         "journal": art.findtext("Journal/Title", "N/A"),
-                        "authors": [], "publication_date": "",
-                        "full_text": "", "has_full_text": False,
+                        "authors": [],
+                        "publication_date": "",
+                        "full_text": "",
+                        "has_full_text": False,
                         "retrieval_timestamp": time.time(),
                     }
                 except Exception as e:
-                    return {"pmid": pmid, "error": str(e), "retrieval_timestamp": time.time()}
+                    return {
+                        "pmid": pmid,
+                        "error": str(e),
+                        "retrieval_timestamp": time.time(),
+                    }
+
         return _R()
 
     def _save_paper(self, data: Dict) -> str:
         try:
             pmid = data.get("pmid", "unknown")
-            fp = project_root / "results" / f"paper_{pmid}_{time.strftime('%Y%m%d_%H%M%S')}.json"
+            fp = (
+                project_root
+                / "results"
+                / f"paper_{pmid}_{time.strftime('%Y%m%d_%H%M%S')}.json"
+            )
             fp.parent.mkdir(parents=True, exist_ok=True)
-            fp.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+            fp.write_text(
+                json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8"
+            )
             print(f"   💾 {fp}")
             return str(fp)
         except Exception as e:
@@ -885,7 +1022,9 @@ class BioAnalyzerCLI:
                 answer = r.json().get("answer") or r.json().get("text", "")
                 conf = r.json().get("confidence", 0.8)
                 if answer:
-                    print(f"\n💡 Answer (confidence: {conf:.2f}):\n{'-'*60}\n{answer}\n{'-'*60}")
+                    print(
+                        f"\n💡 Answer (confidence: {conf:.2f}):\n{'-'*60}\n{answer}\n{'-'*60}"
+                    )
                     return answer
             elif r.status_code == 404:
                 print("⚠️  Q&A endpoint not available yet.")
@@ -955,7 +1094,11 @@ class BioAnalyzerCLI:
             else:
                 print(out)
         elif cmd == "save":
-            settings = BioAnalyzerSettings.from_preset(args.preset) if args.preset else manager.load()
+            settings = (
+                BioAnalyzerSettings.from_preset(args.preset)
+                if args.preset
+                else manager.load()
+            )
             fp = Path(args.file) if args.file else manager.DEFAULT_SETTINGS_FILE
             manager.save(settings, fp, args.format)
             print(f"✅ Saved to {fp}")
@@ -981,14 +1124,20 @@ class BioAnalyzerCLI:
             if not old.exists():
                 print(f"❌ Not found: {old}")
                 return
-            out = Path(args.output) if args.output else old.with_suffix(".new" + old.suffix)
+            out = (
+                Path(args.output)
+                if args.output
+                else old.with_suffix(".new" + old.suffix)
+            )
             manager.migrate_settings(old, out)
             print(f"✅ Migrated → {out}")
 
     def _format_settings_table(self, settings: "BioAnalyzerSettings") -> str:
         s = settings
         lines = [
-            "=" * 60, "BioAnalyzer Settings", "=" * 60,
+            "=" * 60,
+            "BioAnalyzer Settings",
+            "=" * 60,
             f"Version: {s.version}  |  Env: {s.environment.value}",
             f"\n🔌 API  timeout={s.api.timeout}s  analysis={s.api.analysis_timeout}s  "
             f"gemini={s.api.gemini_timeout}s  max_req={s.api.max_concurrent_requests}",
@@ -1013,7 +1162,8 @@ class BioAnalyzerCLI:
 
     def print_help(self):
         self.print_banner()
-        print("""📋 COMMANDS
+        print(
+            """📋 COMMANDS
   build / start / stop / restart / status
   run table [--port N]
   search [--preset discovery|broad|precision] [-n N] [-o FILE] [--query Q]
@@ -1035,12 +1185,14 @@ class BioAnalyzerCLI:
   BioAnalyzer settings preset balanced --save
 
 🔧 API: http://localhost:8000  |  Docs: http://localhost:8000/docs
-""")
+"""
+        )
 
 
 # ---------------------------------------------------------------------------
 # Argument parser
 # ---------------------------------------------------------------------------
+
 
 def _build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
@@ -1060,18 +1212,28 @@ def _build_parser() -> argparse.ArgumentParser:
     run_sub = run.add_subparsers(dest="run_command")
     rt = run_sub.add_parser("table")
     rt.add_argument("--port", "-p", type=int, default=8501)
-    sr = sub.add_parser("search", help="PubMed esearch using spec discovery query presets")
+    sr = sub.add_parser(
+        "search", help="PubMed esearch using spec discovery query presets"
+    )
     sr.add_argument("--query", "-q", help="Custom PubMed query (overrides --preset)")
-    sr.add_argument("--preset", choices=["discovery", "broad", "precision"], default="discovery")
+    sr.add_argument(
+        "--preset", choices=["discovery", "broad", "precision"], default="discovery"
+    )
     sr.add_argument("--max-results", "-n", type=int, default=100)
     sr.add_argument("--format", choices=["txt", "json", "csv"], default="txt")
     sr.add_argument("--output", "-o")
     an = sub.add_parser("analyze")
     an.add_argument("pmids", nargs="*")
     an.add_argument("--file", "-f")
-    an.add_argument("--format", choices=["table", "json", "csv", "curator_desk_csv", "xml"], default="table")
+    an.add_argument(
+        "--format",
+        choices=["table", "json", "csv", "curator_desk_csv", "xml"],
+        default="table",
+    )
     an.add_argument("--output", "-o")
-    an.add_argument("--refresh", action="store_true", help="Bypass cache and recompute analysis")
+    an.add_argument(
+        "--refresh", action="store_true", help="Bypass cache and recompute analysis"
+    )
     an.add_argument("--verbose", "-v", action="store_true")
     au = sub.add_parser("analyze-url")
     au.add_argument("urls", nargs="*")
@@ -1101,12 +1263,18 @@ def _build_parser() -> argparse.ArgumentParser:
     ss = st_sub.add_parser("save")
     ss.add_argument("--file", "-f")
     ss.add_argument("--format", choices=["json", "yaml"], default="json")
-    ss.add_argument("--preset", choices=["fast", "balanced", "high_quality", "development", "production"])
+    ss.add_argument(
+        "--preset",
+        choices=["fast", "balanced", "high_quality", "development", "production"],
+    )
     sl = st_sub.add_parser("load")
     sl.add_argument("--file", "-f", required=True)
     sl.add_argument("--apply", action="store_true")
     sp = st_sub.add_parser("preset")
-    sp.add_argument("name", choices=["fast", "balanced", "high_quality", "development", "production"])
+    sp.add_argument(
+        "name",
+        choices=["fast", "balanced", "high_quality", "development", "production"],
+    )
     sp.add_argument("--save", "-s", action="store_true")
     sm = st_sub.add_parser("migrate")
     sm.add_argument("--file", "-f", required=True)
@@ -1129,6 +1297,7 @@ def _expand_pmids(raw: List[str]) -> List[str]:
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
+
 
 def main():
     parser = _build_parser()
@@ -1181,13 +1350,21 @@ def main():
                 print(f"❌ {e}")
                 return
         if not pmids:
-            print("❌ No PMIDs provided. Use: BioAnalyzer analyze <pmid> or --file <file>")
+            print(
+                "❌ No PMIDs provided. Use: BioAnalyzer analyze <pmid> or --file <file>"
+            )
             return
         asyncio.run(cli.analyze_papers(pmids, args.format, args.output, args.refresh))
     elif cmd == "analyze-url":
         cli.handle_url_analysis(
-            args.urls, args.file, args.embedding_model, args.llm_model,
-            args.format, args.output, args.poll_interval, args.timeout,
+            args.urls,
+            args.file,
+            args.embedding_model,
+            args.llm_model,
+            args.format,
+            args.output,
+            args.poll_interval,
+            args.timeout,
         )
     elif cmd == "retrieve":
         pmids = _dedup(_expand_pmids(args.pmids))
