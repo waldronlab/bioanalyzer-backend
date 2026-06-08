@@ -69,7 +69,9 @@ class LLMProviderManager:
         # Automatically prefix Gemini and Ollama models if the prefix is missing
         if self.provider == LLMProvider.GEMINI and not self.model.startswith("gemini/"):
             self.model = f"gemini/{self.model}"
-        elif self.provider == LLMProvider.OLLAMA and not self.model.startswith("ollama/"):
+        elif self.provider == LLMProvider.OLLAMA and not self.model.startswith(
+            "ollama/"
+        ):
             self.model = f"ollama/{self.model}"
 
         self._validate_provider_config()
