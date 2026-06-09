@@ -1,3 +1,46 @@
+"""
+BugSigDB Analyzer — BioAnalyzer
+=================================
+Extracts BugSigDB-compatible fields from PubMed papers using a single
+unified LLM call, with heuristic and post-processing fallbacks.
+
+Output contract (result dict)
+------------------------------
+Every public entry-point (analyze_paper_simple, analyze_paper_with_rag)
+returns a dict with EXACTLY the following top-level keys.  data.R /
+normalize_dataset() and the curator desk depend on this shape.
+
+    pmid                             str
+    title                            str
+    authors                          List[str]
+    journal                          str
+    publication_date                 str
+    year                             int | ""
+    has_differential_abundance       bool
+    differential_abundance_confidence float
+    in_bugsigdb                      bool
+    fields                           Dict[str, FieldDict]   (see below)
+    analysis_timestamp               str   (ISO-8601)
+    model_used                       str
+
+fields keys  →  curator table column pair
+-----------------------------------------
+  "host_species"    →  "Host Species"       /  "Host Species Status"
+  "body_site"       →  "Body Site"          /  "Body Site Status"
+  "condition"       →  "Condition"          /  "Condition Status"
+  "sequencing_type" →  "Sequencing Type"    /  "Sequencing Type Status"
+  "sample_size"     →  "Sample Size"        /  "Sample Size Status"
+  "taxa_level"      →  (hidden in curator table, present in API)
+
+Each FieldDict has:
+    value               str
+    status              "PRESENT" | "PARTIALLY_PRESENT" | "ABSENT"
+    confidence          float
+    ontology_id         str
+    mapping_confidence  float
+    reason_if_missing   str
+"""
+
 import logging
 import re
 import json
@@ -26,19 +69,16 @@ from app.utils.config import (
     CACHE_VALIDITY_HOURS,
 )
 
-# REMOVED: from app.api.utils.api_utils import get_current_timestamp
-# Reason: caused a circular import chain:
-#   bugsigdb_analyzer -> app.api.utils.api_utils
-#   -> app.api.__init__ -> app.api.app -> app.api.routers.bugsigdb_analysis
-#   -> bugsigdb_analyzer  (already being initialized)
-# The function below (_current_timestamp) is the local equivalent and is used
-# throughout this file — the api_utils import was dead code.
-
 logger = logging.getLogger(__name__)
 
 
+# ---------------------------------------------------------------------------
+# Timestamp helper (local — avoids circular import with app.api.utils)
+# ---------------------------------------------------------------------------
+
+
 def _current_timestamp() -> str:
-    """Get current timestamp in ISO format using UTC."""
+    """Return the current UTC time as an ISO-8601 string."""
     return datetime.now(pytz.UTC).isoformat()
 
 
@@ -55,9 +95,6 @@ def get_unified_qa() -> Optional[UnifiedQA]:
     global _unified_qa
     if _unified_qa is None:
         try:
-            # For structured field extraction, force direct model chat mode.
-            # PaperQA agent mode is powerful for retrieval QA but can introduce
-            # long tool runs/timeouts and non-JSON outputs for this endpoint.
             _unified_qa = UnifiedQA(
                 provider="gemini",
                 model=DEFAULT_MODEL,
@@ -66,14 +103,14 @@ def get_unified_qa() -> Optional[UnifiedQA]:
             )
             logger.info("UnifiedQA initialised successfully")
         except Exception as e:
-            logger.error(f"UnifiedQA init failed: {e}")
+            logger.error("UnifiedQA init failed: %s", e)
             try:
                 from app.models.gemini_qa import GeminiQA
 
                 _unified_qa = GeminiQA(api_key=GEMINI_API_KEY)
                 logger.info("Fallback to GeminiQA successful")
             except Exception as e2:
-                logger.error(f"GeminiQA fallback also failed: {e2}")
+                logger.error("GeminiQA fallback also failed: %s", e2)
     return _unified_qa
 
 
@@ -83,7 +120,7 @@ def get_pubmed_retriever() -> Optional[PubMedRetriever]:
         try:
             _pubmed_retriever = PubMedRetriever(api_key=NCBI_API_KEY)
         except Exception as e:
-            logger.error(f"PubMedRetriever init failed: {e}")
+            logger.error("PubMedRetriever init failed: %s", e)
     return _pubmed_retriever
 
 
@@ -95,8 +132,37 @@ def get_cache_manager() -> CacheManager:
 
 
 # ---------------------------------------------------------------------------
-# Field definitions (unchanged – kept for reference)
+# Canonical field keys — single source of truth
 # ---------------------------------------------------------------------------
+
+# These are the keys used inside result["fields"].
+# data.R / normalize_dataset() maps them to display columns as follows:
+#   snake_case key           → Title Case display name    / Title Case Status col
+#   "host_species"           → "Host Species"             / "Host Species Status"
+#   "body_site"              → "Body Site"                / "Body Site Status"
+#   "condition"              → "Condition"                / "Condition Status"
+#   "sequencing_type"        → "Sequencing Type"          / "Sequencing Type Status"
+#   "sample_size"            → "Sample Size"              / "Sample Size Status"
+#   "taxa_level"             → hidden in curator table, present in API response
+FIELD_KEYS: Tuple[str, ...] = (
+    "host_species",
+    "body_site",
+    "condition",
+    "sequencing_type",
+    "sample_size",
+    "taxa_level",
+)
+
+# STATUS_COLUMNS (as used inside the R layer for colour-coding / filtering)
+# Kept here for reference; the R layer defines its own equivalent.
+STATUS_COLUMNS: Tuple[str, ...] = (
+    "Host Species Status",
+    "Body Site Status",
+    "Condition Status",
+    "Sequencing Type Status",
+    "Sample Size Status",
+    "Taxa Level Status",
+)
 
 ESSENTIAL_FIELDS: Dict[str, str] = {
     "host_species": "What host species is being studied in this research?",
@@ -105,6 +171,11 @@ ESSENTIAL_FIELDS: Dict[str, str] = {
     "sequencing_type": "What sequencing method or molecular technique was used?",
     "sample_size": "How many samples or participants were included in the study?",
 }
+
+
+# ---------------------------------------------------------------------------
+# Extraction prompt
+# ---------------------------------------------------------------------------
 
 EXTRACTION_PROMPT = """\
 You are a biomedical literature analyst specialising in microbiome research curation.
@@ -175,26 +246,20 @@ _SECTION_PATTERNS: List[Tuple[str, re.Pattern]] = [
 
 
 def _classify_section_title(title: str) -> str:
-    """Map a raw section title to one of our canonical section names."""
     if not title:
         return "OTHER"
-
     title_upper = title.strip().upper()
-
     for canonical, pattern in _SECTION_PATTERNS:
-        if pattern.search(title_upper):  # Search in uppercase
+        if pattern.search(title_upper):
             return canonical
     return "OTHER"
 
 
 def _parse_pmc_sections(xml_text: str) -> Dict[str, str]:
-    """Parse PMC full-text XML into a dict of {canonical_section: joined_text}."""
     if not xml_text or not xml_text.strip():
         return {}
-
     if not xml_text.lstrip().startswith("<"):
         return {"FULL_TEXT": xml_text}
-
     try:
         root = ElementTree.fromstring(xml_text)
     except ElementTree.ParseError:
@@ -211,27 +276,18 @@ def _parse_pmc_sections(xml_text: str) -> Dict[str, str]:
 
     def _walk(node: ETElement, inherited_label: str = "OTHER") -> None:
         tag = node.tag.split("}")[-1] if "}" in node.tag else node.tag
-
         if tag == "sec":
-            # === IMPROVED TITLE EXTRACTION ===
-            raw_title = ""
-            ns_prefix = ""
-            if "}" in node.tag:
-                ns_prefix = node.tag.split("}")[0] + "}"
+            ns_prefix = (node.tag.split("}")[0] + "}") if "}" in node.tag else ""
             title_el = node.find(f".//{ns_prefix}title") or node.find(
                 f"{ns_prefix}title"
             )
-
+            raw_title = ""
             if title_el is not None:
-                # Try multiple ways to get title text
-                if title_el.text:
-                    raw_title = title_el.text.strip()
-                else:
-                    raw_title = "".join(title_el.itertext()).strip()
-
+                raw_title = (title_el.text or "").strip() or "".join(
+                    title_el.itertext()
+                ).strip()
             label = _classify_section_title(raw_title) if raw_title else inherited_label
 
-            # Collect paragraph text
             para_texts: List[str] = []
             for child in node:
                 child_tag = child.tag.split("}")[-1] if "}" in child.tag else child.tag
@@ -243,22 +299,17 @@ def _parse_pmc_sections(xml_text: str) -> Dict[str, str]:
                     inline = "".join(child.itertext()).strip()
                     if inline:
                         para_texts.append(inline)
-
             if para_texts:
                 sections.setdefault(label, []).extend(para_texts)
-
-            # Recurse into nested sections
             for child in node:
                 child_tag = child.tag.split("}")[-1] if "}" in child.tag else child.tag
                 if child_tag == "sec":
                     _walk(child, label)
-
         else:
             for child in node:
                 _walk(child, inherited_label)
 
     _walk(root)
-
     return {k: "\n\n".join(v) for k, v in sections.items() if v}
 
 
@@ -279,7 +330,6 @@ _SECTION_BUDGETS: Dict[str, int] = {
 
 
 def _truncate(text: str, max_chars: int) -> str:
-    """Truncate text to max_chars, breaking at a sentence boundary when possible."""
     if len(text) <= max_chars:
         return text
     suffix = " [truncated]"
@@ -299,10 +349,8 @@ def prepare_analysis_context(
     *,
     char_limit: int = _CONTEXT_CHAR_LIMIT,
 ) -> str:
-    """Build analysis context with strict character limit."""
     abstract = (abstract or "").strip()
     full_text = (full_text or "").strip()
-
     if not full_text:
         if not abstract:
             return ""
@@ -311,8 +359,6 @@ def prepare_analysis_context(
     sections = _parse_pmc_sections(full_text)
     if not sections:
         sections = {"FULL_TEXT": full_text}
-
-    # Always prefer the provided abstract in tests
     if abstract:
         sections["ABSTRACT"] = abstract
 
@@ -326,22 +372,16 @@ def prepare_analysis_context(
     for key in key_order:
         if key not in sections or not sections[key].strip():
             continue
-
         budget = _SECTION_BUDGETS.get(key, _SECTION_BUDGETS["OTHER"])
         remaining_budget = char_limit - total_chars
         if remaining_budget <= 15:
             break
-
-        header = f"{key}:\n"
         separator = "\n\n" if parts else ""
+        header = f"{key}:\n"
         overhead = len(separator) + len(header)
-
-        effective_budget = max(0, remaining_budget - overhead)
-        effective_budget = min(budget, effective_budget)
-
+        effective_budget = max(0, min(budget, remaining_budget - overhead))
         if effective_budget <= 0:
             break
-
         section_text = _truncate(sections[key], effective_budget)
         parts.append(f"{separator}{header}{section_text}")
         total_chars += overhead + len(section_text)
@@ -350,14 +390,8 @@ def prepare_analysis_context(
 
 
 # ---------------------------------------------------------------------------
-# Core LLM extraction helpers
+# FieldResult builders
 # ---------------------------------------------------------------------------
-
-
-def extract_year(pub_date_text: Any) -> Optional[int]:
-    """Extract 4-digit year from a publication date string."""
-    match = re.search(r"\b(19|20)\d{2}\b", str(pub_date_text))
-    return int(match.group(0)) if match else None
 
 
 def _build_field_result(
@@ -368,6 +402,11 @@ def _build_field_result(
     ontology_id: str = "",
     mapping_confidence: Optional[float] = None,
 ) -> Dict[str, Any]:
+    """
+    Build the canonical FieldDict stored under result['fields'][key].
+
+    Keys and semantics must never be renamed without updating data.R.
+    """
     if confidence is None:
         confidence = (
             0.85
@@ -392,7 +431,7 @@ def _build_field_result(
 
 
 def _build_field_result_from_term(term: Any) -> Dict[str, Any]:
-    """Build API field dict from a NormalizedTerm."""
+    """Build a FieldDict from a NormalizedTerm."""
     from app.normalization.types import NormalizedTerm
 
     if not isinstance(term, NormalizedTerm):
@@ -411,32 +450,37 @@ def _build_field_result_from_term(term: Any) -> Dict[str, Any]:
     )
 
 
+# ---------------------------------------------------------------------------
+# Cache quality check
+# ---------------------------------------------------------------------------
+
+
 def _is_low_quality_cached_result(analysis_data: Dict[str, Any]) -> bool:
-    """Treat cached rows with all essential fields ABSENT as stale/low-quality."""
+    """Return True when every essential field in a cached result is ABSENT."""
     fields = analysis_data.get("fields") if isinstance(analysis_data, dict) else None
     if not isinstance(fields, dict) or not fields:
         return True
-
-    essential_keys = [
+    for key in (
         "host_species",
         "body_site",
         "condition",
         "sequencing_type",
         "sample_size",
-    ]
-
-    for key in essential_keys:
+    ):
         field = fields.get(key)
         if not isinstance(field, dict):
             return False
         if str(field.get("status", "")).upper() != "ABSENT":
             return False
-
     return True
 
 
+# ---------------------------------------------------------------------------
+# JSON / heuristic parsers
+# ---------------------------------------------------------------------------
+
+
 def _parse_json_object(raw_text: str) -> Dict[str, Any]:
-    """Robustly extract a JSON object from an LLM response string."""
     if not raw_text:
         return {}
     try:
@@ -460,7 +504,7 @@ def _parse_json_object(raw_text: str) -> Dict[str, Any]:
 
 
 def _heuristic_payload_from_text(text: str) -> Dict[str, Any]:
-    """Best-effort extraction when the LLM returns invalid/empty JSON."""
+    """Best-effort field extraction when the LLM returns invalid/empty JSON."""
     t = (text or "").strip()
     if not t:
         return {}
@@ -564,6 +608,7 @@ def _postprocess_field_results(
     text = (analysis_text or "").lower()
     out = dict(field_results or {})
 
+    # --- host_species: if ABSENT but text clearly mentions humans, patch it ---
     host = dict(out.get("host_species") or {})
     if host.get("status") == "ABSENT" and re.search(
         r"\b(human|humans|men|women|participants?|subjects?|volunteers?|patients?|athletes?|controls?)\b",
@@ -581,6 +626,7 @@ def _postprocess_field_results(
         )
         out["host_species"] = host
 
+    # --- condition: if text names a disease, normalise it ---
     condition = dict(out.get("condition") or {})
     disease_phrase = re.search(
         r"\bpatients?\s+with\s+([a-z][a-z0-9\-\s]{2,80}?(?:syndrome|disease|disorder|infection|cancer|diabetes))\b",
@@ -608,6 +654,11 @@ def _postprocess_field_results(
     return out
 
 
+# ---------------------------------------------------------------------------
+# LLM extraction
+# ---------------------------------------------------------------------------
+
+
 async def _extract_structured_metadata(
     *,
     context_text: str,
@@ -615,11 +666,9 @@ async def _extract_structured_metadata(
     journal: str,
     year: Any,
 ) -> Dict[str, Any]:
-    """Send one unified extraction call to the LLM and return parsed JSON."""
     unified_qa = get_unified_qa()
     if unified_qa is None:
         return {}
-
     prompt = EXTRACTION_PROMPT.format(
         title=title or "",
         journal=journal or "",
@@ -638,21 +687,27 @@ async def _extract_structured_metadata(
 def _field_results_from_unified_payload(
     payload: Dict[str, Any]
 ) -> Dict[str, Dict[str, Any]]:
-    """Map unified prompt JSON payload to internal field structure."""
+    """
+    Map the unified-prompt JSON payload to the result['fields'] dict.
+
+    Keys used here MUST match FIELD_KEYS and the column names expected by data.R.
+    """
     host_term = normalize_host_species(payload.get("host_species_raw"))
     body_term = normalize_body_site(payload.get("body_site_raw"))
     cond_term = normalize_condition(payload.get("condition_raw"))
     seq_term = normalize_sequencing_type(payload.get("sequencing_type_raw"))
-    sample_term = normalize_sample_size(payload.get("sample_size_raw"))
+    samp_term = normalize_sample_size(payload.get("sample_size_raw"))
 
     field_results = {
         "host_species": _build_field_result_from_term(host_term),
         "body_site": _build_field_result_from_term(body_term),
         "condition": _build_field_result_from_term(cond_term),
         "sequencing_type": _build_field_result_from_term(seq_term),
-        "sample_size": _build_field_result_from_term(sample_term),
+        "sample_size": _build_field_result_from_term(samp_term),
         "taxa_level": create_empty_field_result("taxa_level"),
     }
+
+    # Heuristic payloads get a confidence cap — they are less reliable
     if payload.get("_source") == "heuristic":
         for key in (
             "host_species",
@@ -669,35 +724,10 @@ def _field_results_from_unified_payload(
                 )
             elif status == "PARTIALLY_PRESENT":
                 field["confidence"] = min(
-                    float(field.get("confidence", 0.0) or 0.0), 0.6
+                    float(field.get("confidence", 0.0) or 0.0), 0.60
                 )
+
     return field_results
-
-
-def _normalize_extracted_fields(
-    field_results: Dict[str, Dict[str, Any]]
-) -> Dict[str, Dict[str, Any]]:
-    """Re-normalise field values (idempotent pass for post-processing)."""
-    normalized = dict(field_results or {})
-
-    mappings = {
-        "host_species": normalize_host_species,
-        "body_site": normalize_body_site,
-        "condition": normalize_condition,
-        "sequencing_type": normalize_sequencing_type,
-        "sample_size": normalize_sample_size,
-    }
-    for key, normalizer in mappings.items():
-        current = dict(normalized.get(key) or {})
-        term = normalizer(current.get("value") or "")
-        current["value"] = term.label if term.status != "ABSENT" else ""
-        current["status"] = term.status
-        current["ontology_id"] = term.ontology_id
-        current["mapping_confidence"] = term.mapping_confidence
-        current["confidence"] = float(current.get("confidence", 0.0) or 0.0)
-        normalized[key] = current
-
-    return normalized
 
 
 def _avg_confidence(field_results: Dict[str, Dict[str, Any]]) -> float:
@@ -710,7 +740,6 @@ def _avg_confidence(field_results: Dict[str, Dict[str, Any]]) -> float:
 def _resolve_diff_abundance(
     payload: Dict[str, Any], fallback_text: str
 ) -> Tuple[bool, float]:
-    """Extract differential abundance fields from LLM payload or use heuristic."""
     try:
         return (
             bool(payload.get("has_differential_abundance", False)),
@@ -725,26 +754,35 @@ def _resolve_diff_abundance(
 # ---------------------------------------------------------------------------
 
 
+def extract_year(pub_date_text: Any) -> Optional[int]:
+    """Extract a 4-digit year from a publication-date string."""
+    match = re.search(r"\b(19|20)\d{2}\b", str(pub_date_text))
+    return int(match.group(0)) if match else None
+
+
 async def analyze_paper_simple(
     pmid: str, force_refresh: bool = False
 ) -> Optional[Dict[str, Any]]:
-    """Extract BugSigDB fields from a paper.
+    """
+    Extract BugSigDB fields from a paper (single LLM call, cache-aware).
 
-    Uses the unified extraction flow (single LLM call per paper).
-    Checks cache first; falls back gracefully when full text is unavailable.
+    Returns a result dict conforming to the Output contract at the top of
+    this module, or None when no content can be retrieved.
     """
     try:
         cache_manager = get_cache_manager()
         pubmed_retriever = get_pubmed_retriever()
 
         if pubmed_retriever is None:
-            logger.error("PubMedRetriever not available – check NCBI_API_KEY")
+            logger.error("PubMedRetriever not available — check NCBI_API_KEY")
             return None
 
+        # ── Cache check ────────────────────────────────────────────────────
         cached = cache_manager.get_analysis_result(pmid)
         low_quality_cached: Optional[Dict[str, Any]] = None
+
         if (
-            (not force_refresh)
+            not force_refresh
             and cached
             and cache_manager.is_cache_valid(
                 cached.get("timestamp", ""), max_age_hours=CACHE_VALIDITY_HOURS
@@ -754,25 +792,22 @@ async def analyze_paper_simple(
             if _is_low_quality_cached_result(cached_analysis):
                 low_quality_cached = cached_analysis
                 logger.info(
-                    "Cached analysis for PMID %s has all essential fields ABSENT; recomputing",
+                    "Cached result for PMID %s has all essential fields ABSENT; recomputing",
                     pmid,
                 )
             else:
-                logger.info(f"Returning cached analysis for PMID {pmid}")
+                logger.info("Returning cached analysis for PMID %s", pmid)
                 return cached_analysis
         elif force_refresh and cached:
-            logger.info("Force refresh enabled for PMID %s; bypassing cache", pmid)
+            logger.info("Force-refresh for PMID %s; bypassing cache", pmid)
 
-        logger.info(f"Starting simple analysis for PMID {pmid}")
-
+        # ── Retrieve content ───────────────────────────────────────────────
+        logger.info("Starting simple analysis for PMID %s", pmid)
         texts = await pubmed_retriever.get_texts_for_analysis_async(pmid)
+
         if not texts.get("title") and not texts.get("abstract"):
-            logger.warning(f"No content found for PMID {pmid}")
+            logger.warning("No content found for PMID %s", pmid)
             if low_quality_cached is not None:
-                logger.info(
-                    "Returning low-quality cached analysis for PMID %s because fresh retrieval failed",
-                    pmid,
-                )
                 return low_quality_cached
             return None
 
@@ -782,11 +817,11 @@ async def analyze_paper_simple(
         year = extract_year(texts.get("publication_date", ""))
 
         analysis_text = prepare_analysis_context(abstract, full_text)
-
         if not analysis_text.strip():
-            logger.warning(f"No analysable text found for PMID {pmid}")
+            logger.warning("No analysable text for PMID %s", pmid)
             return None
 
+        # ── LLM extraction ─────────────────────────────────────────────────
         payload = await _extract_structured_metadata(
             context_text=analysis_text,
             title=title,
@@ -795,17 +830,19 @@ async def analyze_paper_simple(
         )
         if not payload:
             logger.warning(
-                "Structured metadata extraction returned empty payload for PMID %s; using heuristic fallback",
-                pmid,
+                "Empty LLM payload for PMID %s; using heuristic fallback", pmid
             )
             payload = _heuristic_payload_from_text(analysis_text)
+
         field_results = _field_results_from_unified_payload(payload)
         field_results = _postprocess_field_results(field_results, analysis_text)
         has_diff_abund, diff_abund_conf = _resolve_diff_abundance(
             payload, analysis_text
         )
 
-        result = {
+        # ── Assemble result dict ───────────────────────────────────────────
+        # Key names here are the single source of truth — data.R reads these.
+        result: Dict[str, Any] = {
             "pmid": pmid,
             "title": title,
             "authors": texts.get("authors", []),
@@ -820,8 +857,9 @@ async def analyze_paper_simple(
             "model_used": DEFAULT_MODEL,
         }
 
-        logger.info(f"Simple analysis completed for PMID {pmid}")
+        logger.info("Simple analysis completed for PMID %s", pmid)
 
+        # ── Cache result ───────────────────────────────────────────────────
         try:
             cache_manager.store_analysis_result(
                 pmid=pmid,
@@ -836,17 +874,15 @@ async def analyze_paper_simple(
                 confidence=_avg_confidence(field_results),
             )
         except Exception as cache_error:
-            logger.warning(f"Unable to cache analysis for PMID {pmid}: {cache_error}")
+            logger.warning(
+                "Unable to cache analysis for PMID %s: %s", pmid, cache_error
+            )
 
         return result
 
     except Exception as e:
-        logger.error(f"Error in simple analysis for PMID {pmid}: {e}")
+        logger.error("Error in simple analysis for PMID %s: %s", pmid, e)
         if "low_quality_cached" in locals() and low_quality_cached is not None:
-            logger.info(
-                "Returning low-quality cached analysis for PMID %s after analysis exception",
-                pmid,
-            )
             return low_quality_cached
         return None
 
@@ -871,9 +907,10 @@ async def analyze_paper_with_rag(
         pubmed_retriever = get_pubmed_retriever()
 
         if pubmed_retriever is None:
-            logger.error("PubMedRetriever not available – check NCBI_API_KEY")
+            logger.error("PubMedRetriever not available — check NCBI_API_KEY")
             return None
 
+        # Normalise rag_config to a plain dict
         if hasattr(rag_config, "model_dump"):
             rag_config_dict = rag_config.model_dump(exclude_none=True)
         elif hasattr(rag_config, "dict"):
@@ -886,12 +923,11 @@ async def analyze_paper_with_rag(
         use_rag_final = use_rag and (
             rag_config_dict is None or rag_config_dict.get("enabled", True)
         )
-
-        logger.info(f"Starting RAG analysis for PMID {pmid} (RAG={use_rag_final})")
+        logger.info("Starting RAG analysis for PMID %s (RAG=%s)", pmid, use_rag_final)
 
         texts = await pubmed_retriever.get_texts_for_analysis_async(pmid)
         if not texts.get("title") and not texts.get("abstract"):
-            logger.warning(f"No content found for PMID {pmid}")
+            logger.warning("No content found for PMID %s", pmid)
             return None
 
         title = texts.get("title", "")
@@ -900,11 +936,11 @@ async def analyze_paper_with_rag(
         year = extract_year(texts.get("publication_date", ""))
 
         analysis_text = prepare_analysis_context(abstract, full_text)
-
         if not analysis_text.strip():
-            logger.warning(f"No analysable text found for PMID {pmid}")
+            logger.warning("No analysable text for PMID %s", pmid)
             return None
 
+        # ── Optional chunking ──────────────────────────────────────────────
         chunks = None
         if use_rag_final and full_text and len(full_text) > 1_000:
             try:
@@ -917,12 +953,13 @@ async def analyze_paper_with_rag(
                     doc_key=pmid,
                 )
                 logger.info(
-                    f"Created {len(chunks)} section-aware chunks for PMID {pmid}"
+                    "Created %d section-aware chunks for PMID %s", len(chunks), pmid
                 )
             except Exception as chunk_error:
-                logger.warning(f"Chunking failed: {chunk_error}")
+                logger.warning("Chunking failed for PMID %s: %s", pmid, chunk_error)
                 chunks = None
 
+        # ── Optional RAG context retrieval ─────────────────────────────────
         context_for_prompt = analysis_text
         if use_rag_final and chunks:
             try:
@@ -947,11 +984,12 @@ async def analyze_paper_with_rag(
                 )
             except Exception as rag_error:
                 logger.warning(
-                    f"RAG context retrieval failed, using prepared context: {rag_error}"
+                    "RAG context retrieval failed for PMID %s: %s", pmid, rag_error
                 )
 
         processing_time = time.time() - start_time
 
+        # ── LLM extraction ─────────────────────────────────────────────────
         payload = await _extract_structured_metadata(
             context_text=context_for_prompt,
             title=title,
@@ -960,16 +998,17 @@ async def analyze_paper_with_rag(
         )
         if not payload:
             logger.warning(
-                "Structured metadata extraction returned empty payload for PMID %s; using heuristic fallback",
-                pmid,
+                "Empty LLM payload for PMID %s; using heuristic fallback", pmid
             )
             payload = _heuristic_payload_from_text(analysis_text)
+
         field_results = _field_results_from_unified_payload(payload)
         field_results = _postprocess_field_results(field_results, analysis_text)
         has_diff_abund, diff_abund_conf = _resolve_diff_abundance(
             payload, analysis_text
         )
 
+        # ── Assemble result dict ───────────────────────────────────────────
         result: Dict[str, Any] = {
             "pmid": pmid,
             "title": title,
@@ -983,6 +1022,7 @@ async def analyze_paper_with_rag(
             "fields": field_results,
             "analysis_timestamp": _current_timestamp(),
             "model_used": DEFAULT_MODEL,
+            # RAG-specific extras (not consumed by data.R; useful for debugging)
             "processing_time": processing_time,
             "rag_enabled": use_rag_final,
             "rag_stats": None,
@@ -997,7 +1037,9 @@ async def analyze_paper_with_rag(
                 processing_time=processing_time,
             )
 
-        logger.info(f"RAG analysis completed for PMID {pmid} in {processing_time:.2f}s")
+        logger.info(
+            "RAG analysis completed for PMID %s in %.2fs", pmid, processing_time
+        )
 
         try:
             cache_manager.store_analysis_result(
@@ -1013,12 +1055,14 @@ async def analyze_paper_with_rag(
                 confidence=_avg_confidence(field_results),
             )
         except Exception as cache_error:
-            logger.warning(f"Unable to cache analysis for PMID {pmid}: {cache_error}")
+            logger.warning(
+                "Unable to cache RAG analysis for PMID %s: %s", pmid, cache_error
+            )
 
         return result
 
     except Exception as e:
-        logger.error(f"Error in RAG analysis for PMID {pmid}: {e}")
+        logger.error("Error in RAG analysis for PMID %s: %s", pmid, e)
         return None
 
 
@@ -1029,10 +1073,8 @@ def _collect_rag_stats(
     rag_config_dict: Optional[Dict],
     processing_time: float,
 ) -> Dict[str, Any]:
-    """Collect RAG metrics into the rag_stats dict."""
     _rc = rag_config_dict or {}
     rag_metrics: Dict[str, Any] = {}
-
     try:
         from app.services.advanced_rag import AdvancedRAGService
 
@@ -1066,7 +1108,7 @@ def _collect_rag_stats(
 
 
 # ---------------------------------------------------------------------------
-# analyze_single_field  (kept for backward compatibility)
+# analyze_single_field  (backward compat)
 # ---------------------------------------------------------------------------
 
 
@@ -1078,17 +1120,16 @@ async def analyze_single_field(
     chunks: Optional[List] = None,
     rag_config: Optional[Dict] = None,
 ) -> Dict:
-    """Extract a single field value from text using the LLM."""
     try:
-        context_text = _build_single_field_context(
+        context_text = await _build_single_field_context(
             text, field_name, question, chunks, rag_config
         )
         return await _query_single_field(context_text, field_name, question, pmid)
     except asyncio.TimeoutError:
-        logger.warning(f"Field {field_name} timed out for PMID {pmid}")
+        logger.warning("Field %s timed out for PMID %s", field_name, pmid)
         return create_empty_field_result(field_name)
     except Exception as e:
-        logger.error(f"Error analysing field {field_name} for PMID {pmid}: {e}")
+        logger.error("Error analysing field %s for PMID %s: %s", field_name, pmid, e)
         return create_empty_field_result(field_name)
 
 
@@ -1099,10 +1140,8 @@ async def _build_single_field_context(
     chunks: Optional[List],
     rag_config: Optional[Dict],
 ) -> str:
-    """Resolve the best context string for a single-field extraction."""
     if not chunks:
         return text[:2_000]
-
     _rc = rag_config or {}
     try:
         from app.services.advanced_rag import AdvancedRAGService
@@ -1126,7 +1165,6 @@ async def _build_single_field_context(
                 )
         else:
             svc = AdvancedRAGService()
-
         ctx = await svc.get_contextual_context(
             chunks=chunks,
             query=question,
@@ -1134,11 +1172,11 @@ async def _build_single_field_context(
             evidence_k=_rc.get("evidence_k"),
             max_sources=_rc.get("max_sources"),
         )
-        logger.info(f"RAG context for field {field_name}: {len(ctx)} chars")
+        logger.info("RAG context for field %s: %d chars", field_name, len(ctx))
         return ctx
     except Exception as rag_error:
         logger.warning(
-            f"RAG failed for field {field_name}, using plain text: {rag_error}"
+            "RAG failed for field %s; using plain text: %s", field_name, rag_error
         )
         return text[:2_000]
 
@@ -1146,22 +1184,20 @@ async def _build_single_field_context(
 async def _query_single_field(
     context_text: str, field_name: str, question: str, pmid: str
 ) -> Dict:
-    """Send a single-field prompt to the LLM and parse the response."""
-    prompt = f"""Context: {context_text}
-
-Question: {question}
-
-Respond ONLY with a JSON object (no markdown):
-{{
-    "value": "specific answer or null if not found",
-    "status": "PRESENT|PARTIALLY_PRESENT|ABSENT",
-    "confidence": 0.0-1.0,
-    "reason_if_missing": "explanation if absent"
-}}"""
-
+    prompt = (
+        f"Context: {context_text}\n\n"
+        f"Question: {question}\n\n"
+        "Respond ONLY with a JSON object (no markdown):\n"
+        "{\n"
+        '    "value": "specific answer or null if not found",\n'
+        '    "status": "PRESENT|PARTIALLY_PRESENT|ABSENT",\n'
+        '    "confidence": 0.0-1.0,\n'
+        '    "reason_if_missing": "explanation if absent"\n'
+        "}"
+    )
     unified_qa = get_unified_qa()
     if unified_qa is None:
-        logger.error("UnifiedQA not available – check GEMINI_API_KEY")
+        logger.error("UnifiedQA not available — check GEMINI_API_KEY")
         return create_empty_field_result(field_name)
 
     chat_call = unified_qa.chat(prompt)
@@ -1170,21 +1206,22 @@ Respond ONLY with a JSON object (no markdown):
         if asyncio.iscoroutine(chat_call)
         else chat_call
     )
-
     answer_text = response.get("text", "")
+
     if answer_text.startswith("Error:") and (
         "Paper-QA" in answer_text or "router" in answer_text.lower()
     ):
-        logger.info(f"Falling back to GeminiQA for field {field_name}")
+        logger.info("Falling back to GeminiQA for field %s", field_name)
         try:
             from app.models.gemini_qa import GeminiQA
 
             response = await asyncio.wait_for(
-                GeminiQA(api_key=GEMINI_API_KEY).chat(prompt), timeout=ANALYSIS_TIMEOUT
+                GeminiQA(api_key=GEMINI_API_KEY).chat(prompt),
+                timeout=ANALYSIS_TIMEOUT,
             )
             answer_text = response.get("text", "")
         except Exception as fb_err:
-            logger.error(f"GeminiQA fallback failed: {fb_err}")
+            logger.error("GeminiQA fallback failed: %s", fb_err)
             return create_empty_field_result(field_name)
 
     parsed = _parse_json_object(answer_text)
@@ -1230,7 +1267,7 @@ Respond ONLY with a JSON object (no markdown):
 
 
 def create_empty_field_result(field_name: str) -> Dict:
-    """Return a safe empty result when field extraction fails."""
+    """Return a safe ABSENT FieldDict when extraction fails."""
     return {
         "value": None,
         "status": "ABSENT",
@@ -1242,7 +1279,7 @@ def create_empty_field_result(field_name: str) -> Dict:
 
 
 def detect_differential_abundance(text: str) -> Tuple[bool, float]:
-    """Heuristic differential abundance detector."""
+    """Heuristic detector for differential abundance signals in text."""
     if not text or not str(text).strip():
         return False, 0.0
 

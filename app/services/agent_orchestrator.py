@@ -1,162 +1,223 @@
-"""Agent orchestrator using Paper-QA's agent_query system."""
+"""
+Agent Orchestrator — BioAnalyzer
+=================================
+Orchestrates extraction using Paper-QA's agent_query system.
+
+Output contract
+---------------
+Every public method that returns analysis data either returns a
+StudyAnalysisResult or a plain dict produced by
+StudyAnalysisResult.to_analyzer_result().
+
+The plain dict is structurally identical to the dict returned by
+bugsigdb_analyzer.analyze_paper_simple(), which means:
+  - data.R / normalize_dataset() can consume it unchanged
+  - the cache_manager can store it unchanged
+  - the curator table will display the correct columns with correct names
+
+Field name mapping (Python → curator table column)
+  fields["host_species"]["value"]    → Host Species
+  fields["host_species"]["status"]   → Host Species Status
+  fields["body_site"]["value"]       → Body Site
+  fields["body_site"]["status"]      → Body Site Status
+  fields["condition"]["value"]       → Condition
+  fields["condition"]["status"]      → Condition Status
+  fields["sequencing_type"]["value"] → Sequencing Type
+  fields["sequencing_type"]["status"]→ Sequencing Type Status
+  fields["sample_size"]["value"]     → Sample Size
+  fields["sample_size"]["status"]    → Sample Size Status
+  has_differential_abundance         → has_differential_abundance
+  differential_abundance_confidence  → differential_abundance_confidence
+  in_bugsigdb                        → in_bugsigdb
+"""
 
 import asyncio
 import logging
 import os
 import tempfile
-from pathlib import Path
-from typing import List, Optional
 from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict, List, Optional
 
-# Set environment variable for Paper-QA directory BEFORE any imports
-# This ensures pqa_directory() uses our directory instead of /.pqa
-_pqa_temp_dir = Path(tempfile.gettempdir()) / "bioanalyzer_paperqa"
-_pqa_temp_dir.mkdir(parents=True, exist_ok=True)
-os.environ["PQA_DIRECTORY"] = str(_pqa_temp_dir.absolute())
-os.environ["HOME"] = str(_pqa_temp_dir.parent.absolute())  # Also set HOME as fallback
-
-# Patch pqa_directory BEFORE importing AgentSettings
-# This is critical because AgentSettings uses a lambda default_factory
-# that captures pqa_directory at class definition time
-_pqa_base_directory = [str(_pqa_temp_dir.absolute())]  # Pre-set with temp dir
-
-try:
-    import paperqa.utils
-
-    _original_pqa_directory = paperqa.utils.pqa_directory
-
-    def _patched_pqa_directory(subdir: str = ""):
-        """Patched version that uses our configured directory."""
-        if _pqa_base_directory[0] is not None:
-            # Use our configured directory
-            base_dir = Path(_pqa_base_directory[0])
-            if subdir:
-                result_dir = base_dir / subdir
-            else:
-                result_dir = base_dir
-            result_dir.mkdir(parents=True, exist_ok=True)
-            return result_dir
-        else:
-            # Fallback to original (shouldn't happen, but safety)
-            return _original_pqa_directory(subdir)
-
-    # Patch it immediately
-    paperqa.utils.pqa_directory = _patched_pqa_directory
-except (ImportError, AttributeError):
-    _pqa_base_directory = [None]
-
-from paperqa import Docs, Settings
-from paperqa.settings import AgentSettings
-from paperqa.agents import agent_query
-from paperqa.types import Text, Doc
+import pytz
 
 from app.models.extraction_schemas import (
-    ExtractedExperiment,
-    MicrobialSignature,
+    ExperimentFields,
     ExperimentMetadata,
+    ExtractedExperiment,
+    FieldResult,
+    MicrobialSignature,
     StudyAnalysisResult,
 )
 
 logger = logging.getLogger(__name__)
 
 
+# ---------------------------------------------------------------------------
+# Paper-QA directory bootstrap  (must happen before any paperqa import)
+# ---------------------------------------------------------------------------
+
+_pqa_temp_dir = Path(tempfile.gettempdir()) / "bioanalyzer_paperqa"
+_pqa_temp_dir.mkdir(parents=True, exist_ok=True)
+os.environ["PQA_DIRECTORY"] = str(_pqa_temp_dir.absolute())
+os.environ["HOME"] = str(_pqa_temp_dir.parent.absolute())
+
+_pqa_base_directory: List[Optional[str]] = [str(_pqa_temp_dir.absolute())]
+
+try:
+    import paperqa.utils
+
+    _original_pqa_directory = paperqa.utils.pqa_directory
+
+    def _patched_pqa_directory(subdir: str = "") -> Path:
+        base = Path(_pqa_base_directory[0] or str(_pqa_temp_dir.absolute()))
+        target = (base / subdir) if subdir else base
+        target.mkdir(parents=True, exist_ok=True)
+        return target
+
+    paperqa.utils.pqa_directory = _patched_pqa_directory
+except (ImportError, AttributeError):
+    _pqa_base_directory = [None]
+
+
+from paperqa import Docs, Settings  # noqa: E402
+from paperqa.settings import AgentSettings  # noqa: E402
+from paperqa.agents import agent_query  # noqa: E402
+from paperqa.types import Doc, Text  # noqa: E402
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def _current_timestamp() -> str:
+    return datetime.now(pytz.UTC).isoformat()
+
+
+def _avg_confidence(fields: ExperimentFields) -> float:
+    """Average confidence across all six BugSigDB fields."""
+    values = [
+        fields.host_species.confidence,
+        fields.body_site.confidence,
+        fields.condition.confidence,
+        fields.sequencing_type.confidence,
+        fields.sample_size.confidence,
+        fields.taxa_level.confidence,
+    ]
+    return sum(values) / len(values)
+
+
+def _check_missing_fields(experiments: List[ExtractedExperiment]) -> List[str]:
+    """
+    Return the names of required fields that are ABSENT in every experiment.
+
+    Uses the same field key names as bugsigdb_analyzer so that any downstream
+    missing-field reporting is consistent.
+    """
+    if not experiments:
+        return ["No experiments extracted"]
+
+    required: List[str] = [
+        "host_species",
+        "body_site",
+        "condition",
+        "sequencing_type",
+        "taxa_level",
+        "sample_size",
+    ]
+    missing: set = set()
+
+    for exp in experiments:
+        for key in required:
+            field: FieldResult = getattr(exp.fields, key)
+            if field.status == "ABSENT":
+                missing.add(key)
+
+    return sorted(missing)
+
+
+def _field_result_from_raw(value: Optional[str], normalizer_fn=None) -> FieldResult:
+    """
+    Convert a raw extracted string to a FieldResult.
+    Optionally applies a normalizer from app.normalization.*.
+    """
+    if not value or not str(value).strip():
+        return FieldResult.absent()
+
+    if normalizer_fn is not None:
+        try:
+            term = normalizer_fn(value)
+            conf = (
+                0.85
+                if term.status == "PRESENT"
+                else (0.65 if term.status == "PARTIALLY_PRESENT" else 0.0)
+            )
+            return FieldResult(
+                value=term.label if term.status != "ABSENT" else "",
+                status=term.status,
+                confidence=conf,
+                ontology_id=term.ontology_id or "",
+                mapping_confidence=float(term.mapping_confidence or conf),
+                reason_if_missing="" if term.status != "ABSENT" else "Not found",
+            )
+        except Exception:
+            pass  # Fall through to heuristic
+
+    # Heuristic: non-empty value → PRESENT with modest confidence
+    return FieldResult(
+        value=str(value).strip(),
+        status="PRESENT",
+        confidence=0.70,
+        ontology_id="",
+        mapping_confidence=0.70,
+        reason_if_missing="",
+    )
+
+
+# ---------------------------------------------------------------------------
+# AgentOrchestrator
+# ---------------------------------------------------------------------------
+
+
 class AgentOrchestrator:
-    """Orchestrates extraction workflow using Paper-QA's agent system."""
+    """Orchestrates extraction using Paper-QA's agent system.
+
+    Outputs are structurally identical to bugsigdb_analyzer.analyze_paper_simple()
+    so that data.R / normalize_dataset() and the curator table work unchanged.
+    """
 
     def __init__(
         self,
         llm_model: str = "gemini/gemini-2.0-flash",
         embedding_model: str = "gemini/text-embedding-004",
-    ):
-        """Initialize agent orchestrator."""
+    ) -> None:
         self.llm_model = llm_model
         self.embedding_model = embedding_model
 
-        # Create a writable paper directory (Paper-QA needs this for caching)
-        # Use a temp directory or a directory in the current working directory
-        # Make sure to use absolute path to avoid issues
-        paper_dir = Path(tempfile.gettempdir()) / "bioanalyzer_paperqa"
-        try:
-            paper_dir = paper_dir.resolve()  # Get absolute path
-            paper_dir.mkdir(parents=True, exist_ok=True)
-            # Test write access
-            test_file = paper_dir / ".write_test"
-            test_file.write_text("test")
-            test_file.unlink()
-        except (OSError, PermissionError) as e:
-            logger.warning(f"Could not use temp directory {paper_dir}: {e}")
-            # Fall back to a directory in the current working directory
-            paper_dir = Path("cache") / "paperqa"
-            try:
-                paper_dir = paper_dir.resolve()  # Get absolute path
-                paper_dir.mkdir(parents=True, exist_ok=True)
-            except (OSError, PermissionError) as e2:
-                logger.error(f"Could not create paper directory {paper_dir}: {e2}")
-                # Last resort: use system temp directory which should always be writable
-                paper_dir = Path(tempfile.gettempdir()) / "bioanalyzer_paperqa"
-                paper_dir.mkdir(parents=True, exist_ok=True)
-
-        logger.info(f"Using Paper-QA directory: {paper_dir.absolute()}")
-
+        # ── Writable paper directory ──────────────────────────────────────
+        paper_dir = self._resolve_paper_dir()
         paper_dir_str = str(paper_dir.absolute())
-
-        # Create the indexes subdirectory that AgentSettings will try to use
         indexes_dir = paper_dir / "indexes"
         indexes_dir.mkdir(parents=True, exist_ok=True)
-        logger.info(f"Created indexes directory: {indexes_dir}")
 
-        # CRITICAL: Set the directory BEFORE creating AgentSettings
-        # The lambda in AgentSettings.default_factory will call pqa_directory
-        # so we must ensure our patch is active and the directory is set
+        # Keep the patch in sync with our chosen directory
         try:
             _pqa_base_directory[0] = paper_dir_str
-            logger.info(f"Set pqa_base_directory to: {paper_dir_str}")
-        except (NameError, AttributeError) as e:
-            logger.warning(f"Could not set pqa_base_directory: {e}")
+            import paperqa.utils as _pqu
 
-        # Also patch directly as a fallback
-        try:
-            import paperqa.utils
+            def _local_patch(subdir: str = "") -> Path:
+                base = Path(paper_dir_str)
+                target = (base / subdir) if subdir else base
+                target.mkdir(parents=True, exist_ok=True)
+                return target
 
-            def patched_pqa_directory(subdir: str = ""):
-                """Patched version that uses our paper directory."""
-                base_dir = Path(paper_dir_str)
-                if subdir:
-                    result_dir = base_dir / subdir
-                else:
-                    result_dir = base_dir
-                result_dir.mkdir(parents=True, exist_ok=True)
-                return result_dir
-
-            paperqa.utils.pqa_directory = patched_pqa_directory
-            logger.info("Patched pqa_directory function directly")
+            _pqu.pqa_directory = _local_patch
         except Exception as e:
-            logger.warning(f"Could not patch pqa_directory directly: {e}")
+            logger.warning("Could not re-patch pqa_directory: %s", e)
 
-        # Try to create AgentSettings with indexes explicitly set
-        # This bypasses the default_factory lambda
-        try:
-            agent_settings = AgentSettings(
-                agent_llm=llm_model,
-                agent_type="simple",
-                indexes=str(indexes_dir),  # Try to pass indexes directly
-            )
-            logger.info("Created AgentSettings with explicit indexes")
-        except (TypeError, ValueError) as e:
-            # If indexes parameter doesn't exist, try without it
-            logger.debug(f"Could not pass indexes to AgentSettings: {e}")
-            try:
-                agent_settings = AgentSettings(
-                    agent_llm=llm_model,
-                    agent_type="simple",
-                )
-                # Try to set indexes after creation
-                if hasattr(agent_settings, "indexes"):
-                    agent_settings.indexes = str(indexes_dir)
-                    logger.info("Set indexes on AgentSettings after creation")
-            except Exception as e2:
-                logger.error(f"Failed to create AgentSettings: {e2}")
-                raise
+        # ── AgentSettings ─────────────────────────────────────────────────
+        agent_settings = self._make_agent_settings(llm_model, indexes_dir)
 
         self.settings = Settings(
             llm=llm_model,
@@ -165,252 +226,374 @@ class AgentOrchestrator:
             agent=agent_settings,
             paper_directory=paper_dir_str,
         )
+        logger.info(
+            "AgentOrchestrator ready — model=%s dir=%s", llm_model, paper_dir_str
+        )
 
-        logger.info(f"Initialized agent orchestrator with {llm_model}")
+    # ── private helpers ───────────────────────────────────────────────────
+
+    @staticmethod
+    def _resolve_paper_dir() -> Path:
+        candidates = [
+            Path(tempfile.gettempdir()) / "bioanalyzer_paperqa",
+            Path("cache") / "paperqa",
+        ]
+        for candidate in candidates:
+            try:
+                candidate.mkdir(parents=True, exist_ok=True)
+                probe = candidate / ".write_test"
+                probe.write_text("ok")
+                probe.unlink()
+                logger.info("Paper-QA directory: %s", candidate.absolute())
+                return candidate
+            except (OSError, PermissionError):
+                continue
+        # Last-resort
+        fallback = Path(tempfile.gettempdir()) / "bioanalyzer_paperqa"
+        fallback.mkdir(parents=True, exist_ok=True)
+        return fallback
+
+    @staticmethod
+    def _make_agent_settings(llm_model: str, indexes_dir: Path) -> AgentSettings:
+        # Try with explicit indexes kwarg first (some PaperQA versions support it)
+        for kwargs in [
+            {
+                "agent_llm": llm_model,
+                "agent_type": "simple",
+                "indexes": str(indexes_dir),
+            },
+            {"agent_llm": llm_model, "agent_type": "simple"},
+        ]:
+            try:
+                s = AgentSettings(**kwargs)
+                if "indexes" not in kwargs and hasattr(s, "indexes"):
+                    s.indexes = str(indexes_dir)
+                return s
+            except (TypeError, ValueError):
+                continue
+        raise RuntimeError("Could not construct AgentSettings — check PaperQA version.")
+
+    # ── Public API ────────────────────────────────────────────────────────
 
     async def analyze_study(
-        self, chunks: List[Text], study_id: str, source_url: str
+        self,
+        chunks: List[Text],
+        study_id: str,
+        source_url: str,
+        *,
+        pmid: str = "",
+        title: str = "",
+        authors: Optional[List[str]] = None,
+        journal: str = "",
+        publication_date: str = "",
+        year: Optional[int] = None,
+        in_bugsigdb: bool = False,
+        model_used: str = "",
     ) -> StudyAnalysisResult:
-        """Analyze study using agent workflow."""
-        logger.info(f"Starting study analysis: {study_id}")
+        """
+        Analyse a study using the Paper-QA agent workflow.
 
+        Parameters mirror the metadata fields produced by PubMedRetriever so
+        callers can pass everything through in one call.  The returned
+        StudyAnalysisResult can be converted to a curator-table-compatible
+        dict via result.to_analyzer_result().
+        """
+        logger.info("Starting study analysis: %s (pmid=%s)", study_id, pmid)
+
+        docs = self._load_docs(chunks)
+
+        experiments = await self._extract_experiments(docs, pmid=pmid or study_id)
+
+        for experiment in experiments:
+            sigs = await self._extract_signatures(docs, experiment)
+            experiment.signatures = sigs
+            # Keep metadata snapshot in sync after field population
+            experiment.sync_metadata()
+
+        # Aggregate differential abundance from all experiments
+        # (uses the same logic as bugsigdb_analyzer.detect_differential_abundance)
+        has_da, da_conf = self._aggregate_diff_abundance(experiments)
+        total_signatures = sum(len(e.signatures) for e in experiments)
+        missing = _check_missing_fields(experiments)
+        curation_ready = len(missing) == 0 and total_signatures > 0
+        avg_conf = (
+            sum(_avg_confidence(e.fields) for e in experiments) / len(experiments)
+            if experiments
+            else 0.0
+        )
+
+        return StudyAnalysisResult(
+            pmid=pmid or study_id,
+            study_id=study_id,
+            source_url=source_url,
+            title=title,
+            authors=authors or [],
+            journal=journal,
+            publication_date=publication_date,
+            year=year,
+            has_differential_abundance=has_da,
+            differential_abundance_confidence=da_conf,
+            in_bugsigdb=in_bugsigdb,
+            experiments=experiments,
+            total_signatures=total_signatures,
+            curation_ready=curation_ready,
+            missing_fields=missing,
+            confidence_score=avg_conf,
+            analysis_timestamp=datetime.now(pytz.UTC),
+            model_used=model_used or self.llm_model,
+        )
+
+    # ── Internal extraction steps ─────────────────────────────────────────
+
+    @staticmethod
+    def _load_docs(chunks: List[Text]) -> Docs:
         docs = Docs()
         for chunk in chunks:
             docs.texts.append(chunk)
             if chunk.doc.dockey not in docs.docs:
                 docs.docs[chunk.doc.dockey] = chunk.doc
                 docs.docnames.add(chunk.doc.docname)
+        return docs
 
-        logger.info(f"Added {len(chunks)} chunks to Docs")
-
-        # Extract experiments
-        experiments = await self._extract_experiments(docs)
-
-        # Extract signatures for each experiment
-        for experiment in experiments:
-            signatures = await self._extract_signatures(docs, experiment)
-            experiment.signatures = signatures
-
-        # Calculate totals and readiness
-        total_signatures = sum(len(exp.signatures) for exp in experiments)
-        missing_fields = self._check_missing_fields(experiments)
-        curation_ready = len(missing_fields) == 0 and total_signatures > 0
-
-        # Calculate confidence
-        if experiments:
-            avg_confidence = sum(
-                sum(sig.confidence for sig in exp.signatures)
-                / max(len(exp.signatures), 1)
-                for exp in experiments
-            ) / len(experiments)
-        else:
-            avg_confidence = 0.0
-
-        result = StudyAnalysisResult(
-            study_id=study_id,
-            source_url=source_url,
-            experiments=experiments,
-            total_signatures=total_signatures,
-            curation_ready=curation_ready,
-            missing_fields=missing_fields,
-            confidence_score=avg_confidence,
-            analysis_timestamp=datetime.now(),
+    async def _extract_experiments(
+        self, docs: Docs, *, pmid: str
+    ) -> List[ExtractedExperiment]:
+        logger.info("Extracting experiments for pmid=%s", pmid)
+        query = (
+            "Identify all distinct experiments or studies described in this paper. "
+            "For each experiment extract: host organism, body site sampled, "
+            "disease or condition studied, sequencing method, taxonomic level "
+            "analysed, and total sample size. List each experiment separately."
         )
-
-        logger.info(
-            f"Analysis complete: {len(experiments)} experiments, "
-            f"{total_signatures} signatures, ready={curation_ready}"
-        )
-
-        return result
-
-    async def _extract_experiments(self, docs: Docs) -> List[ExtractedExperiment]:
-        """Extract experiments from the study."""
-        logger.info("Extracting experiments...")
-
-        query = """
-        Identify all distinct experiments or studies described in this paper.
-        For each experiment, extract:
-        1. A brief title or description
-        2. Host species studied
-        3. Body site sampled
-        4. Condition or treatment
-        5. Sequencing method used
-        6. Taxonomic level analyzed
-        7. Sample size
-
-        List each experiment separately.
-        """
-
         try:
             response = await agent_query(query=query, settings=self.settings, docs=docs)
-
-            # Parse response to extract structured data
             experiments = self._parse_experiments_from_response(
-                response.session.answer, response.session.contexts
+                answer=response.session.answer,
+                contexts=response.session.contexts,
+                pmid=pmid,
             )
-
-            logger.info(f"Extracted {len(experiments)} experiments")
+            logger.info(
+                "Extracted %d experiment(s) for pmid=%s", len(experiments), pmid
+            )
             return experiments
-
-        except Exception as e:
-            logger.error(f"Error extracting experiments: {e}")
+        except Exception as exc:
+            logger.error("Experiment extraction failed for pmid=%s: %s", pmid, exc)
             return []
 
     async def _extract_signatures(
         self, docs: Docs, experiment: ExtractedExperiment
     ) -> List[MicrobialSignature]:
-        """Extract microbial signatures for an experiment."""
-        logger.info(f"Extracting signatures for: {experiment.title}")
-
-        query = f"""
-        For the experiment "{experiment.title}", identify all microbial taxa
-        that showed significant changes. For each taxon, extract:
-        1. Taxon name
-        2. Direction of change (increased/decreased)
-        3. Statistical significance (p-value)
-        4. Comparison groups
-        5. Supporting evidence text
-
-        Focus on statistically significant findings.
-        """
-
+        logger.info(
+            "Extracting signatures for experiment: %s", experiment.experiment_id
+        )
+        query = (
+            f'For the experiment "{experiment.title}", identify all microbial taxa '
+            "that showed significant changes between groups. "
+            "For each taxon provide: name, direction (increased/decreased), "
+            "p-value or FDR, comparison groups, and the supporting sentence."
+        )
         try:
             response = await agent_query(query=query, settings=self.settings, docs=docs)
-
-            # Parse signatures from response
-            signatures = self._parse_signatures_from_response(
-                response.session.answer, response.session.contexts
+            return self._parse_signatures_from_response(
+                answer=response.session.answer,
+                contexts=response.session.contexts,
             )
-
-            logger.info(f"Extracted {len(signatures)} signatures")
-            return signatures
-
-        except Exception as e:
-            logger.error(f"Error extracting signatures: {e}")
+        except Exception as exc:
+            logger.error(
+                "Signature extraction failed for experiment %s: %s",
+                experiment.experiment_id,
+                exc,
+            )
             return []
 
+    # ── Response parsers ──────────────────────────────────────────────────
+
     def _parse_experiments_from_response(
-        self, answer: str, contexts: list
+        self,
+        answer: str,
+        contexts: list,
+        *,
+        pmid: str,
     ) -> List[ExtractedExperiment]:
-        """Parse experiments from agent response."""
-        # Simple parsing - in production, use more sophisticated NLP
-        experiments = []
+        """
+        Parse the LLM answer into ExtractedExperiment objects.
 
-        # Split by experiment markers
-        lines = answer.split("\n")
-        current_exp = None
+        Uses lazy imports for the normalizers so this module does not hard-require
+        them at import time (keeps the test surface small).
+        """
+        try:
+            from app.normalization.body_site import normalize_body_site
+            from app.normalization.condition import normalize_condition
+            from app.normalization.host_species import normalize_host_species
+            from app.normalization.sample_size import normalize_sample_size
+            from app.normalization.sequencing_type import normalize_sequencing_type
+        except ImportError:
+            normalize_host_species = normalize_body_site = normalize_condition = None
+            normalize_sequencing_type = normalize_sample_size = None
 
-        for line in lines:
+        experiments: List[ExtractedExperiment] = []
+        current_raw: Dict[str, Any] = {}
+        current_title = ""
+
+        def _flush() -> None:
+            if not current_title and not current_raw:
+                return
+            exp_id = f"exp_{pmid}_{len(experiments) + 1}"
+            fields = ExperimentFields(
+                host_species=_field_result_from_raw(
+                    current_raw.get("host_species"), normalize_host_species
+                ),
+                body_site=_field_result_from_raw(
+                    current_raw.get("body_site"), normalize_body_site
+                ),
+                condition=_field_result_from_raw(
+                    current_raw.get("condition"), normalize_condition
+                ),
+                sequencing_type=_field_result_from_raw(
+                    current_raw.get("sequencing_type"), normalize_sequencing_type
+                ),
+                sample_size=_field_result_from_raw(
+                    current_raw.get("sample_size"), normalize_sample_size
+                ),
+                taxa_level=_field_result_from_raw(current_raw.get("taxa_level")),
+            )
+            exp = ExtractedExperiment(
+                experiment_id=exp_id,
+                title=current_title or f"Experiment {len(experiments) + 1}",
+                fields=fields,
+                evidence_chunks=[ctx.context for ctx in (contexts or [])[:3]],
+            )
+            exp.sync_metadata()
+            experiments.append(exp)
+
+        for line in (answer or "").split("\n"):
             line = line.strip()
             if not line:
                 continue
 
-            # Look for experiment indicators
-            if any(
-                marker in line.lower() for marker in ["experiment", "study", "cohort"]
-            ):
-                if current_exp:
-                    experiments.append(current_exp)
+            lower = line.lower()
 
-                current_exp = ExtractedExperiment(
-                    experiment_id=f"exp_{len(experiments) + 1}",
-                    title=line,
-                    metadata=ExperimentMetadata(),
-                    evidence_chunks=[ctx.context for ctx in contexts[:3]],
-                )
+            # Detect a new experiment block
+            if any(kw in lower for kw in ("experiment", "study", "cohort", "group")):
+                _flush()
+                current_raw = {}
+                current_title = line
 
-            # Extract metadata fields
-            elif current_exp:
-                line_lower = line.lower()
-                if "host" in line_lower or "species" in line_lower:
-                    current_exp.metadata.host_species = line.split(":")[-1].strip()
-                elif "body site" in line_lower or "sample site" in line_lower:
-                    current_exp.metadata.body_site = line.split(":")[-1].strip()
-                elif "condition" in line_lower or "disease" in line_lower:
-                    current_exp.metadata.condition = line.split(":")[-1].strip()
-                elif "sequencing" in line_lower or "method" in line_lower:
-                    current_exp.metadata.sequencing_type = line.split(":")[-1].strip()
-                elif "taxa" in line_lower or "taxonomic" in line_lower:
-                    current_exp.metadata.taxa_level = line.split(":")[-1].strip()
-                elif "sample size" in line_lower or "participants" in line_lower:
-                    try:
-                        size_str = line.split(":")[-1].strip()
-                        current_exp.metadata.sample_size = int(
-                            "".join(filter(str.isdigit, size_str))
-                        )
-                    except:
-                        pass
+            # ── field extraction — key: value format ──────────────────────
+            # These names map 1-to-1 onto ExperimentFields attribute names.
+            elif ":" in line:
+                key_raw, _, val = line.partition(":")
+                key = key_raw.strip().lower().replace(" ", "_")
+                val = val.strip()
+                if not val:
+                    continue
 
-        if current_exp:
-            experiments.append(current_exp)
+                # Normalise key aliases to canonical names
+                _aliases: Dict[str, str] = {
+                    "host": "host_species",
+                    "host_organism": "host_species",
+                    "species": "host_species",
+                    "sample_site": "body_site",
+                    "anatomical_site": "body_site",
+                    "disease": "condition",
+                    "treatment": "condition",
+                    "sequencing_method": "sequencing_type",
+                    "method": "sequencing_type",
+                    "molecular_method": "sequencing_type",
+                    "taxonomic_level": "taxa_level",
+                    "taxon_level": "taxa_level",
+                    "participants": "sample_size",
+                    "n": "sample_size",
+                    "total_samples": "sample_size",
+                }
+                canonical = _aliases.get(key, key)
+
+                if canonical in {
+                    "host_species",
+                    "body_site",
+                    "condition",
+                    "sequencing_type",
+                    "taxa_level",
+                    "sample_size",
+                }:
+                    current_raw[canonical] = val
+
+        _flush()
+
+        # If the LLM produced no structured blocks, emit one experiment
+        # from whatever we parsed — consistent with single-experiment papers.
+        if not experiments and answer:
+            fields = ExperimentFields()
+            exp = ExtractedExperiment(
+                experiment_id=f"exp_{pmid}_1",
+                title="Extracted experiment",
+                fields=fields,
+                evidence_chunks=[ctx.context for ctx in (contexts or [])[:3]],
+            )
+            exp.sync_metadata()
+            experiments.append(exp)
 
         return experiments
 
+    @staticmethod
     def _parse_signatures_from_response(
-        self, answer: str, contexts: list
+        answer: str, contexts: list
     ) -> List[MicrobialSignature]:
-        """Parse microbial signatures from agent response."""
-        signatures = []
+        import re
 
-        lines = answer.split("\n")
-        for line in lines:
+        signatures: List[MicrobialSignature] = []
+        for line in (answer or "").split("\n"):
             line = line.strip()
             if not line:
                 continue
+            lower = line.lower()
+            change: Optional[str] = None
+            if any(w in lower for w in ("increased", "enriched", "higher", "elevated")):
+                change = "increased"
+            elif any(w in lower for w in ("decreased", "depleted", "lower", "reduced")):
+                change = "decreased"
+            if change is None:
+                continue
 
-            # Look for taxon mentions with change indicators
-            if any(
-                word in line.lower()
-                for word in ["increased", "decreased", "enriched", "depleted"]
-            ):
-                # Extract taxon name (simple heuristic)
-                words = line.split()
-                taxon_name = None
-                abundance_change = None
+            # Try to pull a p-value
+            pval_match = re.search(
+                r"p\s*[<=>]\s*0?\.?\d+(?:e[+-]?\d+)?", line, re.IGNORECASE
+            )
+            stat_sig = pval_match.group(0) if pval_match else None
 
-                for i, word in enumerate(words):
-                    if word.lower() in ["increased", "enriched", "higher"]:
-                        abundance_change = "increased"
-                        if i > 0:
-                            taxon_name = words[i - 1]
-                    elif word.lower() in ["decreased", "depleted", "lower", "reduced"]:
-                        abundance_change = "decreased"
-                        if i > 0:
-                            taxon_name = words[i - 1]
+            # Heuristic taxon: capitalised word near the change indicator
+            taxon_match = re.search(r"\b([A-Z][a-z]+(?:\s+[a-z]+)?)\b", line)
+            taxon_name = taxon_match.group(1) if taxon_match else "Unknown taxon"
 
-                if taxon_name and abundance_change:
-                    signatures.append(
-                        MicrobialSignature(
-                            taxon_name=taxon_name,
-                            abundance_change=abundance_change,
-                            evidence_text=line,
-                            confidence=0.7,  # Default confidence
-                        )
-                    )
+            signatures.append(
+                MicrobialSignature(
+                    taxon_name=taxon_name,
+                    abundance_change=change,
+                    statistical_significance=stat_sig,
+                    evidence_text=line,
+                    confidence=0.70 if stat_sig else 0.50,
+                )
+            )
 
         return signatures
 
-    def _check_missing_fields(
-        self, experiments: List[ExtractedExperiment]
-    ) -> List[str]:
-        """Check for missing required fields."""
+    # ── Aggregation helpers ───────────────────────────────────────────────
+
+    @staticmethod
+    def _aggregate_diff_abundance(
+        experiments: List[ExtractedExperiment],
+    ) -> tuple:
+        """
+        Return (has_differential_abundance, confidence) for the whole study.
+
+        Mirrors the scoring logic in bugsigdb_analyzer.detect_differential_abundance:
+        - If any experiment has has_differential_abundance=True, the study has it.
+        - Confidence is the max across experiments.
+        """
         if not experiments:
-            return ["No experiments extracted"]
-
-        missing = set()
-        required_fields = [
-            "host_species",
-            "body_site",
-            "condition",
-            "sequencing_type",
-            "taxa_level",
-            "sample_size",
-        ]
-
-        for exp in experiments:
-            for field in required_fields:
-                if getattr(exp.metadata, field) is None:
-                    missing.add(field)
-
-        return list(missing)
+            return False, 0.0
+        has_da = any(e.has_differential_abundance for e in experiments)
+        conf = max(
+            (e.differential_abundance_confidence for e in experiments), default=0.0
+        )
+        return has_da, conf
