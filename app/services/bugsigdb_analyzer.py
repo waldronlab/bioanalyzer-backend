@@ -137,19 +137,19 @@ Extract the following fields and return as a single JSON object:
 }}
 
 Rules:
-- host_species_raw   : Use METHODS or ABSTRACT. If multiple species, join with " and ".
-- body_site_raw      : Use METHODS or ABSTRACT. If multiple sites, join with " and ".
-- condition_raw      : Use ABSTRACT or INTRODUCTION. Give the disease/condition name only.
+- host_species_raw   : Give the species name(s) as written. Prefer METHODS or ABSTRACT if sections are present, otherwise extract from any available text. If multiple species, join with " and ".
+- body_site_raw      : Give the anatomical sample site(s) as written. Prefer METHODS or ABSTRACT if sections are present, otherwise extract from any available text. If multiple sites, join with " and ".
+- condition_raw      : Give the disease/condition name only. Prefer ABSTRACT or INTRODUCTION if sections are present, otherwise extract from any available text.
   Do NOT include phrases like "patients with" or "diagnosed with".
   If the study compares diseased vs. healthy controls, give the disease name only.
-- sequencing_type_raw: Prefer METHODS section. Give the method name exactly as written
+- sequencing_type_raw: Give the sequencing or molecular method name only. Prefer METHODS if sections are present, otherwise extract from any available text. Give the method name exactly as written
   (e.g. "16S rRNA gene sequencing", "shotgun metagenomics", "whole-genome sequencing").
-- sample_size_raw    : Prefer METHODS section. Give ONLY an integer. Convert word-numbers
+- sample_size_raw    : Give ONLY an integer. Prefer METHODS if sections are present, otherwise extract from any available text. Convert word-numbers
   (e.g. "forty-two" → 42). If a range or multiple cohorts, give the total or largest number.
   If completely absent from the paper, return null.
 - has_differential_abundance: true ONLY when RESULTS or ABSTRACT explicitly states that
   specific microbial taxa or features differ statistically between groups (p-value, FDR,
-  fold-change, or equivalent reported). Do NOT infer from study design alone.
+  fold-change, or equivalent reported), or if this is clearly stated in the available text. Do NOT infer from study design alone.
 - differential_abundance_confidence:
     1.0 = explicitly stated with statistics in RESULTS
     0.8 = clearly stated in ABSTRACT with statistical language
