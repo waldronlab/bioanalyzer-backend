@@ -62,6 +62,13 @@ def _field_ontology_id(fields: dict, key: str) -> str:
     return str(fields.get(key, {}).get("ontology_id", "") or "")
 
 
+def _field_mapping_confidence(fields: dict, key: str) -> str:
+    try:
+        return f"{float(fields.get(key, {}).get('mapping_confidence', 0.0)):.2f}"
+    except (TypeError, ValueError):
+        return "0.00"
+
+
 def _status_normalise(value: Any) -> str:
     s = str(value).strip().upper() if value else ""
     return s if s in {"PRESENT", "PARTIALLY_PRESENT", "ABSENT"} else "ABSENT"
@@ -137,6 +144,7 @@ def _render_csv(results: List[Dict[str, Any]]) -> str:
 
 
 def _render_curator_desk_csv(results: List[Dict[str, Any]]) -> str:
+    # Curator Desk spec §3.1 / §6.2: five prediction fields + ontology IDs + triage flags.
     columns = [
         "PMID",
         "Title",
@@ -145,16 +153,21 @@ def _render_curator_desk_csv(results: List[Dict[str, Any]]) -> str:
         "Host Species",
         "Host Species ID",
         "Host Species Status",
+        "Host Species Mapping Confidence",
         "Body Site",
         "Body Site ID",
         "Body Site Status",
+        "Body Site Mapping Confidence",
         "Condition",
         "Condition ID",
         "Condition Status",
+        "Condition Mapping Confidence",
         "Sequencing Type",
         "Sequencing Type Status",
         "Sample Size",
         "Sample Size Status",
+        "Summary",
+        "Processing Time",
         "has_differential_abundance",
         "differential_abundance_confidence",
         "in_bugsigdb",
@@ -173,6 +186,10 @@ def _render_curator_desk_csv(results: List[Dict[str, Any]]) -> str:
             conf = f"{float(r.get('differential_abundance_confidence', 0.0)):.2f}"
         except (TypeError, ValueError):
             conf = "0.00"
+        try:
+            proc_time = f"{float(r.get('processing_time', 0.0)):.2f}"
+        except (TypeError, ValueError):
+            proc_time = "0.00"
         w.writerow(
             {
                 "PMID": pmid,
@@ -184,15 +201,24 @@ def _render_curator_desk_csv(results: List[Dict[str, Any]]) -> str:
                 "Host Species Status": _status_normalise(
                     _field_val(fields, "host_species", "status")
                 ),
+                "Host Species Mapping Confidence": _field_mapping_confidence(
+                    fields, "host_species"
+                ),
                 "Body Site": _field_val(fields, "body_site"),
                 "Body Site ID": _field_ontology_id(fields, "body_site"),
                 "Body Site Status": _status_normalise(
                     _field_val(fields, "body_site", "status")
                 ),
+                "Body Site Mapping Confidence": _field_mapping_confidence(
+                    fields, "body_site"
+                ),
                 "Condition": _field_val(fields, "condition"),
                 "Condition ID": _field_ontology_id(fields, "condition"),
                 "Condition Status": _status_normalise(
                     _field_val(fields, "condition", "status")
+                ),
+                "Condition Mapping Confidence": _field_mapping_confidence(
+                    fields, "condition"
                 ),
                 "Sequencing Type": _field_val(fields, "sequencing_type"),
                 "Sequencing Type Status": _status_normalise(
@@ -202,6 +228,8 @@ def _render_curator_desk_csv(results: List[Dict[str, Any]]) -> str:
                 "Sample Size Status": _status_normalise(
                     _field_val(fields, "sample_size", "status")
                 ),
+                "Summary": r.get("curation_summary", ""),
+                "Processing Time": proc_time,
                 "has_differential_abundance": _bool_upper(
                     r.get("has_differential_abundance")
                 ),

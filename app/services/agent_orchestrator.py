@@ -307,7 +307,7 @@ class AgentOrchestrator:
         for experiment in experiments:
             sigs = await self._extract_signatures(docs, experiment)
             experiment.signatures = sigs
-            # Keep metadata snapshot in sync after field population
+            experiment.apply_signature_da_flags(sigs)
             experiment.sync_metadata()
 
         # Aggregate differential abundance from all experiments
@@ -427,9 +427,11 @@ class AgentOrchestrator:
             from app.normalization.host_species import normalize_host_species
             from app.normalization.sample_size import normalize_sample_size
             from app.normalization.sequencing_type import normalize_sequencing_type
+            from app.normalization.taxa_level import normalize_taxa_level
         except ImportError:
             normalize_host_species = normalize_body_site = normalize_condition = None
             normalize_sequencing_type = normalize_sample_size = None
+            normalize_taxa_level = None
 
         experiments: List[ExtractedExperiment] = []
         current_raw: Dict[str, Any] = {}
@@ -455,7 +457,9 @@ class AgentOrchestrator:
                 sample_size=_field_result_from_raw(
                     current_raw.get("sample_size"), normalize_sample_size
                 ),
-                taxa_level=_field_result_from_raw(current_raw.get("taxa_level")),
+                taxa_level=_field_result_from_raw(
+                    current_raw.get("taxa_level"), normalize_taxa_level
+                ),
             )
             exp = ExtractedExperiment(
                 experiment_id=exp_id,
