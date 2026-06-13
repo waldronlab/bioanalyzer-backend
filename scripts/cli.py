@@ -87,36 +87,42 @@ def _extract_year(publication_date: Any) -> str:
 def _priority_score(fields: dict) -> float:
     """
     Calculate curation priority score (0-5 range).
-    
+
     Weights each field by its extraction confidence:
     - PRESENT: weight = 1.0
     - PARTIALLY_PRESENT: weight = 0.5
     - ABSENT: weight = 0.0
-    
+
     Score = sum(weight × mapping_confidence) for each of 5 fields.
     Higher scores = more promising candidates for curation.
     """
-    field_keys = ["host_species", "body_site", "condition", "sequencing_type", "sample_size"]
+    field_keys = [
+        "host_species",
+        "body_site",
+        "condition",
+        "sequencing_type",
+        "sample_size",
+    ]
     weights = {"PRESENT": 1.0, "PARTIALLY_PRESENT": 0.5, "ABSENT": 0.0}
     score = 0.0
-    
+
     for key in field_keys:
         field_data = fields.get(key, {})
         status = str(field_data.get("status", "ABSENT")).strip().upper()
         base_weight = weights.get(status, 0.0)
-        
+
         if base_weight == 0.0:
             continue
-        
+
         # Get mapping confidence (default to 1.0 if not available)
         try:
             mapping_conf = float(field_data.get("mapping_confidence", 1.0))
             mapping_conf = max(0.0, min(1.0, mapping_conf))  # Clamp to [0, 1]
         except (TypeError, ValueError):
             mapping_conf = 1.0
-        
+
         score += base_weight * mapping_conf
-    
+
     return round(score, 2)
 
 
