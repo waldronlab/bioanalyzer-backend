@@ -4,6 +4,7 @@ from app.normalization.host_species import normalize_host_species
 from app.normalization.ols import format_ontology_id
 from app.normalization.sample_size import normalize_sample_size
 from app.normalization.sequencing_type import normalize_sequencing_type
+from app.normalization.taxa_level import normalize_taxa_level
 
 
 def test_format_ontology_id():
@@ -115,6 +116,26 @@ def test_sequencing_type_normalization_variants():
 
     t = normalize_sequencing_type("new custom chemistry")
     assert t.status == "PARTIALLY_PRESENT"
+
+
+def test_taxa_level_normalization_variants():
+    t = normalize_taxa_level("genus level analysis")
+    assert t.label == "genus"
+    assert t.status == "PRESENT"
+    assert t.ontology_id == ""
+
+    t = normalize_taxa_level("operational taxonomic units")
+    assert t.label == "OTU"
+    assert t.status == "PRESENT"
+
+    t = normalize_taxa_level("amplicon sequence variants")
+    assert t.label == "ASV"
+
+    t = normalize_taxa_level("species and genus")
+    assert t.status == "PARTIALLY_PRESENT"
+
+    t = normalize_taxa_level("")
+    assert t.status == "ABSENT"
 
 
 def test_sample_size_normalization_variants():

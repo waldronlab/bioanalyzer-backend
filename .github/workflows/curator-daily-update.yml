@@ -1,0 +1,60 @@
+name: Curator Desk daily update
+
+on:
+  schedule:
+    - cron: "0 5 * * *"
+  workflow_dispatch:
+    inputs:
+      max_results:
+        description: Max PubMed PMIDs to fetch
+        required: false
+        default: "50"
+
+permissions:
+  contents: write
+
+jobs:
+  analyze-and-publish:
+    runs-on: ubuntu-latest
+    if: ${{ secrets.GEMINI_API_KEY != '' && secrets.NCBI_API_KEY != '' }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Start BioAnalyzer API
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          NCBI_API_KEY: ${{ secrets.NCBI_API_KEY }}
+          EMAIL: ${{ secrets.BIOANALYZER_EMAIL }}
+        run: |
+          docker compose -p bioanalyzer-package up -d --build
+          timeout 120 bash -c 'until curl -sf http://localhost:8000/health; do sleep 3; done'
+
+      - name: Run curator pipeline
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          NCBI_API_KEY: ${{ secrets.NCBI_API_KEY }}
+          EMAIL: ${{ secrets.BIOANALYZER_EMAIL }}
+          BIOANALYZER_API_URL: http://localhost:8000/api/v1
+        run: |
+          python scripts/curator_daily_pipeline.py \
+            --max-results ${{ github.event.inputs.max_results || '50' }} \
+            -o curator_table_r/data/predictions.csv
+
+      - name: Commit predictions
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add curator_table_r/data/predictions.csv results/analyzed_pmids.json
+          git diff --staged --quiet || git commit -m "chore: daily curator predictions update"
+          git push

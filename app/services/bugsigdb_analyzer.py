@@ -45,6 +45,7 @@ import logging
 import re
 import json
 import asyncio
+import time
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -57,6 +58,7 @@ from app.normalization.condition import normalize_condition
 from app.normalization.host_species import normalize_host_species
 from app.normalization.sample_size import normalize_sample_size
 from app.normalization.sequencing_type import normalize_sequencing_type
+from app.normalization.taxa_level import normalize_taxa_level
 from app.models.unified_qa import UnifiedQA
 from app.services.bugsigdb_check import is_in_bugsigdb
 from app.services.cache_manager import CacheManager
@@ -169,6 +171,7 @@ ESSENTIAL_FIELDS: Dict[str, str] = {
     "body_site": "What body site or anatomical location was sampled for microbiome analysis?",
     "condition": "What disease, treatment, or condition is being studied?",
     "sequencing_type": "What sequencing method or molecular technique was used?",
+    "taxa_level": "What taxonomic level was analysed (e.g. genus, species, OTU)?",
     "sample_size": "How many samples or participants were included in the study?",
 }
 
@@ -202,6 +205,7 @@ Extract the following fields and return as a single JSON object:
   "body_site_raw":                   "<anatomical sample site(s) as written, e.g. 'faeces' or 'gut and oral cavity'>",
   "condition_raw":                   "<disease or condition name only, stripped of clinical preamble>",
   "sequencing_type_raw":             "<sequencing or molecular method name only>",
+  "taxa_level_raw":                  "<taxonomic rank analysed, e.g. 'genus', 'species', 'OTU', 'ASV', or null if not stated>",
   "sample_size_raw":                 <integer total participants/samples, or null if not stated>,
   "has_differential_abundance":      <true if specific microbial taxa are reported as statistically more/less abundant between groups>,
   "differential_abundance_confidence": <float 0.0–1.0 confidence in the above>
@@ -215,6 +219,8 @@ Rules:
   If the study compares diseased vs. healthy controls, give the disease name only.
 - sequencing_type_raw: Give the sequencing or molecular method name only. Prefer METHODS if sections are present, otherwise extract from any available text. Give the method name exactly as written
   (e.g. "16S rRNA gene sequencing", "shotgun metagenomics", "whole-genome sequencing").
+- taxa_level_raw     : Give the taxonomic rank analysed (e.g. genus, species, phylum, OTU, ASV). Prefer METHODS or RESULTS if sections are present.
+  If multiple ranks are reported, give the finest rank stated. If not stated, return null.
 - sample_size_raw    : Give ONLY an integer. Prefer METHODS if sections are present, otherwise extract from any available text. Convert word-numbers
   (e.g. "forty-two" → 42). If a range or multiple cohorts, give the total or largest number.
   If completely absent from the paper, return null.
@@ -564,6 +570,27 @@ def _heuristic_payload_from_text(text: str) -> Dict[str, Any]:
     elif "sequencing" in lower:
         sequencing_type_raw = "sequencing"
 
+    taxa_level_raw = None
+    for term in [
+        "operational taxonomic unit",
+        "amplicon sequence variant",
+        "otu",
+        "asv",
+        "species level",
+        "genus level",
+        "phylum level",
+        "family level",
+        "species",
+        "genus",
+        "phylum",
+        "family",
+        "class",
+        "order",
+    ]:
+        if term in lower:
+            taxa_level_raw = term
+            break
+
     sample_size_raw: Optional[int] = None
     n_match = re.search(r"\bn\s*=\s*(\d{1,5})\b", lower)
     if n_match:
@@ -584,6 +611,7 @@ def _heuristic_payload_from_text(text: str) -> Dict[str, Any]:
         "body_site_raw": body_site_raw,
         "condition_raw": condition_raw,
         "sequencing_type_raw": sequencing_type_raw,
+        "taxa_level_raw": taxa_level_raw,
         "sample_size_raw": sample_size_raw,
         "has_differential_abundance": bool(
             re.search(
@@ -598,6 +626,21 @@ def _heuristic_payload_from_text(text: str) -> Dict[str, Any]:
         ),
         "_source": "heuristic",
     }
+
+
+def _build_curation_summary(field_results: Dict[str, Dict[str, Any]]) -> str:
+    """Brief curator-facing summary from normalized field values."""
+    parts: List[str] = []
+    condition = field_results.get("condition", {})
+    if condition.get("status") != "ABSENT" and condition.get("value"):
+        parts.append(f"Condition: {condition['value']}.")
+    host = field_results.get("host_species", {})
+    body = field_results.get("body_site", {})
+    if host.get("status") != "ABSENT" and host.get("value"):
+        parts.append(f"Host: {host['value']}.")
+    if body.get("status") != "ABSENT" and body.get("value"):
+        parts.append(f"Body site: {body['value']}.")
+    return " ".join(parts).strip()
 
 
 def _postprocess_field_results(
@@ -696,6 +739,7 @@ def _field_results_from_unified_payload(
     body_term = normalize_body_site(payload.get("body_site_raw"))
     cond_term = normalize_condition(payload.get("condition_raw"))
     seq_term = normalize_sequencing_type(payload.get("sequencing_type_raw"))
+    taxa_term = normalize_taxa_level(payload.get("taxa_level_raw"))
     samp_term = normalize_sample_size(payload.get("sample_size_raw"))
 
     field_results = {
@@ -704,7 +748,7 @@ def _field_results_from_unified_payload(
         "condition": _build_field_result_from_term(cond_term),
         "sequencing_type": _build_field_result_from_term(seq_term),
         "sample_size": _build_field_result_from_term(samp_term),
-        "taxa_level": create_empty_field_result("taxa_level"),
+        "taxa_level": _build_field_result_from_term(taxa_term),
     }
 
     # Heuristic payloads get a confidence cap — they are less reliable
@@ -714,6 +758,7 @@ def _field_results_from_unified_payload(
             "body_site",
             "condition",
             "sequencing_type",
+            "taxa_level",
             "sample_size",
         ):
             field = field_results.get(key, {})
@@ -802,6 +847,7 @@ async def analyze_paper_simple(
             logger.info("Force-refresh for PMID %s; bypassing cache", pmid)
 
         # ── Retrieve content ───────────────────────────────────────────────
+        start_time = time.time()
         logger.info("Starting simple analysis for PMID %s", pmid)
         texts = await pubmed_retriever.get_texts_for_analysis_async(pmid)
 
@@ -840,6 +886,8 @@ async def analyze_paper_simple(
             payload, analysis_text
         )
 
+        processing_time = time.time() - start_time
+
         # ── Assemble result dict ───────────────────────────────────────────
         # Key names here are the single source of truth — data.R reads these.
         result: Dict[str, Any] = {
@@ -853,11 +901,15 @@ async def analyze_paper_simple(
             "differential_abundance_confidence": diff_abund_conf,
             "in_bugsigdb": is_in_bugsigdb(pmid),
             "fields": field_results,
+            "curation_summary": _build_curation_summary(field_results),
+            "processing_time": processing_time,
             "analysis_timestamp": _current_timestamp(),
             "model_used": DEFAULT_MODEL,
         }
 
-        logger.info("Simple analysis completed for PMID %s", pmid)
+        logger.info(
+            "Simple analysis completed for PMID %s in %.2fs", pmid, processing_time
+        )
 
         # ── Cache result ───────────────────────────────────────────────────
         try:

@@ -308,6 +308,18 @@ class ExtractedExperiment(BaseModel):
         """Re-derive metadata from fields (call after fields are populated)."""
         self.metadata = ExperimentMetadata.from_fields(self.fields)
 
+    def apply_signature_da_flags(self, signatures: List["MicrobialSignature"]) -> None:
+        """Set differential-abundance flags from extracted microbial signatures."""
+        if not signatures:
+            return
+        self.has_differential_abundance = True
+        confidences = [float(s.confidence or 0.0) for s in signatures]
+        has_stats = any(s.statistical_significance for s in signatures)
+        base_conf = max(confidences) if confidences else 0.6
+        self.differential_abundance_confidence = (
+            min(1.0, base_conf + 0.15) if has_stats else base_conf
+        )
+
 
 # ---------------------------------------------------------------------------
 # StudyAnalysisResult
@@ -414,12 +426,8 @@ class StudyAnalysisResult(BaseModel):
         primary_fields: Dict[str, Dict[str, Any]]
         if self.experiments:
             primary_fields = self.experiments[0].fields.to_legacy_dict()
-            has_da = self.experiments[0].has_differential_abundance
-            da_conf = self.experiments[0].differential_abundance_confidence
         else:
             primary_fields = ExperimentFields().to_legacy_dict()
-            has_da = self.has_differential_abundance
-            da_conf = self.differential_abundance_confidence
 
         return {
             "pmid": self.pmid,
@@ -428,8 +436,8 @@ class StudyAnalysisResult(BaseModel):
             "journal": self.journal,
             "publication_date": self.publication_date,
             "year": self.year if self.year is not None else "",
-            "has_differential_abundance": has_da,
-            "differential_abundance_confidence": da_conf,
+            "has_differential_abundance": self.has_differential_abundance,
+            "differential_abundance_confidence": self.differential_abundance_confidence,
             "in_bugsigdb": self.in_bugsigdb,
             "fields": primary_fields,
             "analysis_timestamp": self.analysis_timestamp.isoformat(),

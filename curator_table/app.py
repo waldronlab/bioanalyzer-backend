@@ -47,8 +47,12 @@ STATUS_COLUMNS = [
     "Body Site Status",
     "Condition Status",
     "Sequencing Type Status",
-    "Taxa Level Status",
     "Sample Size Status",
+]
+MAPPING_CONFIDENCE_COLUMNS = [
+    "Host Species Mapping Confidence",
+    "Body Site Mapping Confidence",
+    "Condition Mapping Confidence",
 ]
 OPTIONS = {
     "valid_states": ["ABSENT", "PARTIALLY_PRESENT", "PRESENT"],
@@ -108,11 +112,29 @@ def _normalize_status(x: str) -> str:
 
 
 def _priority_score(row: pd.Series) -> float:
+    """Confidence-weighted priority score (spec §6.4 + long-term vision)."""
     weights = {"PRESENT": 1.0, "PARTIALLY_PRESENT": 0.5}
-    return sum(
-        weights.get(str(row.get(col, "")).strip().upper(), 0.0)
-        for col in STATUS_COLUMNS
-    )
+    score = 0.0
+    for i, col in enumerate(STATUS_COLUMNS):
+        base = weights.get(str(row.get(col, "")).strip().upper(), 0.0)
+        if base == 0:
+            continue
+        conf = 1.0
+        if i < len(MAPPING_CONFIDENCE_COLUMNS):
+            map_col = MAPPING_CONFIDENCE_COLUMNS[i]
+            if map_col in row.index and pd.notna(row.get(map_col)):
+                try:
+                    conf = float(row.get(map_col))
+                except (TypeError, ValueError):
+                    conf = 1.0
+        score += base * conf
+    if row.get("has_differential_abundance") in (True, "TRUE", "True", 1, "1"):
+        try:
+            da_conf = float(row.get("differential_abundance_confidence", 0) or 0)
+            score += 0.25 * da_conf
+        except (TypeError, ValueError):
+            pass
+    return round(score, 3)
 
 
 # -----------------------------
@@ -163,6 +185,17 @@ def normalize_dataset(df: pd.DataFrame) -> pd.DataFrame:
     for col in STATUS_COLUMNS:
         if col in df.columns:
             df = df.assign(**{col: df[col].apply(_normalize_status)})
+    for col in ("has_differential_abundance", "in_bugsigdb"):
+        if col in df.columns:
+            df[col] = df[col].map(
+                lambda v: str(v).strip().upper() in {"TRUE", "T", "1", "YES"}
+                if pd.notna(v)
+                else False
+            )
+        else:
+            df[col] = False
+    if "differential_abundance_confidence" not in df.columns:
+        df["differential_abundance_confidence"] = 0.0
     df = df.assign(
         **{"Priority Score": df.apply(_priority_score, axis=1)},
         **{"PubMed Link": df["PMID"].apply(_make_pmid_link)},
@@ -234,6 +267,19 @@ def render_filters(df: pd.DataFrame) -> pd.DataFrame:
         if not years.empty:
             min_y, max_y = int(years.min()), int(years.max())
             year_range = st.sidebar.slider("Year range", min_y, max_y, (min_y, max_y))
+    da_only = st.sidebar.checkbox(
+        "Only differential abundance papers",
+        value=True,
+        help="Show papers where has_differential_abundance is TRUE (spec §8.2 default)",
+    )
+    min_da_conf = st.sidebar.slider(
+        "Min differential abundance confidence",
+        0.0,
+        1.0,
+        0.0,
+        0.05,
+    )
+    hide_bugsigdb = st.sidebar.checkbox("Hide papers already in BugSigDB", value=False)
     out = df.copy()
     if search:
         mask = out["PMID"].astype(str).str.contains(search, na=False)
@@ -246,6 +292,12 @@ def render_filters(df: pd.DataFrame) -> pd.DataFrame:
             out = out[out[col].isin(allowed)]
     if year_range and "Year" in out.columns:
         out = out[(out["Year"] >= year_range[0]) & (out["Year"] <= year_range[1])]
+    if da_only and "has_differential_abundance" in out.columns:
+        out = out[out["has_differential_abundance"] == True]  # noqa: E712
+    if min_da_conf > 0 and "differential_abundance_confidence" in out.columns:
+        out = out[out["differential_abundance_confidence"].fillna(0) >= min_da_conf]
+    if hide_bugsigdb and "in_bugsigdb" in out.columns:
+        out = out[out["in_bugsigdb"] != True]  # noqa: E712
     return out
 
 

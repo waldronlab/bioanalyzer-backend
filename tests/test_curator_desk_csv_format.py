@@ -16,21 +16,26 @@ def test_curator_desk_csv_header_and_core_fields():
                 "has_differential_abundance": True,
                 "differential_abundance_confidence": 0.92,
                 "in_bugsigdb": True,
+                "curation_summary": "Condition: Parkinson disease. Host: Homo sapiens.",
+                "processing_time": 1.25,
                 "fields": {
                     "host_species": {
                         "value": "Homo sapiens",
                         "status": "PRESENT",
                         "ontology_id": "NCBITaxon:9606",
+                        "mapping_confidence": 1.0,
                     },
                     "body_site": {
                         "value": "feces",
                         "status": "PRESENT",
                         "ontology_id": "UBERON:0001988",
+                        "mapping_confidence": 1.0,
                     },
                     "condition": {
                         "value": "Parkinson disease",
                         "status": "PRESENT",
                         "ontology_id": "EFO:0002508",
+                        "mapping_confidence": 1.0,
                     },
                     "sequencing_type": {"value": "16S", "status": "PRESENT"},
                     "sample_size": {"value": "98", "status": "PRESENT"},
@@ -51,6 +56,7 @@ def test_curator_desk_csv_header_and_core_fields():
     assert row["Host Species"] == "Homo sapiens"
     assert row["Host Species ID"] == "NCBITaxon:9606"
     assert row["Host Species Status"] == "PRESENT"
+    assert row["Host Species Mapping Confidence"] == "1.00"
     assert row["Body Site"] == "feces"
     assert row["Body Site ID"] == "UBERON:0001988"
     assert row["Body Site Status"] == "PRESENT"
@@ -61,7 +67,11 @@ def test_curator_desk_csv_header_and_core_fields():
     assert row["Sequencing Type Status"] == "PRESENT"
     assert row["Sample Size"] == "98"
     assert row["Sample Size Status"] == "PRESENT"
+    assert row["Summary"] == "Condition: Parkinson disease. Host: Homo sapiens."
+    assert row["Processing Time"] == "1.25"
     assert row["has_differential_abundance"] == "TRUE"
     assert row["differential_abundance_confidence"] == "0.92"
     assert row["in_bugsigdb"] == "TRUE"
-    assert "taxa_level" not in row
+    # Spec §6.2: five prediction fields in curator-desk CSV (taxa_level is API-only)
+    assert "Taxa Level" not in row
+    assert "Taxa Level Status" not in row
