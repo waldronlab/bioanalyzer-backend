@@ -84,6 +84,42 @@ def _extract_year(publication_date: Any) -> str:
     return m.group(0) if m else ""
 
 
+def _priority_score(fields: dict) -> float:
+    """
+    Calculate curation priority score (0-5 range).
+    
+    Weights each field by its extraction confidence:
+    - PRESENT: weight = 1.0
+    - PARTIALLY_PRESENT: weight = 0.5
+    - ABSENT: weight = 0.0
+    
+    Score = sum(weight × mapping_confidence) for each of 5 fields.
+    Higher scores = more promising candidates for curation.
+    """
+    field_keys = ["host_species", "body_site", "condition", "sequencing_type", "sample_size"]
+    weights = {"PRESENT": 1.0, "PARTIALLY_PRESENT": 0.5, "ABSENT": 0.0}
+    score = 0.0
+    
+    for key in field_keys:
+        field_data = fields.get(key, {})
+        status = str(field_data.get("status", "ABSENT")).strip().upper()
+        base_weight = weights.get(status, 0.0)
+        
+        if base_weight == 0.0:
+            continue
+        
+        # Get mapping confidence (default to 1.0 if not available)
+        try:
+            mapping_conf = float(field_data.get("mapping_confidence", 1.0))
+            mapping_conf = max(0.0, min(1.0, mapping_conf))  # Clamp to [0, 1]
+        except (TypeError, ValueError):
+            mapping_conf = 1.0
+        
+        score += base_weight * mapping_conf
+    
+    return round(score, 2)
+
+
 def render_results(results: List[Dict[str, Any]], fmt: str) -> str:
     if fmt == "json":
         return json.dumps(results, indent=2, ensure_ascii=False)
@@ -144,7 +180,7 @@ def _render_csv(results: List[Dict[str, Any]]) -> str:
 
 
 def _render_curator_desk_csv(results: List[Dict[str, Any]]) -> str:
-    # Curator Desk spec §3.1 / §6.2: five prediction fields + ontology IDs + triage flags.
+    # Curator Desk spec §3.1 / §6.2: five prediction fields + ontology IDs + triage flags + priority.
     columns = [
         "PMID",
         "Title",
@@ -166,11 +202,12 @@ def _render_curator_desk_csv(results: List[Dict[str, Any]]) -> str:
         "Sequencing Type Status",
         "Sample Size",
         "Sample Size Status",
-        "Summary",
-        "Processing Time",
         "has_differential_abundance",
         "differential_abundance_confidence",
         "in_bugsigdb",
+        "Priority",
+        "Summary",
+        "Processing Time",
     ]
     out = io.StringIO()
     w = csv.DictWriter(out, fieldnames=columns, extrasaction="ignore")
@@ -228,13 +265,14 @@ def _render_curator_desk_csv(results: List[Dict[str, Any]]) -> str:
                 "Sample Size Status": _status_normalise(
                     _field_val(fields, "sample_size", "status")
                 ),
-                "Summary": r.get("curation_summary", ""),
-                "Processing Time": proc_time,
                 "has_differential_abundance": _bool_upper(
                     r.get("has_differential_abundance")
                 ),
                 "differential_abundance_confidence": conf,
                 "in_bugsigdb": _bool_upper(r.get("in_bugsigdb")),
+                "Priority": _priority_score(fields),
+                "Summary": r.get("curation_summary", ""),
+                "Processing Time": proc_time,
             }
         )
     return out.getvalue()
