@@ -223,7 +223,7 @@ async def process_url_analysis(
 
     except Exception as e:
         safe_error = mask_exception_message(e)
-        error_msg = str(e) if str(e) else f"{type(e).__name__}: {repr(e)}"
+        error_msg = safe_error if safe_error else f"{type(e).__name__} occurred"
         logger.error(f"Job {job_id}: Failed with error: {safe_error}", exc_info=True)
         job_store[job_id].status = "failed"
         job_store[job_id].error = error_msg
