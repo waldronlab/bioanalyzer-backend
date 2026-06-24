@@ -95,6 +95,52 @@ endpoints, not as its own REST resource. There's no `/health/live` or
 `/health` check plus the provider-specific `/health/gemini` and
 `/health/ncbi`.
 
+### URL-based analysis pipeline (`/api/v1/analyze-url`)
+
+A third analysis pipeline, separate from v1/v2 above and not PMID-based -
+it takes an arbitrary URL. Implemented as a background-task workflow in
+`app/api/routers/study_analysis.py`:
+
+1. Scrape the URL to Markdown (`app/services/web_scraper.py`).
+2. Describe up to 10 images via an LLM if `GEMINI_API_KEY` is set, else a
+   static placeholder (`app/services/image_processor.py`).
+3. Merge scraped content + image descriptions + any downloaded
+   supplementary files into one enhanced Markdown document
+   (`app/services/converter_service.py` - note: downloaded PDFs are never
+   actually parsed into this merge, only a placeholder note is inserted).
+4. Chunk the merged Markdown (`app/utils/chunking.py`, wraps Paper-QA's
+   `chunk_text`).
+5. Vectorize the chunks (`app/services/vector_store_service.py` - supports
+   both NumPy and Qdrant backends, but this pipeline's only caller always
+   selects NumPy/in-memory; Qdrant is never actually exercised here).
+6. Extract experiments and microbial signatures via Paper-QA's
+   `agent_query`, orchestrated by
+   `app/services/agent_orchestrator.py::AgentOrchestrator`. Parsing of the
+   LLM's free-text response is line-based/regex heuristics, not
+   structured/JSON-mode extraction. Output is a `StudyAnalysisResult`
+   (`app/models/extraction_schemas.py`), deliberately shaped to be
+   drop-in compatible with v1/v2's result dict so the curator table can
+   consume either source.
+7. Store the result in a module-level `job_store` dict, polled via
+   `GET /api/v1/analysis-status/{job_id}` and
+   `GET /api/v1/analysis-result/{job_id}`.
+
+**Known limitations** (verified, not speculative):
+
+- `job_store` is an in-memory Python dict - **lost on process restart,
+  unbounded** (no TTL/eviction), and **not shared across worker
+  processes**. Running multiple Uvicorn/Gunicorn workers (or multiple
+  Docker replicas, see `docs/PRODUCTION_DEPLOYMENT.md`'s horizontal
+  scaling section) means a job created on one worker is invisible to a
+  status/result request routed to another.
+- This router has its own `try`/`except` around the background task, so
+  it does **not** go through `app/api/app.py`'s global exception handler -
+  `mask_exception_message` must be (and is) called explicitly here rather
+  than relying on the global policy.
+- No automated test coverage for `AgentOrchestrator` or this router itself
+  (steps 1-5 are tested in isolation in `tests/test_vector_store.py` and
+  `tests/test_integration_workflow.py`).
+
 ### CLI structure
 
 `scripts/cli.py`'s `BioAnalyzerCLI`, invoked via the `BioAnalyzer` wrapper
@@ -140,6 +186,10 @@ NCBI lookup) and fall back to a lower-confidence result rather than
 raising; API-level errors are caught by FastAPI exception handlers in
 `app/api/app.py`, which always mask credentials via
 `app/utils/credential_masking.py` before logging or returning error detail.
+The one exception is `app/api/routers/study_analysis.py`'s background
+task, which has its own `try`/`except` and calls `mask_exception_message`
+explicitly rather than relying on the global handler (see the URL-based
+analysis pipeline section above).
 
 ### Caching
 

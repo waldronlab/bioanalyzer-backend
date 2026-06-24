@@ -375,7 +375,10 @@ curl -X POST http://localhost:8000/api/v1/analyze-url \
 #### VectorStoreService (URL Workflow)
 - **Options:**
   - `NumpyVectorStore` - In-memory (fast, simple)
-  - `QdrantVectorStore` - Persistent (production)
+  - `QdrantVectorStore` - Persistent option exists in `VectorStoreService`,
+    but `study_analysis.py` (this service's only caller) always hardcodes
+    `store_type="numpy"` - Qdrant is not actually used by the URL workflow
+    today, despite being a real, working code path.
 - **Embeddings:**
   - Gemini: `text-embedding-004`
   - OLLAMA: `nomic-embed-text`
