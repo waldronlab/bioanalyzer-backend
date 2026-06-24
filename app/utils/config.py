@@ -384,6 +384,10 @@ try:
 
     # Logging
     LOG_LEVEL = _settings.logging.level.value
-except Exception:
-    # Fail gracefully; fall back to env-based values defined above
-    pass
+except Exception as e:
+    # Fall back to the env-based values defined above, but don't fail silently -
+    # a broken settings file should be visible at startup, not just swallowed.
+    logger.warning(
+        "Failed to load structured settings; falling back to raw env vars: %s",
+        mask_exception_message(e),
+    )
