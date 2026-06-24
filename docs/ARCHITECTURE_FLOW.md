@@ -333,10 +333,13 @@ curl -X POST http://localhost:8000/api/v1/analyze-url \
 
 #### UnifiedQA
 - **Purpose:** Unified interface for LLM interactions
-- **Backends (in priority order):**
-  - `LLMProviderManager` (preferred) - Multi-provider via LiteLLM
-  - `PaperQAAgent` (fallback) - Uses litellm
-  - `GeminiQA` (fallback) - Direct Gemini API
+- **Backends, in the order `chat()` actually tries them** (`chat()` is what
+  the main analysis pipeline calls - verified against
+  `app/models/unified_qa.py`):
+  1. `PaperQAAgent` - tried first when available and a Gemini API key is set
+  2. `LLMProviderManager` (LiteLLM, multi-provider) - tried if Paper-QA is
+     unavailable or errors
+  3. `GeminiQA` - direct Gemini API call, last resort
 - **Features:** Chat, question answering, image analysis
 
 #### AdvancedRAGService

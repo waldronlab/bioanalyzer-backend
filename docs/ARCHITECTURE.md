@@ -118,12 +118,17 @@ Output rendering (table/csv/curator_desk_csv/xml) lives in
 
 ### LLM provider fallback chain
 
-`UnifiedQA` (`app/models/unified_qa.py`) tries providers in this order,
-falling back on failure (per its own docstring, verified): **LiteLLM**
-(`LLMProviderManager`, supports Gemini/OpenAI/Anthropic/Ollama) first, then
-**Paper-QA** (`PaperQAAgent`), then **GeminiQA** directly as the last
-resort. Provider auto-detects from whichever API key is set; override with
-`LLM_PROVIDER`.
+`UnifiedQA.chat()` (`app/models/unified_qa.py`) is what the main analysis
+pipeline actually calls (confirmed via `app/services/bugsigdb_analyzer.py`).
+It tries providers in this order, falling back on failure: **Paper-QA**
+(`PaperQAAgent`) first when available and a Gemini API key is set, then
+**LiteLLM** (`LLMProviderManager`, supports Gemini/OpenAI/Anthropic/Ollama),
+then **GeminiQA** directly as the last resort. `UnifiedQA`'s other public
+method, `ask_question()`, checks LiteLLM first instead - a real
+inconsistency between the two methods, not just stale docs; left as a
+future cleanup rather than fixed here since reconciling them changes
+runtime behavior. Provider auto-detects from whichever API key is set;
+override with `LLM_PROVIDER`.
 
 ### Error handling
 
