@@ -244,14 +244,17 @@ class GeminiQA:
 
                 if current_section == "readiness":
                     line_upper = line.upper()
-                    if "READY FOR CURATION" in line_upper:
-                        curation_analysis["readiness"] = "READY"
-                    elif "NOT READY FOR CURATION" in line_upper:
+                    # Check the "NOT READY..." variants first: "READY FOR CURATION"
+                    # is a substring of "NOT READY FOR CURATION", so checking the
+                    # bare READY phrases first would misclassify NOT_READY as READY.
+                    if "NOT READY FOR CURATION" in line_upper:
                         curation_analysis["readiness"] = "NOT_READY"
-                    elif "READY" in line_upper and "NOT" not in line_upper:
+                    elif "READY FOR CURATION" in line_upper:
                         curation_analysis["readiness"] = "READY"
                     elif "NOT READY" in line_upper:
                         curation_analysis["readiness"] = "NOT_READY"
+                    elif "READY" in line_upper and "NOT" not in line_upper:
+                        curation_analysis["readiness"] = "READY"
                     elif "UNKNOWN" in line_upper or "UNCLEAR" in line_upper:
                         curation_analysis["readiness"] = "UNKNOWN"
                 elif current_section == "explanation":
