@@ -14,6 +14,8 @@ import requests
 from bs4 import BeautifulSoup
 from html2text import html2text
 
+from app.utils.url_safety import UnsafeURLError, assert_public_url
+
 logger = logging.getLogger(__name__)
 
 
@@ -143,6 +145,11 @@ class WebScraperService:
 
     async def _fetch_html(self, url: str) -> str:
         """Fetch HTML content from URL with proper headers."""
+        try:
+            assert_public_url(url)
+        except UnsafeURLError as e:
+            raise ValueError(f"Refusing to fetch unsafe URL: {e}")
+
         # Set headers to mimic a real browser request
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -246,6 +253,12 @@ class WebScraperService:
         self, session: aiohttp.ClientSession, url: str, base_url: str
     ) -> Optional[dict]:
         """Download a single file."""
+        try:
+            assert_public_url(url)
+        except UnsafeURLError as e:
+            logger.warning(f"Skipping unsafe download URL {url}: {e}")
+            return None
+
         try:
             async with session.get(
                 url, timeout=aiohttp.ClientTimeout(total=self.timeout)
