@@ -1,10 +1,35 @@
+import time
+
+import pytest
+import requests
+
+from app.normalization import host_species as host_species_module
+from app.normalization import ols as ols_module
 from app.normalization.body_site import normalize_body_site
 from app.normalization.condition import normalize_condition
 from app.normalization.host_species import normalize_host_species
-from app.normalization.ols import format_ontology_id
+from app.normalization.ols import format_ontology_id, ols_search
 from app.normalization.sample_size import normalize_sample_size
 from app.normalization.sequencing_type import normalize_sequencing_type
 from app.normalization.taxa_level import normalize_taxa_level
+
+
+class _DummyResponse:
+    """Minimal stand-in for requests.Response used by the fakes below."""
+
+    def __init__(self, json_data=None, status_code=200, raise_json_error=False):
+        self._json_data = json_data
+        self.status_code = status_code
+        self._raise_json_error = raise_json_error
+
+    def raise_for_status(self):
+        if self.status_code >= 400:
+            raise requests.exceptions.HTTPError(f"{self.status_code} error")
+
+    def json(self):
+        if self._raise_json_error:
+            raise ValueError("malformed JSON")
+        return self._json_data
 
 
 def test_format_ontology_id():
@@ -157,3 +182,126 @@ def test_sample_size_normalization_variants():
 
     t = normalize_sample_size("unknown sample count")
     assert t.status == "PARTIALLY_PRESENT"
+
+
+# ---------------------------------------------------------------------------
+# host_species.py: NCBI Taxonomy API fallback (only reached when the local
+# SPECIES_LOOKUP dict misses). Untested before this milestone, and exactly
+# the code path whose exception handling was narrowed from a bare
+# `except Exception` to (RequestException, ValueError, KeyError).
+# ---------------------------------------------------------------------------
+
+
+def test_host_species_ncbi_fallback_success(monkeypatch):
+    monkeypatch.setattr(time, "sleep", lambda s: None)
+
+    def fake_get(url, params=None, timeout=None):
+        if url == host_species_module.NCBI_TAX_SEARCH_URL:
+            return _DummyResponse({"esearchresult": {"idlist": ["9685"]}})
+        if url == host_species_module.NCBI_TAX_SUMMARY_URL:
+            return _DummyResponse(
+                {"result": {"9685": {"scientificname": "Felis catus", "taxid": "9685"}}}
+            )
+        raise AssertionError(f"unexpected URL: {url}")
+
+    monkeypatch.setattr(requests, "get", fake_get)
+    t = normalize_host_species("domestic cat")
+    assert t.label == "Felis catus"
+    assert t.ontology_id == "NCBITaxon:9685"
+    assert t.status == "PRESENT"
+    assert t.mapping_confidence == 0.9
+
+
+def test_host_species_ncbi_fallback_no_results(monkeypatch):
+    monkeypatch.setattr(time, "sleep", lambda s: None)
+
+    def fake_get(url, params=None, timeout=None):
+        return _DummyResponse({"esearchresult": {"idlist": []}})
+
+    monkeypatch.setattr(requests, "get", fake_get)
+    t = normalize_host_species("some unrecognized organism")
+    assert t.status == "PARTIALLY_PRESENT"
+    assert t.ontology_id == ""
+    assert t.mapping_confidence == 0.5
+
+
+@pytest.mark.parametrize(
+    "fake_get",
+    [
+        pytest.param(
+            lambda url, params=None, timeout=None: (_ for _ in ()).throw(
+                requests.exceptions.ConnectionError("network down")
+            ),
+            id="connection-error",
+        ),
+        pytest.param(
+            lambda url, params=None, timeout=None: _DummyResponse(
+                raise_json_error=True
+            ),
+            id="malformed-json",
+        ),
+        pytest.param(
+            lambda url, params=None, timeout=None: (
+                _DummyResponse({"esearchresult": {"idlist": ["9685"]}})
+                if url == host_species_module.NCBI_TAX_SEARCH_URL
+                else _DummyResponse({"result": {}})
+            ),  # missing the id key -> KeyError
+            id="missing-result-key",
+        ),
+    ],
+)
+def test_host_species_ncbi_fallback_handles_narrowed_exceptions(monkeypatch, fake_get):
+    """The exception narrowing in host_species.py (RequestException, ValueError,
+    KeyError) must still gracefully fall back rather than raise."""
+    monkeypatch.setattr(time, "sleep", lambda s: None)
+    monkeypatch.setattr(requests, "get", fake_get)
+    t = normalize_host_species("some unrecognized organism")
+    assert t.status == "PARTIALLY_PRESENT"
+    assert t.ontology_id == ""
+    assert t.mapping_confidence == 0.5
+
+
+# ---------------------------------------------------------------------------
+# ols.py: ols_search() (shared fallback used by condition.py and body_site.py
+# when their local lookup dicts miss). Also untested before this milestone,
+# and also where exception handling was narrowed to
+# (RequestException, ValueError).
+# ---------------------------------------------------------------------------
+
+
+def test_ols_search_success(monkeypatch):
+    def fake_get(url, params=None, timeout=None):
+        assert url == ols_module.OLS_SEARCH_URL
+        return _DummyResponse(
+            {
+                "response": {
+                    "docs": [{"label": "felis catus", "obo_id": "NCBITaxon_9685"}]
+                }
+            }
+        )
+
+    monkeypatch.setattr(requests, "get", fake_get)
+    result = ols_search("domestic cat", "ncbitaxon", "NCBITaxon")
+    assert result == ("felis catus", "NCBITaxon:9685", 0.9)
+
+
+def test_ols_search_no_docs(monkeypatch):
+    monkeypatch.setattr(
+        requests, "get", lambda *a, **k: _DummyResponse({"response": {"docs": []}})
+    )
+    assert ols_search("nonexistent term", "efo", "EFO") is None
+
+
+def test_ols_search_handles_request_exception(monkeypatch):
+    def fake_get(*args, **kwargs):
+        raise requests.exceptions.Timeout("timed out")
+
+    monkeypatch.setattr(requests, "get", fake_get)
+    assert ols_search("some term", "efo", "EFO") is None
+
+
+def test_ols_search_handles_malformed_json(monkeypatch):
+    monkeypatch.setattr(
+        requests, "get", lambda *a, **k: _DummyResponse(raise_json_error=True)
+    )
+    assert ols_search("some term", "efo", "EFO") is None
