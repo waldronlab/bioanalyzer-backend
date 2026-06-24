@@ -78,7 +78,7 @@ A third, separate pipeline takes an arbitrary URL instead of a PMID:
 
 Key modules:
 
-- `app/services/data_retrieval.py`, `pubmed_retrieval_service.py`, `standalone_pubmed_retriever.py` — PubMed/PMC fetching (metadata + full text), rate-limited to NCBI's 3 req/s.
+- `app/services/data_retrieval.py`, `standalone_pubmed_retriever.py` — PubMed/PMC fetching (metadata + full text), rate-limited to NCBI's 3 req/s.
 - `app/services/cache_manager.py` — SQLite-backed cache (`cache/analysis_cache.db`), default 24h TTL. This is the actual cache; `redis` in `docker-compose.yml` is provisioned but not wired into the app code — don't assume cache reads/writes touch Redis.
 - `app/models/llm_provider.py` — LiteLLM-based provider abstraction (Gemini/OpenAI/Anthropic/Ollama/Llamafile); `app/models/unified_qa.py` is the common QA interface; `app/models/gemini_qa.py` and `paperqa_agent.py` are provider-specific implementations.
 - `app/normalization/` — maps extracted free-text fields to controlled ontology vocabularies before they reach the curator-desk CSV format: `host_species.py` → NCBITaxon, `body_site.py` → UBERON, `condition.py` → EFO (via `ols.py`, which queries EBI's OLS4 API), `sequencing_type.py` / `taxa_level.py` → BugSigDB's own controlled vocab, `sample_size.py` → numeric parsing (including word-to-number). Each returns a `NormalizedTerm` (`types.py`): label, ontology ID, status, mapping confidence.

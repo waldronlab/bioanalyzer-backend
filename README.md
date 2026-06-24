@@ -209,16 +209,11 @@ Cache is SQLite-based, stored in `cache/analysis_cache.db`. Results valid for 24
 BioAnalyzer includes a formal validation workflow to compare automated predictions against expert curator annotations:
 
 - **Ground truth**: Expert annotations in `feedback.csv` for the five core BugSigDB curation fields  
-- **Predictions**: BioAnalyzer outputs in a predictions CSV (e.g. `analysis_results.csv` or `new.csv`)  
-- **Alignment**: PMIDs are aligned with `align_pmids.py`  
+- **Predictions**: BioAnalyzer outputs in a predictions CSV (e.g. `analysis_results.csv` or `new.csv`), already aligned by PMID with the ground-truth file (the `align_pmids.py` script this step used to reference no longer exists in the repo - align manually or write a one-off script for now)
 - **Evaluation**: `scripts/eval/confusion_matrix_analysis.py` computes 3-class confusion matrices (`ABSENT`, `PARTIALLY_PRESENT`, `PRESENT`) and per-field accuracy  
 - **Outputs**: Metrics and PNG confusion matrices are written to `confusion_matrix_results/`
 
-For sharing/inspection, `create_validation_dataset.py` can generate a flat CSV:
-
-- Columns: `Study, PMID, Experiment, Outcome of the experiment, Prediction`  
-- Each row = one paper–field comparison  
-- Used in the `Deliverables/` folder to communicate validation results (methods, ground truth analysis, and confusion-matrix summaries).
+`create_validation_dataset.py`, previously used to flatten results into a `Study, PMID, Experiment, Outcome of the experiment, Prediction` CSV for the `Deliverables/` folder, no longer exists in the repo either.
 
 ## Development
 

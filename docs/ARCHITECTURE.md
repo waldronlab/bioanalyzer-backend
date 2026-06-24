@@ -33,8 +33,7 @@ don't write code or docs assuming any of that section is real.
   utilities (`utils/`). Mounts four routers, each with its own URL prefix
   (see API Endpoints below).
 - **`app/services/`** - business logic: PubMed/PMC retrieval
-  (`data_retrieval.py`, `pubmed_retrieval_service.py`,
-  `standalone_pubmed_retriever.py`), field analysis orchestration
+  (`data_retrieval.py`, `standalone_pubmed_retriever.py`), field analysis orchestration
   (`bugsigdb_analyzer.py`), the v2 RAG pipeline (`advanced_rag.py`,
   `chunk_reranking.py`, `contextual_summarization.py`), and the SQLite
   cache (`cache_manager.py`).
