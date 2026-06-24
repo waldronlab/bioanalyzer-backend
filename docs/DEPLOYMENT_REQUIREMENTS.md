@@ -25,9 +25,14 @@ You'll need:
 - Internet access for NCBI E-utilities API and LLM provider APIs
 
 Optional but useful:
-- Redis for caching (SQLite is used by default though)
 - Reverse proxy like Nginx or Traefik for production
 - SSL/TLS certificates if you need HTTPS
+
+Note: `docker-compose.yml` provisions a Redis service, but it isn't wired
+into any code path today - caching is SQLite-only
+(`app/services/cache_manager.py`) and rate limiting is in-memory
+(`app/api/middleware/rate_limit.py`, which has a comment noting Redis as a
+possible future upgrade). Running Redis currently has no effect.
 
 ### Dependencies
 
