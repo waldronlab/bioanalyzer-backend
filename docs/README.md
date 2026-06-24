@@ -25,6 +25,7 @@ All project documentation is organized in this folder.
 | Document | Description |
 |----------|-------------|
 | [CLI_DOCUMENTATION.md](CLI_DOCUMENTATION.md) | Full CLI command reference and examples |
+| [CURATOR_DESK_CSV_FORMAT.md](CURATOR_DESK_CSV_FORMAT.md) | The `curator_desk_csv` output contract consumed by `curator_table`/`curator_table_r` |
 
 ## Features & guides
 
