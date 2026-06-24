@@ -69,25 +69,6 @@ if os.getenv("OLLAMA_BASE_URL") or os.getenv("OLLAMA_HOST"):
     AVAILABLE_MODELS.append("ollama")
 
 
-def validate_gemini_key() -> bool:
-    """Validate Gemini API key by configuring the client."""
-    if not GEMINI_API_KEY:
-        return False
-    try:
-        genai = get_genai()
-        genai.configure(api_key=GEMINI_API_KEY)
-        return True
-    except (ValueError, AttributeError) as e:
-        safe_error = mask_exception_message(e)
-        print(f"Gemini API key validation failed: {safe_error}")
-        return False
-    except Exception as e:
-        # Catch-all for unexpected errors during configuration
-        safe_error = mask_exception_message(e)
-        print(f"Unexpected error validating Gemini key: {safe_error}")
-        return False
-
-
 def validate_env_vars() -> bool:
     """Validate that required environment variables are set."""
     missing_vars: List[str] = []
@@ -104,34 +85,20 @@ def validate_env_vars() -> bool:
         missing_vars.append("GEMINI_API_KEY")
 
     if missing_vars:
-        print(f"Warning: Missing environment variables: {', '.join(missing_vars)}")
-        print("Set them in your .env file or environment.")
+        # This runs at import time, before this module's own `logger` (set up
+        # further down via setup_logging()) exists - use the stdlib logger
+        # directly rather than depending on that module-level assignment order.
+        logging.getLogger(__name__).warning(
+            "Missing environment variables: %s. Set them in your .env file or "
+            "environment.",
+            ", ".join(missing_vars),
+        )
 
     return len(missing_vars) == 0
 
 
 # Validate on import
 validate_env_vars()
-
-
-def check_required_vars() -> bool:
-    """Check if all required environment variables are set."""
-    missing_vars: List[str] = []
-
-    if not NCBI_API_KEY:
-        missing_vars.append("NCBI_API_KEY")
-    if not EMAIL:
-        missing_vars.append("EMAIL")
-    if not GEMINI_API_KEY:
-        missing_vars.append("GEMINI_API_KEY")
-
-    if missing_vars:
-        print("Missing required environment variables:")
-        for var in missing_vars:
-            print(f"- {var}")
-        return False
-
-    return True
 
 
 # Performance Configuration - balanced timeouts for reliability

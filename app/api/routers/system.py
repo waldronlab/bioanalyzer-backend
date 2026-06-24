@@ -238,8 +238,8 @@ async def get_metrics():
                 cache_hit_rate = cache_stats.get("cache_hits", 0) / cache_stats.get(
                     "total_requests", 1
                 )
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("Failed to compute cache hit rate: %s", e)
 
         return MetricsResponse(
             total_requests=perf_metrics.get("total_requests", 0),

@@ -885,7 +885,12 @@ async def analyze_paper_simple(
             )
             payload = _heuristic_payload_from_text(analysis_text)
 
-        field_results = _field_results_from_unified_payload(payload)
+        # Normalization can make blocking network calls (NCBI/OLS fallback
+        # lookups) - run off the event loop so a slow lookup doesn't stall
+        # other concurrent requests.
+        field_results = await asyncio.to_thread(
+            _field_results_from_unified_payload, payload
+        )
         field_results = _postprocess_field_results(field_results, analysis_text)
         has_diff_abund, diff_abund_conf = _resolve_diff_abundance(
             payload, analysis_text
@@ -1059,7 +1064,12 @@ async def analyze_paper_with_rag(
             )
             payload = _heuristic_payload_from_text(analysis_text)
 
-        field_results = _field_results_from_unified_payload(payload)
+        # Normalization can make blocking network calls (NCBI/OLS fallback
+        # lookups) - run off the event loop so a slow lookup doesn't stall
+        # other concurrent requests.
+        field_results = await asyncio.to_thread(
+            _field_results_from_unified_payload, payload
+        )
         field_results = _postprocess_field_results(field_results, analysis_text)
         has_diff_abund, diff_abund_conf = _resolve_diff_abundance(
             payload, analysis_text
@@ -1142,8 +1152,12 @@ def _collect_rag_stats(
             use_10_scale=_rc.get("use_10_scale", True),
         )
         rag_metrics = svc.get_rerank_metrics()
-    except Exception:
-        pass
+    except Exception as e:
+        from app.utils.credential_masking import mask_exception_message
+
+        logger.warning(
+            "Failed to compute RAG rerank metrics: %s", mask_exception_message(e)
+        )
 
     return {
         "chunks_processed": len(chunks),
