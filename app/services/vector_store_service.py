@@ -2,7 +2,6 @@
 
 import asyncio
 import logging
-from pathlib import Path
 from typing import Optional
 
 from paperqa.llms import NumpyVectorStore, embedding_model_factory
@@ -13,8 +12,7 @@ try:
 except Exception:  # pragma: no cover - handled via runtime fallback
     QdrantVectorStore = None  # type: ignore[assignment]
 
-from paperqa.types import Text, Doc
-from paperqa import Docs
+from paperqa.types import Text
 
 logger = logging.getLogger(__name__)
 

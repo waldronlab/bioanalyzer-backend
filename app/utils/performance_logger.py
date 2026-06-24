@@ -2,11 +2,8 @@ import logging
 import time
 import json
 from datetime import datetime
-from typing import Dict, Any, Optional
-from pathlib import Path
-from functools import wraps
+from typing import Dict, Any
 import traceback
-import asyncio
 
 
 class PerformanceLogger:
@@ -172,105 +169,6 @@ class PerformanceLogger:
                 else 0.0
             ),
         }
-
-
-def log_performance(func):
-    """Decorator to automatically log function performance."""
-
-    @wraps(func)
-    async def async_wrapper(*args, **kwargs):
-        start_time = time.time()
-        pmid = None
-
-        # Try to extract PMID from arguments
-        for arg in args:
-            if isinstance(arg, str) and arg.isdigit():
-                pmid = arg
-                break
-
-        if not pmid:
-            for key, value in kwargs.items():
-                if isinstance(value, str) and value.isdigit():
-                    pmid = value
-                    break
-
-        try:
-            result = await func(*args, **kwargs)
-            duration = time.time() - start_time
-
-            # Log successful execution
-            perf_logger = PerformanceLogger()
-            perf_logger.log_analysis_step(
-                pmid or "Unknown",
-                f"{func.__module__}.{func.__name__}",
-                duration,
-                {"success": True},
-            )
-
-            return result
-
-        except Exception as e:
-            duration = time.time() - start_time
-
-            # Log error
-            perf_logger = PerformanceLogger()
-            perf_logger.log_error(
-                pmid or "Unknown", e, f"{func.__module__}.{func.__name__}"
-            )
-
-            raise
-
-    @wraps(func)
-    def sync_wrapper(*args, **kwargs):
-        start_time = time.time()
-        pmid = None
-
-        # Try to extract PMID from arguments
-        for arg in args:
-            if isinstance(arg, str) and arg.isdigit():
-                pmid = arg
-                break
-
-        if not pmid:
-            for key, value in kwargs.items():
-                if isinstance(value, str) and value.isdigit():
-                    pmid = value
-                    break
-
-        try:
-            result = func(*args, **kwargs)
-            duration = time.time() - start_time
-
-            # Log successful execution
-            perf_logger = PerformanceLogger()
-            perf_logger.log_analysis_step(
-                pmid or "Unknown",
-                f"{func.__module__}.{func.__name__}",
-                duration,
-                {"success": True},
-            )
-
-            return result
-
-        except Exception as e:
-            duration = time.time() - start_time
-
-            # Log error
-            perf_logger = PerformanceLogger()
-            perf_logger.log_error(
-                pmid or "Unknown", e, f"{func.__module__}.{func.__name__}"
-            )
-
-            raise
-
-    # Return appropriate wrapper based on function type
-    # Use inspect.iscoroutinefunction for better compatibility
-    import inspect
-
-    if inspect.iscoroutinefunction(func):
-        return async_wrapper
-    else:
-        return sync_wrapper
 
 
 # Global instance
