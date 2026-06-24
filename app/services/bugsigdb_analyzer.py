@@ -261,6 +261,11 @@ def _classify_section_title(title: str) -> str:
     return "OTHER"
 
 
+def _local_tag(tag: str) -> str:
+    """Strip the XML namespace prefix from an ElementTree tag (e.g. '{ns}sec' -> 'sec')."""
+    return tag.split("}")[-1] if "}" in tag else tag
+
+
 def _parse_pmc_sections(xml_text: str) -> Dict[str, str]:
     if not xml_text or not xml_text.strip():
         return {}
@@ -281,7 +286,7 @@ def _parse_pmc_sections(xml_text: str) -> Dict[str, str]:
     sections: Dict[str, List[str]] = {}
 
     def _walk(node: ETElement, inherited_label: str = "OTHER") -> None:
-        tag = node.tag.split("}")[-1] if "}" in node.tag else node.tag
+        tag = _local_tag(node.tag)
         if tag == "sec":
             ns_prefix = (node.tag.split("}")[0] + "}") if "}" in node.tag else ""
             title_el = node.find(f".//{ns_prefix}title") or node.find(
@@ -296,7 +301,7 @@ def _parse_pmc_sections(xml_text: str) -> Dict[str, str]:
 
             para_texts: List[str] = []
             for child in node:
-                child_tag = child.tag.split("}")[-1] if "}" in child.tag else child.tag
+                child_tag = _local_tag(child.tag)
                 if child_tag == "p":
                     text = "".join(child.itertext()).strip()
                     if text:
@@ -308,7 +313,7 @@ def _parse_pmc_sections(xml_text: str) -> Dict[str, str]:
             if para_texts:
                 sections.setdefault(label, []).extend(para_texts)
             for child in node:
-                child_tag = child.tag.split("}")[-1] if "}" in child.tag else child.tag
+                child_tag = _local_tag(child.tag)
                 if child_tag == "sec":
                     _walk(child, label)
         else:
