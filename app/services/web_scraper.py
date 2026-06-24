@@ -10,7 +10,6 @@ from typing import Optional
 from urllib.parse import urljoin, urlparse
 
 import aiohttp
-import requests
 from bs4 import BeautifulSoup
 from html2text import html2text
 
@@ -91,7 +90,10 @@ class WebScraperService:
         # Fall back to a temporary directory
         temp_dir = Path(tempfile.gettempdir()) / "bioanalyzer_downloads"
         try:
-            temp_dir.mkdir(parents=True, exist_ok=True)
+            temp_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+            # mkdir's mode= only applies on creation; chmod explicitly so a
+            # pre-existing directory from an earlier run is restricted too.
+            os.chmod(temp_dir, 0o700)
             logger.info(f"Using temporary download directory: {temp_dir.absolute()}")
             return temp_dir
         except Exception as e:

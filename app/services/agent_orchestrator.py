@@ -58,7 +58,10 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 _pqa_temp_dir = Path(tempfile.gettempdir()) / "bioanalyzer_paperqa"
-_pqa_temp_dir.mkdir(parents=True, exist_ok=True)
+_pqa_temp_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+# mkdir's mode= only applies on creation; chmod explicitly so a
+# pre-existing directory from an earlier run is restricted too.
+os.chmod(_pqa_temp_dir, 0o700)
 os.environ["PQA_DIRECTORY"] = str(_pqa_temp_dir.absolute())
 os.environ["HOME"] = str(_pqa_temp_dir.parent.absolute())
 
@@ -234,13 +237,16 @@ class AgentOrchestrator:
 
     @staticmethod
     def _resolve_paper_dir() -> Path:
-        candidates = [
-            Path(tempfile.gettempdir()) / "bioanalyzer_paperqa",
-            Path("cache") / "paperqa",
-        ]
+        temp_candidate = Path(tempfile.gettempdir()) / "bioanalyzer_paperqa"
+        candidates = [temp_candidate, Path("cache") / "paperqa"]
         for candidate in candidates:
             try:
                 candidate.mkdir(parents=True, exist_ok=True)
+                if candidate == temp_candidate:
+                    # Shared system temp dir is world-writable; restrict
+                    # this subdirectory (mode= only applies on creation,
+                    # so chmod explicitly to cover pre-existing dirs too).
+                    os.chmod(candidate, 0o700)
                 probe = candidate / ".write_test"
                 probe.write_text("ok")
                 probe.unlink()
@@ -251,6 +257,7 @@ class AgentOrchestrator:
         # Last-resort
         fallback = Path(tempfile.gettempdir()) / "bioanalyzer_paperqa"
         fallback.mkdir(parents=True, exist_ok=True)
+        os.chmod(fallback, 0o700)
         return fallback
 
     @staticmethod
