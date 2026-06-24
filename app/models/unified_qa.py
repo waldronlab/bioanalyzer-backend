@@ -30,8 +30,10 @@ if not PAPERQA_AVAILABLE:
 class UnifiedQA:
     """Wrapper around LLM providers for question answering.
 
-    Tries LiteLLM first (supports multiple providers), falls back to Paper-QA,
-    then GeminiQA if those fail. Auto-detects provider from available API keys.
+    chat() (used by the main analysis pipeline) tries Paper-QA first when a
+    Gemini API key is available and Paper-QA initialized successfully, then
+    falls back to LiteLLM (supports multiple providers), then to GeminiQA
+    directly. Auto-detects provider from available API keys.
     """
 
     def __init__(
