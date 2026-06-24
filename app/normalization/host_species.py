@@ -127,7 +127,7 @@ def normalize_host_species(raw_text: str) -> NormalizedTerm:
                     "PRESENT",
                     0.9,
                 )
-    except Exception:
+    except (requests.exceptions.RequestException, ValueError, KeyError):
         pass
 
     return NormalizedTerm(raw_text.strip(), "", "PARTIALLY_PRESENT", 0.5)
