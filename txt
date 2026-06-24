@@ -1,2 +1,0 @@
-BioAnalyzer start
-BioAnalyzer analyze --file pmids.txt --format curator_desk_csv -o predictions.csv
