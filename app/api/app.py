@@ -56,7 +56,13 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ORIGINS if ENVIRONMENT == "production" else ["*"],
-    allow_credentials=True,
+    # No cookie/session-based auth exists anywhere in this app, so there's
+    # nothing that needs credentialed cross-origin requests. Deliberately
+    # NOT setting allow_credentials=True: combined with a wildcard origin
+    # it would make most CORS middlewares (including Starlette's) reflect
+    # the request's Origin header instead of a literal "*", which would
+    # let any origin make credentialed requests - a real risk with no
+    # corresponding benefit here.
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
     expose_headers=["X-Request-ID", "X-RateLimit-Limit", "X-RateLimit-Remaining"],
