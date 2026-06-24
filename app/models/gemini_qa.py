@@ -316,12 +316,16 @@ class GeminiQA:
                             f.strip() for f in fields_text.split(",") if f.strip()
                         ]
                     elif "Data completeness:" in line:
-                        if "complete" in line.lower():
-                            curation_analysis["data_completeness"] = "Complete"
-                        elif "partial" in line.lower():
-                            curation_analysis["data_completeness"] = "Partial"
-                        elif "insufficient" in line.lower():
+                        # Check only the value after the colon, not the whole line -
+                        # the label itself ("completeness") contains "complete" as a
+                        # substring, which would otherwise always match first.
+                        value = (line.split(":", 1)[1] if ":" in line else "").lower()
+                        if "insufficient" in value:
                             curation_analysis["data_completeness"] = "Insufficient"
+                        elif "partial" in value:
+                            curation_analysis["data_completeness"] = "Partial"
+                        elif "complete" in value:
+                            curation_analysis["data_completeness"] = "Complete"
                 elif current_section == "reasons":
                     if line.startswith("-") or line.startswith("*"):
                         curation_analysis["specific_reasons"].append(
