@@ -308,7 +308,13 @@ class BioAnalyzerSettings(BaseModel):
         file_path = Path(file_path)
         file_path.parent.mkdir(parents=True, exist_ok=True)
 
-        data = self.model_dump(exclude_none=True)
+        # mode="json" converts non-JSON-native fields (Path, Enum, ...) to
+        # their plain str/value form. Without it, json.dump() crashes
+        # outright on the Path defaults (cache.directory, logging.directory)
+        # and yaml.dump() "succeeds" but emits unsafe `!!python/object` tags
+        # for Path/Enum fields that from_file()'s yaml.safe_load() can't
+        # read back - i.e. every settings file this wrote was unreadable.
+        data = self.model_dump(exclude_none=True, mode="json")
 
         with open(file_path, "w") as f:
             if format == "yaml":
@@ -645,7 +651,11 @@ class SettingsManager:
         from_preset: Optional[str] = None,
         cli_overrides: Optional[Dict[str, Any]] = None,
     ) -> BioAnalyzerSettings:
-        """Load settings from multiple sources with priority: CLI > File > Preset > Env > Defaults."""
+        """Load settings from multiple sources with priority: CLI > Env > File > Preset > Defaults.
+
+        Each source below is merged over the previous one (later wins), in
+        the order: defaults, preset, file, env, cli_overrides.
+        """
         settings = BioAnalyzerSettings()
 
         if from_preset:
