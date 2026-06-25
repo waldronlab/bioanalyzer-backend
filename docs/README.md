@@ -17,7 +17,6 @@ All project documentation is organized in this folder.
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Package architecture and system overview |
 | [ARCHITECTURE_FLOW.md](ARCHITECTURE_FLOW.md) | Complete architecture, flows, and CLI/API reference |
 | [CURATOR_DESK_ALIGNMENT.md](CURATOR_DESK_ALIGNMENT.md) | Agreed implementation sequence across BioAnalyzer and curator-desk (from PR #13 discussion) |
-| [LEVI_MAIN_POINTS_IMPLEMENTATION.md](LEVI_MAIN_POINTS_IMPLEMENTATION.md) | Implementation status against Levi's agreed main points and ordering |
 | Curator desk system spec | End-to-end curator-desk + BioAnalyzer specification: [`docs/SPEC.md`](https://github.com/waldronlab/curator-desk/blob/main/docs/SPEC.md) in [waldronlab/curator-desk](https://github.com/waldronlab/curator-desk) |
 
 ## CLI & API
@@ -50,7 +49,9 @@ All project documentation is organized in this folder.
 | Document | Description |
 |----------|-------------|
 | [TESTING.md](TESTING.md) | Running tests and test structure |
-| [CLEANUP_CHECKLIST.md](CLEANUP_CHECKLIST.md) | Cleanup and maintenance checklist |
+| [DEVELOPER_GUIDE.md](DEVELOPER_GUIDE.md) | Extending the codebase: extraction pipeline, test conventions, pre-PR checks |
+| [FOLDER_STRUCTURE.md](FOLDER_STRUCTURE.md) | Annotated directory map |
+| [../CONTRIBUTING.md](../CONTRIBUTING.md) | Contribution workflow, branch/PR conventions, what CI checks |
 | [RENOVATE_CONFIG.md](RENOVATE_CONFIG.md) | Renovate dependency updates configuration |
 
 ---

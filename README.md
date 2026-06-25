@@ -235,8 +235,13 @@ flake8 .
 
 - Services go in `app/services/`
 - API routes in `app/api/routers/`
-- CLI commands in `cli.py`
-- Models in `app/api/models/`
+- CLI commands go in `scripts/cli.py` (root `cli.py` is just a backward-compat shim)
+- API request/response models go in `app/api/models/`
+
+See [docs/DEVELOPER_GUIDE.md](docs/DEVELOPER_GUIDE.md) for extension
+workflows and [docs/FOLDER_STRUCTURE.md](docs/FOLDER_STRUCTURE.md) for the
+full directory map. Contributing changes? See
+[CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Troubleshooting
 
@@ -268,7 +273,7 @@ All documentation lives in the **[docs/](docs/)** folder:
 - **CLI:** [CLI_DOCUMENTATION](docs/CLI_DOCUMENTATION.md)
 - **Features:** [RAG_GUIDE](docs/RAG_GUIDE.md), [CURATOR_TABLE_DESIGN](docs/CURATOR_TABLE_DESIGN.md), [CURATOR_TABLE_USER_GUIDE](docs/CURATOR_TABLE_USER_GUIDE.md)
 - **Deployment:** [DOCKER_DEPLOYMENT](docs/DOCKER_DEPLOYMENT.md), [PRODUCTION_DEPLOYMENT](docs/PRODUCTION_DEPLOYMENT.md)
-- **Development:** [TESTING](docs/TESTING.md)
+- **Development:** [TESTING](docs/TESTING.md), [DEVELOPER_GUIDE](docs/DEVELOPER_GUIDE.md), [FOLDER_STRUCTURE](docs/FOLDER_STRUCTURE.md), [CONTRIBUTING](CONTRIBUTING.md)
 
 When the API is running, interactive API docs: **http://localhost:8000/docs**
 

@@ -180,5 +180,5 @@ If something goes wrong:
 - Verify API keys are set correctly
 - Test the health endpoint: `curl http://localhost:8000/health`
 - Check network connectivity for API calls
-- See [PRODUCTION_DEPLOYMENT.md](docs/PRODUCTION_DEPLOYMENT.md) for more details
+- See [PRODUCTION_DEPLOYMENT.md](PRODUCTION_DEPLOYMENT.md) for more details
 
