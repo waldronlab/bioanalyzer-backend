@@ -142,16 +142,20 @@ def _heuristic_payload_from_text(text: str) -> Dict[str, Any]:
         return {}
     lower = t.lower()
 
+    # Check explicit animal mentions first: "controls"/"subjects"/etc. below
+    # are weak, species-ambiguous cues (animal studies use "controls" too,
+    # e.g. "wild-type controls") - checking them first via if/elif would let
+    # them mask an explicit "mice"/"rats" mention elsewhere in the same text.
     host_species_raw = None
-    if re.search(
+    if re.search(r"\b(mouse|mice)\b", lower):
+        host_species_raw = "mouse"
+    elif re.search(r"\b(rat|rats)\b", lower):
+        host_species_raw = "rat"
+    elif re.search(
         r"\b(human|humans|men|women|participants?|subjects?|volunteers?|patients?|athletes?|controls?)\b",
         lower,
     ):
         host_species_raw = "human"
-    elif re.search(r"\b(mouse|mice)\b", lower):
-        host_species_raw = "mouse"
-    elif re.search(r"\b(rat|rats)\b", lower):
-        host_species_raw = "rat"
 
     body_site_raw = None
     if re.search(r"\b(fecal|faecal|feces|faeces|stool)\b", lower):
@@ -280,10 +284,19 @@ def _postprocess_field_results(
     out = dict(field_results or {})
 
     # --- host_species: if ABSENT but text clearly mentions humans, patch it ---
+    # The human-cue regex includes weak, species-ambiguous words ("controls",
+    # "subjects") that animal studies use too (e.g. "wild-type controls") -
+    # require the absence of an explicit animal mention before assuming human,
+    # so a mouse/rat study whose host_species the LLM missed doesn't get
+    # force-corrected to "Homo sapiens".
     host = dict(out.get("host_species") or {})
-    if host.get("status") == "ABSENT" and re.search(
-        r"\b(human|humans|men|women|participants?|subjects?|volunteers?|patients?|athletes?|controls?)\b",
-        text,
+    if (
+        host.get("status") == "ABSENT"
+        and re.search(
+            r"\b(human|humans|men|women|participants?|subjects?|volunteers?|patients?|athletes?|controls?)\b",
+            text,
+        )
+        and not re.search(r"\b(mouse|mice|rat|rats)\b", text)
     ):
         host.update(
             {

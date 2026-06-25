@@ -78,6 +78,16 @@ def _extract_clean_disease_name(raw_text: str) -> str:
     return text.strip()
 
 
+# "control"/"normal"/"healthy" describe the comparator arm of a case-control
+# study, not a diagnosis - and they're frequently *longer* than the disease
+# abbreviation they're being contrasted with ("IBD patients vs healthy
+# controls", "HIV patients compared to controls"). Plain longest-match-wins
+# would pick "control(s)" over "IBD"/"HIV"/"ASD"/"T2D" and misreport the
+# actual studied condition as "healthy". These three keys are only used as
+# a last resort, never over a real disease-name match.
+_HEALTHY_KEYS = {"healthy", "control", "normal"}
+
+
 def normalize_condition(raw_text: str) -> NormalizedTerm:
     """Return normalized condition label, EFO ID, status, and mapping confidence."""
     if not raw_text or raw_text.strip() == "":
@@ -86,12 +96,21 @@ def normalize_condition(raw_text: str) -> NormalizedTerm:
     lowered = raw_text.lower()
     match: Tuple[str, str] | None = None
     match_len = 0
+    healthy_match: Tuple[str, str] | None = None
     for key, pair in CONDITION_LOOKUP.items():
-        if key in lowered and len(key) > match_len:
+        if key not in lowered:
+            continue
+        if key in _HEALTHY_KEYS:
+            healthy_match = pair
+            continue
+        if len(key) > match_len:
             match = pair
             match_len = len(key)
     if match:
         label, efo_id = match
+        return NormalizedTerm(label, efo_id, "PRESENT", 1.0)
+    if healthy_match:
+        label, efo_id = healthy_match
         return NormalizedTerm(label, efo_id, "PRESENT", 1.0)
 
     clean_term = _extract_clean_disease_name(raw_text)

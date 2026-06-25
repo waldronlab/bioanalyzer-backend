@@ -222,6 +222,15 @@ class TestHeuristicPayloadFromText:
         payload = _heuristic_payload_from_text("Mice were fed a high-fat diet.")
         assert payload["host_species_raw"] == "mouse"
 
+    def test_mouse_host_wins_over_generic_controls_wording(self):
+        """Regression test: "controls" is species-ambiguous (animal studies
+        use it too, e.g. "wild-type controls") and must not outrank an
+        explicit mouse/rat mention in the same text."""
+        payload = _heuristic_payload_from_text(
+            "Mice were compared to wild-type controls fed a high-fat diet."
+        )
+        assert payload["host_species_raw"] == "mouse"
+
     def test_detects_fecal_body_site(self):
         payload = _heuristic_payload_from_text("Stool samples were collected.")
         assert payload["body_site_raw"] == "fecal samples"
@@ -317,6 +326,20 @@ class TestPostprocessFieldResults:
             "host_species": {"value": "", "status": "ABSENT", "confidence": 0.0}
         }
         result = _postprocess_field_results(field_results, "bacterial culture media")
+        assert result["host_species"]["status"] == "ABSENT"
+
+    def test_does_not_force_human_when_text_mentions_mouse(self):
+        """Regression test: an ABSENT host_species must not get force-patched
+        to "Homo sapiens" just because the text says "controls" - mouse/rat
+        studies use that word too, and an explicit animal mention in the same
+        text should block the human-assumption patch."""
+        field_results = {
+            "host_species": {"value": "", "status": "ABSENT", "confidence": 0.0}
+        }
+        result = _postprocess_field_results(
+            field_results,
+            "Mice were compared to wild-type controls fed a high-fat diet.",
+        )
         assert result["host_species"]["status"] == "ABSENT"
 
     def test_handles_missing_field_keys_gracefully(self):

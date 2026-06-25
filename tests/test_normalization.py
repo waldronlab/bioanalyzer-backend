@@ -62,7 +62,27 @@ def test_host_species_normalization_variants():
 
     t = normalize_host_species("")
     assert t.status == "ABSENT"
-    assert t.ontology_id == ""
+
+
+def test_host_species_animal_wins_over_life_stage_descriptor():
+    """Regression test: "adult"/"infant"/"neonate" are life-stage words, not
+    species cues - animal studies use them too ("adult mice", "infant rats",
+    "neonate pigs"). The longest-match lookup must not let these generic,
+    coincidentally-longer words outrank a short but explicit animal noun."""
+    t = normalize_host_species("adult mice were studied")
+    assert t.label == "Mus musculus"
+    assert t.ontology_id == "NCBITaxon:10090"
+
+    t = normalize_host_species("infant rats received treatment")
+    assert t.label == "Rattus norvegicus"
+
+    t = normalize_host_species("neonate pigs were sampled")
+    assert t.label == "Sus scrofa"
+
+    # Sanity check: pure-human phrasing with a genuine species cue still works.
+    t = normalize_host_species("adult patients were recruited")
+    assert t.label == "Homo sapiens"
+    assert t.ontology_id == "NCBITaxon:9606"
 
     t = normalize_host_species("mice and rats")
     assert t.status == "PARTIALLY_PRESENT"
@@ -118,6 +138,29 @@ def test_condition_normalization_variants():
 
     t = normalize_condition("")
     assert t.status == "ABSENT"
+
+
+def test_condition_disease_wins_over_comparator_arm_wording():
+    """Regression test: "control(s)" describes the comparator arm of a
+    case-control study, not a diagnosis - and it's longer than several real
+    disease abbreviations (IBD, HIV, ASD, T2D). The disease actually being
+    studied must win even when a "vs healthy/matched controls" phrase is
+    also present in the same text."""
+    t = normalize_condition("IBD patients vs healthy controls")
+    assert t.label == "inflammatory bowel disease"
+
+    t = normalize_condition("HIV patients compared to controls")
+    assert t.label == "HIV infection"
+
+    t = normalize_condition("ASD children vs typically developing controls")
+    assert t.label == "autism spectrum disorder"
+
+    t = normalize_condition("patients with T2D and matched controls")
+    assert t.label == "type 2 diabetes mellitus"
+
+    # No disease mentioned at all - "healthy" must still be reachable.
+    t = normalize_condition("healthy volunteers")
+    assert t.label == "healthy"
 
 
 def test_sequencing_type_normalization_variants():

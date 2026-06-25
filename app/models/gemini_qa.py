@@ -162,9 +162,7 @@ Please provide a detailed analysis in the following structured format:
 [Provide a confidence score (0.0-1.0) with explanation]
 
 **EXAMPLES AND EVIDENCE:**
-[Provide specific examples from the text]
-
-CRITICAL: If the paper contains ANY specific microbial taxa identification, abundance data, or microbial community analysis, it should be marked as READY FOR CURATION."""
+[Provide specific examples from the text]"""
 
             model = genai.GenerativeModel(self.model)
             response = await model.generate_content_async(
