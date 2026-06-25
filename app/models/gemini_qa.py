@@ -6,6 +6,13 @@ import pytz
 import google.generativeai as genai
 import os
 import json
+from app.models.gemini_response_parsing import (
+    estimate_confidence as _estimate_confidence,
+    estimate_category_scores as _estimate_category_scores,
+    parse_gemini_output as _parse_gemini_output,
+    extract_found_terms as _extract_found_terms,
+    parse_enhanced_analysis as _parse_enhanced_analysis,
+)
 from app.utils.config import GEMINI_TIMEOUT
 from app.utils.credential_masking import mask_string, mask_exception_message
 import asyncio
@@ -40,343 +47,24 @@ class GeminiQA:
             ]
             logger.info(f"Available Gemini models: {available_models}")
         except Exception as e:
-            logger.warning(f"Could not list models: {e}")
+            logger.warning("Could not list models: %s", mask_exception_message(e))
 
     def estimate_confidence(self, key_findings):
-        if not key_findings:
-            return 0.0
-        return min(1.0, 0.3 + 0.15 * len(key_findings))
+        return _estimate_confidence(key_findings)
 
     def estimate_category_scores(self, key_findings):
-        categories = {
-            "microbiome": ["microbiome", "microbial", "bacteria", "microbiota"],
-            "methods": [
-                "16s",
-                "metagenomic",
-                "sequencing",
-                "amplicon",
-                "shotgun",
-                "transcriptomic",
-                "qpcr",
-                "fish",
-            ],
-            "analysis": [
-                "enriched",
-                "depleted",
-                "increased",
-                "decreased",
-                "differential",
-                "higher abundance",
-                "lower abundance",
-            ],
-            "body_sites": [
-                "gut",
-                "oral",
-                "skin",
-                "lung",
-                "vaginal",
-                "intestinal",
-                "colon",
-                "mouth",
-                "dermal",
-                "epidermis",
-                "airway",
-                "bronchial",
-                "cervical",
-            ],
-            "diseases": [
-                "ibd",
-                "cancer",
-                "tumor",
-                "carcinoma",
-                "neoplasm",
-                "obesity",
-                "diabetes",
-                "infection",
-                "autoimmune",
-                "arthritis",
-                "lupus",
-                "multiple sclerosis",
-            ],
-        }
-        text = " ".join(key_findings).lower()
-        scores = {}
-        for cat, keywords in categories.items():
-            count = sum(1 for kw in keywords if kw in text)
-            scores[cat] = min(1.0, count / max(1, len(keywords)))
-        return scores
+        return _estimate_category_scores(key_findings)
 
     def parse_gemini_output(self, key_findings):
-        findings = []
-        suggested_topics = []
-        in_suggested = False
-        for line in key_findings:
-            if (
-                "Suggested Topics" in line
-                or "Suggested Topics for Future Research" in line
-            ):
-                in_suggested = True
-                continue
-            if in_suggested:
-                if line.strip().startswith("*") or line.strip().startswith("-"):
-                    suggested_topics.append(line.strip("*- ").strip())
-                elif line.strip() == "" or line.strip().startswith("**"):
-                    continue
-                else:
-                    in_suggested = False
-            if not in_suggested:
-                findings.append(line)
-        return findings, suggested_topics
+        return _parse_gemini_output(key_findings)
 
     def extract_found_terms(self, key_findings):
-        categories = {
-            "microbiome": ["microbiome", "microbial", "bacteria", "microbiota"],
-            "methods": [
-                "16s",
-                "metagenomic",
-                "sequencing",
-                "amplicon",
-                "shotgun",
-                "transcriptomic",
-                "qpcr",
-                "fish",
-            ],
-            "analysis": [
-                "enriched",
-                "depleted",
-                "increased",
-                "decreased",
-                "differential",
-                "higher abundance",
-                "lower abundance",
-            ],
-            "body_sites": [
-                "gut",
-                "oral",
-                "skin",
-                "lung",
-                "vaginal",
-                "intestinal",
-                "colon",
-                "mouth",
-                "dermal",
-                "epidermis",
-                "airway",
-                "bronchial",
-                "cervical",
-            ],
-            "diseases": [
-                "ibd",
-                "cancer",
-                "tumor",
-                "carcinoma",
-                "neoplasm",
-                "obesity",
-                "diabetes",
-                "infection",
-                "autoimmune",
-                "arthritis",
-                "lupus",
-                "multiple sclerosis",
-            ],
-        }
-        text = " ".join(key_findings).lower()
-        found = {}
-        for cat, keywords in categories.items():
-            found[cat] = [kw for kw in keywords if kw in text]
-        return found
+        return _extract_found_terms(key_findings)
 
     def parse_enhanced_analysis(
         self, analysis_text: str
     ) -> Dict[str, Union[str, float, List[str]]]:
-        try:
-            lines = analysis_text.split("\n")
-            curation_analysis = {
-                "readiness": "UNKNOWN",
-                "explanation": "",
-                "microbial_signatures": "Unknown",
-                "signature_types": [],
-                "data_quality": "Unknown",
-                "statistical_significance": "Unknown",
-                "required_fields": [],
-                "missing_fields": [],
-                "data_completeness": "Unknown",
-                "specific_reasons": [],
-                "confidence": 0.0,
-                "examples": [],
-                "general_factors_present": [],
-                "human_animal_factors_present": [],
-                "environmental_factors_present": [],
-                "missing_critical_factors": [],
-                "factor_based_score": 0.0,
-            }
-
-            current_section = ""
-            for line in lines:
-                line = line.strip()
-                if not line:
-                    continue
-
-                if "CURATION READINESS ASSESSMENT:" in line:
-                    current_section = "readiness"
-                    continue
-                elif "DETAILED EXPLANATION:" in line:
-                    current_section = "explanation"
-                    continue
-                elif "FACTOR-BASED ANALYSIS:" in line:
-                    current_section = "factor_analysis"
-                    continue
-                elif "MICROBIAL SIGNATURE ANALYSIS:" in line:
-                    current_section = "signatures"
-                    continue
-                elif "CURATABLE CONTENT ASSESSMENT:" in line:
-                    current_section = "content"
-                    continue
-                elif "SPECIFIC REASONS" in line:
-                    current_section = "reasons"
-                    continue
-                elif "CONFIDENCE LEVEL:" in line:
-                    current_section = "confidence"
-                    continue
-                elif "EXAMPLES AND EVIDENCE:" in line:
-                    current_section = "examples"
-                    continue
-
-                if current_section == "readiness":
-                    line_upper = line.upper()
-                    # Check the "NOT READY..." variants first: "READY FOR CURATION"
-                    # is a substring of "NOT READY FOR CURATION", so checking the
-                    # bare READY phrases first would misclassify NOT_READY as READY.
-                    if "NOT READY FOR CURATION" in line_upper:
-                        curation_analysis["readiness"] = "NOT_READY"
-                    elif "READY FOR CURATION" in line_upper:
-                        curation_analysis["readiness"] = "READY"
-                    elif "NOT READY" in line_upper:
-                        curation_analysis["readiness"] = "NOT_READY"
-                    elif "READY" in line_upper and "NOT" not in line_upper:
-                        curation_analysis["readiness"] = "READY"
-                    elif "UNKNOWN" in line_upper or "UNCLEAR" in line_upper:
-                        curation_analysis["readiness"] = "UNKNOWN"
-                elif current_section == "explanation":
-                    curation_analysis["explanation"] += line + " "
-                elif current_section == "factor_analysis":
-                    if "General Factors Present:" in line:
-                        factors_text = line.split(":", 1)[1] if ":" in line else ""
-                        curation_analysis["general_factors_present"] = [
-                            f.strip() for f in factors_text.split(",") if f.strip()
-                        ]
-                    elif "Human/Animal Factors Present:" in line:
-                        factors_text = line.split(":", 1)[1] if ":" in line else ""
-                        curation_analysis["human_animal_factors_present"] = [
-                            f.strip() for f in factors_text.split(",") if f.strip()
-                        ]
-                    elif "Environmental Factors Present:" in line:
-                        factors_text = line.split(":", 1)[1] if ":" in line else ""
-                        curation_analysis["environmental_factors_present"] = [
-                            f.strip() for f in factors_text.split(",") if f.strip()
-                        ]
-                    elif "Missing Critical Factors:" in line:
-                        factors_text = line.split(":", 1)[1] if ":" in line else ""
-                        curation_analysis["missing_critical_factors"] = [
-                            f.strip() for f in factors_text.split(",") if f.strip()
-                        ]
-                elif current_section == "signatures":
-                    if "Presence of microbial signatures:" in line:
-                        if "yes" in line.lower():
-                            curation_analysis["microbial_signatures"] = "Present"
-                        elif "no" in line.lower():
-                            curation_analysis["microbial_signatures"] = "Absent"
-                        elif "partial" in line.lower():
-                            curation_analysis["microbial_signatures"] = "Partial"
-                    elif "Types of signatures found:" in line:
-                        types_text = line.split(":", 1)[1] if ":" in line else ""
-                        curation_analysis["signature_types"] = [
-                            t.strip() for t in types_text.split(",") if t.strip()
-                        ]
-                    elif "Quality of signature data:" in line:
-                        if "high" in line.lower():
-                            curation_analysis["data_quality"] = "High"
-                        elif "medium" in line.lower():
-                            curation_analysis["data_quality"] = "Medium"
-                        elif "low" in line.lower():
-                            curation_analysis["data_quality"] = "Low"
-                    elif "Statistical significance:" in line:
-                        if "yes" in line.lower():
-                            curation_analysis["statistical_significance"] = "Yes"
-                        elif "no" in line.lower():
-                            curation_analysis["statistical_significance"] = "No"
-                        elif "insufficient" in line.lower():
-                            curation_analysis["statistical_significance"] = (
-                                "Insufficient"
-                            )
-                elif current_section == "content":
-                    if "Missing required fields:" in line:
-                        fields_text = line.split(":", 1)[1] if ":" in line else ""
-                        curation_analysis["missing_fields"] = [
-                            f.strip() for f in fields_text.split(",") if f.strip()
-                        ]
-                    elif "Data completeness:" in line:
-                        # Check only the value after the colon, not the whole line -
-                        # the label itself ("completeness") contains "complete" as a
-                        # substring, which would otherwise always match first.
-                        value = (line.split(":", 1)[1] if ":" in line else "").lower()
-                        if "insufficient" in value:
-                            curation_analysis["data_completeness"] = "Insufficient"
-                        elif "partial" in value:
-                            curation_analysis["data_completeness"] = "Partial"
-                        elif "complete" in value:
-                            curation_analysis["data_completeness"] = "Complete"
-                elif current_section == "reasons":
-                    if line.startswith("-") or line.startswith("*"):
-                        curation_analysis["specific_reasons"].append(
-                            line.lstrip("- *").strip()
-                        )
-                elif current_section == "confidence":
-                    import re
-
-                    confidence_match = re.search(r"(\d+\.?\d*)", line)
-                    if confidence_match:
-                        curation_analysis["confidence"] = float(
-                            confidence_match.group(1)
-                        )
-                elif current_section == "examples":
-                    if line.startswith("-") or line.startswith("*"):
-                        curation_analysis["examples"].append(line.lstrip("- *").strip())
-
-            curation_analysis["explanation"] = curation_analysis["explanation"].strip()
-            total_factors = (
-                len(curation_analysis["general_factors_present"])
-                + len(curation_analysis["human_animal_factors_present"])
-                + len(curation_analysis["environmental_factors_present"])
-            )
-            max_factors = 16
-            curation_analysis["factor_based_score"] = min(
-                1.0, total_factors / max_factors
-            )
-
-            return curation_analysis
-
-        except Exception as e:
-            logger.error(f"Error parsing enhanced analysis: {str(e)}")
-            return {
-                "readiness": "ERROR",
-                "explanation": f"Error parsing analysis: {str(e)}",
-                "microbial_signatures": "Unknown",
-                "signature_types": [],
-                "data_quality": "Unknown",
-                "statistical_significance": "Unknown",
-                "required_fields": [],
-                "missing_fields": [],
-                "data_completeness": "Unknown",
-                "specific_reasons": [],
-                "confidence": 0.0,
-                "examples": [],
-                "general_factors_present": [],
-                "human_animal_factors_present": [],
-                "environmental_factors_present": [],
-                "missing_critical_factors": [],
-                "factor_based_score": 0.0,
-            }
+        return _parse_enhanced_analysis(analysis_text)
 
     async def analyze_paper(
         self, paper_content: Dict[str, str]
@@ -720,7 +408,8 @@ CRITICAL: If the paper contains ANY specific microbial taxa identification, abun
                     "status": "success",
                 }
             except json.JSONDecodeError as e:
-                logger.warning(f"Failed to parse JSON response: {e}")
+                safe_error = mask_exception_message(e)
+                logger.warning("Failed to parse JSON response: %s", safe_error)
                 logger.warning(f"Raw response: {response_text[:500]}...")
                 fallback_json = self._create_fallback_json()
 
@@ -728,7 +417,7 @@ CRITICAL: If the paper contains ANY specific microbial taxa identification, abun
                     "key_findings": json.dumps(fallback_json, indent=2),
                     "confidence": 0.0,
                     "status": "fallback",
-                    "error": f"JSON parsing failed: {str(e)}",
+                    "error": f"JSON parsing failed: {safe_error}",
                 }
         except asyncio.TimeoutError:
             logger.error("Enhanced paper analysis request timed out")
@@ -950,7 +639,9 @@ CRITICAL: If the paper contains ANY specific microbial taxa identification, abun
             final_confidence = sum(weighted_scores) / len(weighted_scores)
             return min(1.0, final_confidence)
         except Exception as e:
-            logger.warning(f"Error calculating enhanced confidence: {str(e)}")
+            logger.warning(
+                "Error calculating enhanced confidence: %s", mask_exception_message(e)
+            )
             return 0.5
 
     def _get_content_key_for_field(self, field_name: str) -> str:
@@ -1028,5 +719,6 @@ CRITICAL: If the paper contains ANY specific microbial taxa identification, abun
                 "confidence": 0.0,
             }
         except Exception as e:
-            logger.error(f"Model API error in chat: {str(e)}")
-            return {"text": f"[Error: {str(e)}]", "confidence": 0.0}
+            safe_error = mask_exception_message(e)
+            logger.error("Model API error in chat: %s", safe_error)
+            return {"text": f"[Error: {safe_error}]", "confidence": 0.0}
