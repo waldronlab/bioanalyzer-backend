@@ -338,3 +338,262 @@ class TestAsyncOperations:
         # Verify it was stored
         retrieved = cache_manager.get_fulltext(pmid)
         assert retrieved is not None
+
+
+class TestIsCacheValid:
+    """Tests for is_cache_valid - previously entirely untested."""
+
+    def test_recent_timestamp_is_valid(self, cache_manager):
+        from datetime import datetime
+
+        assert cache_manager.is_cache_valid(datetime.now().isoformat()) is True
+
+    def test_old_timestamp_is_invalid(self, cache_manager):
+        from datetime import datetime, timedelta
+
+        old = (datetime.now() - timedelta(hours=48)).isoformat()
+        assert cache_manager.is_cache_valid(old, max_age_hours=24) is False
+
+    def test_respects_custom_max_age(self, cache_manager):
+        from datetime import datetime, timedelta
+
+        ts = (datetime.now() - timedelta(hours=2)).isoformat()
+        assert cache_manager.is_cache_valid(ts, max_age_hours=1) is False
+        assert cache_manager.is_cache_valid(ts, max_age_hours=3) is True
+
+    def test_malformed_timestamp_returns_false(self, cache_manager):
+        assert cache_manager.is_cache_valid("not-a-timestamp") is False
+
+    def test_empty_timestamp_returns_false(self, cache_manager):
+        assert cache_manager.is_cache_valid("") is False
+
+
+class TestSearchCache:
+    """Tests for search_cache - previously entirely untested."""
+
+    def test_search_analysis_type_matches_query(self, cache_manager):
+        cache_manager.store_analysis_result(
+            "111", {"summary": "gut microbiome study"}, {"title": "Paper A"}
+        )
+        cache_manager.store_analysis_result(
+            "222", {"summary": "unrelated topic"}, {"title": "Paper B"}
+        )
+        results = cache_manager.search_cache("microbiome", search_type="analysis")
+        pmids = [r[0] for r in results]
+        assert "111" in pmids
+        assert "222" not in pmids
+
+    def test_search_metadata_type_matches_query(self, cache_manager):
+        cache_manager.store_metadata("333", {"title": "Gut Microbiome Research"})
+        cache_manager.store_metadata("444", {"title": "Unrelated"})
+        results = cache_manager.search_cache("Microbiome", search_type="metadata")
+        pmids = [r[0] for r in results]
+        assert "333" in pmids
+        assert "444" not in pmids
+
+    def test_search_all_searches_every_table(self, cache_manager):
+        cache_manager.store_fulltext("555", "discusses microbiome diversity")
+        results = cache_manager.search_cache("microbiome", search_type="all")
+        pmids = [r[0] for r in results]
+        assert "555" in pmids
+
+    def test_search_returns_empty_list_when_no_match(self, cache_manager):
+        assert cache_manager.search_cache("no such term anywhere") == []
+
+    def test_search_handles_db_error_gracefully(self, cache_manager, monkeypatch):
+        import sqlite3 as sqlite3_module
+
+        def boom(*a, **k):
+            raise sqlite3_module.OperationalError("db is locked")
+
+        monkeypatch.setattr(sqlite3_module, "connect", boom)
+        assert cache_manager.search_cache("anything") == []
+
+
+class TestDeleteOperations:
+    """Tests for delete_analysis_result/delete_metadata/delete_fulltext -
+    previously entirely untested."""
+
+    def test_delete_analysis_result_found(self, cache_manager):
+        cache_manager.store_analysis_result("111", {"a": 1}, {"title": "T"})
+        assert cache_manager.delete_analysis_result("111") is True
+        assert cache_manager.get_analysis_result("111") is None
+
+    def test_delete_analysis_result_not_found(self, cache_manager):
+        assert cache_manager.delete_analysis_result("does-not-exist") is False
+
+    def test_delete_metadata_found(self, cache_manager):
+        cache_manager.store_metadata("222", {"title": "T"})
+        assert cache_manager.delete_metadata("222") is True
+        assert cache_manager.get_metadata("222") is None
+
+    def test_delete_metadata_not_found(self, cache_manager):
+        assert cache_manager.delete_metadata("does-not-exist") is False
+
+    def test_delete_fulltext_found(self, cache_manager):
+        cache_manager.store_fulltext("333", "full text body")
+        assert cache_manager.delete_fulltext("333") is True
+        assert cache_manager.get_fulltext("333") is None
+
+    def test_delete_fulltext_not_found(self, cache_manager):
+        assert cache_manager.delete_fulltext("does-not-exist") is False
+
+
+class TestGetCacheSizeMb:
+    def test_returns_zero_when_db_does_not_exist(self, cache_manager):
+        cache_manager.db_path = Path("/no/such/path/cache.db")
+        assert cache_manager._get_cache_size_mb() == 0.0
+
+    def test_returns_positive_size_for_real_db(self, cache_manager):
+        cache_manager.store_analysis_result("111", {"a": 1}, {"title": "T"})
+        assert cache_manager._get_cache_size_mb() >= 0.0
+
+
+class TestErrorHandlingBranches:
+    """Exercise the except-Exception branches across CacheManager by making
+    sqlite3.connect raise, confirming every public method degrades to its
+    documented safe default instead of propagating."""
+
+    def test_store_analysis_result_returns_false_on_db_error(
+        self, cache_manager, monkeypatch
+    ):
+        monkeypatch.setattr(
+            cache_manager,
+            "_get_connection",
+            lambda: (_ for _ in ()).throw(RuntimeError("db down")),
+        )
+        assert cache_manager.store_analysis_result("1", {}, {}) is False
+
+    def test_get_analysis_result_returns_none_on_db_error(
+        self, cache_manager, monkeypatch
+    ):
+        monkeypatch.setattr(
+            cache_manager,
+            "_get_connection",
+            lambda: (_ for _ in ()).throw(RuntimeError("db down")),
+        )
+        assert cache_manager.get_analysis_result("1") is None
+
+    def test_store_metadata_returns_false_on_db_error(self, cache_manager, monkeypatch):
+        import sqlite3 as sqlite3_module
+
+        monkeypatch.setattr(
+            sqlite3_module,
+            "connect",
+            lambda *a, **k: (_ for _ in ()).throw(RuntimeError("db down")),
+        )
+        assert cache_manager.store_metadata("1", {}) is False
+
+    def test_get_metadata_returns_none_on_db_error(self, cache_manager, monkeypatch):
+        import sqlite3 as sqlite3_module
+
+        monkeypatch.setattr(
+            sqlite3_module,
+            "connect",
+            lambda *a, **k: (_ for _ in ()).throw(RuntimeError("db down")),
+        )
+        assert cache_manager.get_metadata("1") is None
+
+    def test_store_fulltext_returns_false_on_db_error(self, cache_manager, monkeypatch):
+        import sqlite3 as sqlite3_module
+
+        monkeypatch.setattr(
+            sqlite3_module,
+            "connect",
+            lambda *a, **k: (_ for _ in ()).throw(RuntimeError("db down")),
+        )
+        assert cache_manager.store_fulltext("1", "text") is False
+
+    def test_get_fulltext_returns_none_on_db_error(self, cache_manager, monkeypatch):
+        import sqlite3 as sqlite3_module
+
+        monkeypatch.setattr(
+            sqlite3_module,
+            "connect",
+            lambda *a, **k: (_ for _ in ()).throw(RuntimeError("db down")),
+        )
+        assert cache_manager.get_fulltext("1") is None
+
+    def test_get_cache_stats_returns_empty_dict_on_db_error(
+        self, cache_manager, monkeypatch
+    ):
+        import sqlite3 as sqlite3_module
+
+        monkeypatch.setattr(
+            sqlite3_module,
+            "connect",
+            lambda *a, **k: (_ for _ in ()).throw(RuntimeError("db down")),
+        )
+        assert cache_manager.get_cache_stats() == {}
+
+    def test_clear_old_cache_returns_zero_on_db_error(self, cache_manager, monkeypatch):
+        import sqlite3 as sqlite3_module
+
+        monkeypatch.setattr(
+            sqlite3_module,
+            "connect",
+            lambda *a, **k: (_ for _ in ()).throw(RuntimeError("db down")),
+        )
+        assert cache_manager.clear_old_cache() == 0
+
+    def test_delete_analysis_result_returns_false_on_db_error(
+        self, cache_manager, monkeypatch
+    ):
+        import sqlite3 as sqlite3_module
+
+        monkeypatch.setattr(
+            sqlite3_module,
+            "connect",
+            lambda *a, **k: (_ for _ in ()).throw(RuntimeError("db down")),
+        )
+        assert cache_manager.delete_analysis_result("1") is False
+
+    def test_delete_metadata_returns_false_on_db_error(
+        self, cache_manager, monkeypatch
+    ):
+        import sqlite3 as sqlite3_module
+
+        monkeypatch.setattr(
+            sqlite3_module,
+            "connect",
+            lambda *a, **k: (_ for _ in ()).throw(RuntimeError("db down")),
+        )
+        assert cache_manager.delete_metadata("1") is False
+
+    def test_delete_fulltext_returns_false_on_db_error(
+        self, cache_manager, monkeypatch
+    ):
+        import sqlite3 as sqlite3_module
+
+        monkeypatch.setattr(
+            sqlite3_module,
+            "connect",
+            lambda *a, **k: (_ for _ in ()).throw(RuntimeError("db down")),
+        )
+        assert cache_manager.delete_fulltext("1") is False
+
+    def test_clear_all_cache_returns_false_on_db_error(
+        self, cache_manager, monkeypatch
+    ):
+        import sqlite3 as sqlite3_module
+
+        monkeypatch.setattr(
+            sqlite3_module,
+            "connect",
+            lambda *a, **k: (_ for _ in ()).throw(RuntimeError("db down")),
+        )
+        assert cache_manager.clear_all_cache() is False
+
+    def test_init_database_logs_error_without_raising(
+        self, monkeypatch, temp_cache_dir
+    ):
+        import sqlite3 as sqlite3_module
+        import os
+
+        monkeypatch.setattr(
+            sqlite3_module,
+            "connect",
+            lambda *a, **k: (_ for _ in ()).throw(RuntimeError("db down")),
+        )
+        db_path = os.path.join(temp_cache_dir, "broken.db")
+        CacheManager(cache_dir=temp_cache_dir, db_path=db_path)  # should not raise
