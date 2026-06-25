@@ -369,8 +369,13 @@ class BioAnalyzerCLI:
             raise Exception(
                 "Docker image required to read Excel files. Run 'BioAnalyzer build'."
             )
-        # Build the script as a plain string using concatenation to avoid
-        # any quote or heredoc conflicts with the surrounding Python source.
+        # The filename is attacker-controllable in principle (it's whatever
+        # the --file argument's basename is) and gets embedded in a Python
+        # source string passed to `python -c` below - use json.dumps() to
+        # produce a properly quote-escaped Python string literal instead of
+        # raw concatenation, which would let a filename containing a quote
+        # break out of the literal and inject arbitrary code.
+        safe_filename_literal = json.dumps(file_path_obj.name)
         script = (
             "import pandas as pd, sys, json, re\n"
             "def normalize(v):\n"
@@ -380,7 +385,7 @@ class BioAnalyzerCLI:
             "    raw = str(v).strip()\n"
             "    if re.fullmatch(r'\\d+\\.0+', raw): return raw.split('.')[0]\n"
             "    return raw if re.fullmatch(r'\\d+', raw) else None\n"
-            "df = pd.read_excel('/workspace/" + file_path_obj.name + "')\n"
+            "df = pd.read_excel('/workspace/' + " + safe_filename_literal + ")\n"
             "best, best_score = [], -1\n"
             "for col in df.columns:\n"
             "    pmids = [p for p in (normalize(v) for v in df[col]) if p and len(p) >= 6]\n"
