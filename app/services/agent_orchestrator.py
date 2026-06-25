@@ -164,8 +164,16 @@ def _field_result_from_raw(value: Optional[str], normalizer_fn=None) -> FieldRes
                 mapping_confidence=float(term.mapping_confidence or conf),
                 reason_if_missing="" if term.status != "ABSENT" else "Not found",
             )
-        except Exception:
-            pass  # Fall through to heuristic
+        except Exception as e:
+            from app.utils.credential_masking import mask_exception_message
+
+            logger.debug(
+                "Normalizer %s failed for %r: %s",
+                normalizer_fn,
+                value,
+                mask_exception_message(e),
+            )
+            # Fall through to heuristic
 
     # Heuristic: non-empty value → PRESENT with modest confidence
     return FieldResult(
