@@ -63,6 +63,7 @@ from app.models.unified_qa import UnifiedQA
 from app.services.bugsigdb_check import is_in_bugsigdb
 from app.services.cache_manager import CacheManager
 from app.services.data_retrieval import PubMedRetriever
+from app.utils.credential_masking import mask_exception_message
 from app.utils.config import (
     DEFAULT_MODEL,
     GEMINI_API_KEY,
@@ -105,14 +106,16 @@ def get_unified_qa() -> Optional[UnifiedQA]:
             )
             logger.info("UnifiedQA initialised successfully")
         except Exception as e:
-            logger.error("UnifiedQA init failed: %s", e)
+            logger.error("UnifiedQA init failed: %s", mask_exception_message(e))
             try:
                 from app.models.gemini_qa import GeminiQA
 
                 _unified_qa = GeminiQA(api_key=GEMINI_API_KEY)
                 logger.info("Fallback to GeminiQA successful")
             except Exception as e2:
-                logger.error("GeminiQA fallback also failed: %s", e2)
+                logger.error(
+                    "GeminiQA fallback also failed: %s", mask_exception_message(e2)
+                )
     return _unified_qa
 
 
@@ -122,7 +125,7 @@ def get_pubmed_retriever() -> Optional[PubMedRetriever]:
         try:
             _pubmed_retriever = PubMedRetriever(api_key=NCBI_API_KEY)
         except Exception as e:
-            logger.error("PubMedRetriever init failed: %s", e)
+            logger.error("PubMedRetriever init failed: %s", mask_exception_message(e))
     return _pubmed_retriever
 
 
@@ -611,6 +614,12 @@ def _heuristic_payload_from_text(text: str) -> Dict[str, Any]:
         if mentions:
             sample_size_raw = max(mentions)
 
+    has_diff_abundance = bool(
+        re.search(
+            r"\b(significant(?:ly)?|differential(?:ly)?|enriched|depleted|p\s*[<=>]\s*0?\.\d+)\b",
+            lower,
+        )
+    )
     return {
         "host_species_raw": host_species_raw,
         "body_site_raw": body_site_raw,
@@ -618,17 +627,13 @@ def _heuristic_payload_from_text(text: str) -> Dict[str, Any]:
         "sequencing_type_raw": sequencing_type_raw,
         "taxa_level_raw": taxa_level_raw,
         "sample_size_raw": sample_size_raw,
-        "has_differential_abundance": bool(
-            re.search(
-                r"\b(significant(?:ly)?|differential(?:ly)?|enriched|depleted|p\s*[<=>]\s*0?\.\d+)\b",
-                lower,
-            )
-        ),
-        "differential_abundance_confidence": (
-            0.6
-            if re.search(r"\b(significant|differential|p\s*[<=>]\s*0?\.\d+)\b", lower)
-            else 0.0
-        ),
+        # Confidence must never be 0.0 while the boolean is True - both are
+        # derived from the same match so they can't disagree (previously the
+        # confidence regex lacked the boolean regex's "(?:ly)?"/enriched/
+        # depleted alternatives, so e.g. "significantly enriched" set
+        # has_differential_abundance=True with confidence=0.0).
+        "has_differential_abundance": has_diff_abundance,
+        "differential_abundance_confidence": 0.6 if has_diff_abundance else 0.0,
         "_source": "heuristic",
     }
 
@@ -943,7 +948,11 @@ async def analyze_paper_simple(
         return result
 
     except Exception as e:
-        logger.error("Error in simple analysis for PMID %s: %s", pmid, e)
+        logger.error(
+            "Error in simple analysis for PMID %s: %s",
+            pmid,
+            mask_exception_message(e),
+        )
         if "low_quality_cached" in locals() and low_quality_cached is not None:
             return low_quality_cached
         return None
@@ -1018,7 +1027,11 @@ async def analyze_paper_with_rag(
                     "Created %d section-aware chunks for PMID %s", len(chunks), pmid
                 )
             except Exception as chunk_error:
-                logger.warning("Chunking failed for PMID %s: %s", pmid, chunk_error)
+                logger.warning(
+                    "Chunking failed for PMID %s: %s",
+                    pmid,
+                    mask_exception_message(chunk_error),
+                )
                 chunks = None
 
         # ── Optional RAG context retrieval ─────────────────────────────────
@@ -1046,7 +1059,9 @@ async def analyze_paper_with_rag(
                 )
             except Exception as rag_error:
                 logger.warning(
-                    "RAG context retrieval failed for PMID %s: %s", pmid, rag_error
+                    "RAG context retrieval failed for PMID %s: %s",
+                    pmid,
+                    mask_exception_message(rag_error),
                 )
 
         processing_time = time.time() - start_time
@@ -1123,13 +1138,17 @@ async def analyze_paper_with_rag(
             )
         except Exception as cache_error:
             logger.warning(
-                "Unable to cache RAG analysis for PMID %s: %s", pmid, cache_error
+                "Unable to cache RAG analysis for PMID %s: %s",
+                pmid,
+                mask_exception_message(cache_error),
             )
 
         return result
 
     except Exception as e:
-        logger.error("Error in RAG analysis for PMID %s: %s", pmid, e)
+        logger.error(
+            "Error in RAG analysis for PMID %s: %s", pmid, mask_exception_message(e)
+        )
         return None
 
 
@@ -1153,8 +1172,6 @@ def _collect_rag_stats(
         )
         rag_metrics = svc.get_rerank_metrics()
     except Exception as e:
-        from app.utils.credential_masking import mask_exception_message
-
         logger.warning(
             "Failed to compute RAG rerank metrics: %s", mask_exception_message(e)
         )
@@ -1200,7 +1217,12 @@ async def analyze_single_field(
         logger.warning("Field %s timed out for PMID %s", field_name, pmid)
         return create_empty_field_result(field_name)
     except Exception as e:
-        logger.error("Error analysing field %s for PMID %s: %s", field_name, pmid, e)
+        logger.error(
+            "Error analysing field %s for PMID %s: %s",
+            field_name,
+            pmid,
+            mask_exception_message(e),
+        )
         return create_empty_field_result(field_name)
 
 
@@ -1247,7 +1269,9 @@ async def _build_single_field_context(
         return ctx
     except Exception as rag_error:
         logger.warning(
-            "RAG failed for field %s; using plain text: %s", field_name, rag_error
+            "RAG failed for field %s; using plain text: %s",
+            field_name,
+            mask_exception_message(rag_error),
         )
         return text[:2_000]
 
@@ -1292,7 +1316,7 @@ async def _query_single_field(
             )
             answer_text = response.get("text", "")
         except Exception as fb_err:
-            logger.error("GeminiQA fallback failed: %s", fb_err)
+            logger.error("GeminiQA fallback failed: %s", mask_exception_message(fb_err))
             return create_empty_field_result(field_name)
 
     parsed = _parse_json_object(answer_text)
