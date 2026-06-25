@@ -43,6 +43,11 @@ dependencies = [
     # Note: paper-qa>=5.0.0 requires Python >=3.11
     # For Python <3.11, install paper-qa>=4.9.0,<5.0.0
     "paper-qa>=4.9.0",
+    # Transitive deps (google-generativeai -> google-auth -> cryptography;
+    # paper-qa -> paper-qa-pypdf -> pypdf); pinned explicitly to versions
+    # without known CVEs (GHSA-537c-gmf6-5ccf; CVE-2026-54530/54531).
+    "cryptography>=48.0.1",
+    "pypdf>=6.13.3",
     # Web and data retrieval
     "requests>=2.31.0",
     "beautifulsoup4>=4.12.2",
@@ -52,9 +57,9 @@ dependencies = [
     "psutil>=5.9.0",
     "fastapi>=0.104.0",
     "uvicorn[standard]>=0.23.2",
-    "aiohttp>=3.13.4",
+    "aiohttp>=3.14.1",
     "pydantic>=2.4.2",
-    "starlette>=0.31.1",
+    "starlette>=1.3.1",
     "PyYAML>=5.4.1",
     "pytz>=2023.3",
     # Vector database (optional - for persistent storage)
@@ -62,6 +67,11 @@ dependencies = [
     # Curator table (sortable/searchable Streamlit UI)
     "streamlit>=1.28.0",
     "pyarrow>=14.0.0",
+    # Transitive deps with known CVEs in versions older constraints allow;
+    # pinned explicitly rather than relying on paper-qa/fastapi/streamlit's
+    # own (looser) constraints to pick a safe version.
+    "pydantic-settings>=2.14.2",
+    "python-multipart>=0.0.31",
 ]
 
 [project.optional-dependencies]

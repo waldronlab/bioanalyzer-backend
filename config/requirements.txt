@@ -19,6 +19,11 @@ tiktoken>=0.5.0
 google-generativeai>=0.7.2
 litellm>=1.83.7
 paper-qa>=5.0.0
+# Transitive deps (google-generativeai -> google-auth -> cryptography;
+# paper-qa -> paper-qa-pypdf -> pypdf); pinned explicitly to versions
+# without known CVEs (GHSA-537c-gmf6-5ccf; CVE-2026-54530/54531).
+cryptography>=48.0.1
+pypdf>=6.13.3
 
 # --- Vector Database ---
 qdrant-client>=1.7.0
@@ -26,14 +31,20 @@ qdrant-client>=1.7.0
 # --- Web Framework & API ---
 fastapi>=0.104.0
 uvicorn[standard]>=0.23.2
-starlette>=0.31.1
+starlette>=1.3.1
 pydantic>=2.4.2
+# Transitive dep of paper-qa; pinned explicitly to a version without known
+# CVEs (GHSA-4xgf-cpjx-pc3j) since paper-qa's own constraint allows older.
+pydantic-settings>=2.14.2
 
 # --- Networking & Web Scraping ---
 requests>=2.31.0
-aiohttp>=3.13.4
+aiohttp>=3.14.1
 beautifulsoup4>=4.12.2
 defusedxml>=0.7.1
+# Transitive dep of fastapi/streamlit (form-data parsing); pinned explicitly
+# to a version without known CVEs since neither's own constraint requires it.
+python-multipart>=0.0.31
 
 # --- File Processing ---
 python-dotenv>=1.2.2
