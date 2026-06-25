@@ -3,13 +3,16 @@ import time
 import pytest
 import requests
 
+from app.normalization import body_site as body_site_module
+from app.normalization import condition as condition_module
 from app.normalization import host_species as host_species_module
 from app.normalization import ols as ols_module
+from app.normalization import sample_size as sample_size_module
 from app.normalization.body_site import normalize_body_site
-from app.normalization.condition import normalize_condition
+from app.normalization.condition import normalize_condition, _extract_clean_disease_name
 from app.normalization.host_species import normalize_host_species
 from app.normalization.ols import format_ontology_id, ols_search
-from app.normalization.sample_size import normalize_sample_size
+from app.normalization.sample_size import normalize_sample_size, _simple_word_to_num
 from app.normalization.sequencing_type import normalize_sequencing_type
 from app.normalization.taxa_level import normalize_taxa_level
 
@@ -305,3 +308,149 @@ def test_ols_search_handles_malformed_json(monkeypatch):
         requests, "get", lambda *a, **k: _DummyResponse(raise_json_error=True)
     )
     assert ols_search("some term", "efo", "EFO") is None
+
+
+# ---------------------------------------------------------------------------
+# body_site.py: multiple-keyword match + OLS fallback (previously untested)
+# ---------------------------------------------------------------------------
+
+
+def test_body_site_multiple_matches_is_partially_present():
+    t = normalize_body_site("fecal and salivary samples were both collected")
+    assert t.status == "PARTIALLY_PRESENT"
+    assert t.mapping_confidence == 0.9
+    # first match in dict iteration order wins - just confirm it's one of
+    # the two genuinely-matched pairs, not a third unrelated one.
+    assert t.label in ("feces", "saliva")
+
+
+def test_body_site_ols_fallback_success(monkeypatch):
+    def fake_get(url, params=None, timeout=None):
+        assert url == ols_module.OLS_SEARCH_URL
+        return _DummyResponse(
+            {"response": {"docs": [{"label": "duodenum", "obo_id": "UBERON_0002114"}]}}
+        )
+
+    monkeypatch.setattr(requests, "get", fake_get)
+    t = normalize_body_site("duodenal biopsy")
+    assert t.label == "duodenum"
+    assert t.ontology_id == "UBERON:0002114"
+    assert t.status == "PRESENT"
+    assert t.mapping_confidence == 0.9
+
+
+def test_body_site_ols_fallback_no_hit_returns_partially_present(monkeypatch):
+    monkeypatch.setattr(
+        requests, "get", lambda *a, **k: _DummyResponse({"response": {"docs": []}})
+    )
+    t = normalize_body_site("some unmapped anatomical site")
+    assert t.status == "PARTIALLY_PRESENT"
+    assert t.ontology_id == ""
+    assert t.mapping_confidence == 0.5
+    assert t.label == "some unmapped anatomical site"
+
+
+# ---------------------------------------------------------------------------
+# condition.py: _extract_clean_disease_name + OLS fallback (previously
+# untested)
+# ---------------------------------------------------------------------------
+
+
+def test_extract_clean_disease_name_strips_known_phrases():
+    assert (
+        _extract_clean_disease_name("Patients with a rare metabolic disorder")
+        == "a rare metabolic disorder"
+    )
+    assert (
+        _extract_clean_disease_name("Subjects with chronic kidney disease")
+        == "chronic kidney disease"
+    )
+
+
+def test_extract_clean_disease_name_passes_through_when_no_phrase_matches():
+    assert _extract_clean_disease_name("Some Disease") == "some disease"
+
+
+def test_condition_ols_fallback_success(monkeypatch):
+    def fake_get(url, params=None, timeout=None):
+        assert url == ols_module.OLS_SEARCH_URL
+        return _DummyResponse(
+            {
+                "response": {
+                    "docs": [{"label": "rare metabolic disorder", "obo_id": "EFO_9999"}]
+                }
+            }
+        )
+
+    monkeypatch.setattr(requests, "get", fake_get)
+    t = normalize_condition("patients with a rare metabolic disorder")
+    assert t.label == "rare metabolic disorder"
+    assert t.ontology_id == "EFO:9999"
+    assert t.status == "PRESENT"
+
+
+def test_condition_ols_fallback_no_hit_returns_partially_present(monkeypatch):
+    monkeypatch.setattr(
+        requests, "get", lambda *a, **k: _DummyResponse({"response": {"docs": []}})
+    )
+    t = normalize_condition("some entirely unmapped condition")
+    assert t.status == "PARTIALLY_PRESENT"
+    assert t.ontology_id == ""
+    assert t.mapping_confidence == 0.5
+
+
+# ---------------------------------------------------------------------------
+# sample_size.py: _simple_word_to_num (the word2number-unavailable fallback,
+# previously untested - word2number is installed in this environment, so
+# the production code path through it is exercised directly here, and the
+# normalize_sample_size() delegation to it is exercised by monkeypatching
+# the module's `w2n` global to simulate word2number being absent).
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "text,expected",
+    [
+        ("ninety eight", 98),
+        ("thirty", 30),
+        ("one hundred", 100),
+        ("two thousand", 2000),
+        ("two thousand and fifty", 2050),
+        ("twelve", 12),
+        ("zero", 0),
+    ],
+)
+def test_simple_word_to_num_parses_common_phrasings(text, expected):
+    assert _simple_word_to_num(text) == expected
+
+
+def test_simple_word_to_num_returns_none_for_unparseable_text():
+    assert _simple_word_to_num("no numbers here") is None
+
+
+def test_simple_word_to_num_returns_none_for_empty_text():
+    assert _simple_word_to_num("") is None
+
+
+def test_simple_word_to_num_stops_at_first_non_number_word():
+    # "fifty dogs were studied" - consumes "fifty", stops at "dogs"
+    assert _simple_word_to_num("fifty dogs were studied") == 50
+
+
+def test_normalize_sample_size_uses_simple_fallback_when_word2number_absent(
+    monkeypatch,
+):
+    monkeypatch.setattr(sample_size_module, "w2n", None)
+    t = normalize_sample_size("forty two")
+    assert t.label == "42"
+    assert t.status == "PRESENT"
+    assert t.mapping_confidence == 1.0
+
+
+def test_normalize_sample_size_simple_fallback_miss_falls_through_to_regex(
+    monkeypatch,
+):
+    monkeypatch.setattr(sample_size_module, "w2n", None)
+    t = normalize_sample_size("approximately 42 mice")
+    assert t.label == "42"
+    assert t.mapping_confidence == 0.9
