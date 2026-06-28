@@ -49,7 +49,6 @@ All project documentation is organized in this folder.
 | Document | Description |
 |----------|-------------|
 | [TESTING.md](TESTING.md) | Running tests and test structure |
-| [CLEANUP_CHECKLIST.md](CLEANUP_CHECKLIST.md) | Cleanup and maintenance checklist |
 | [RENOVATE_CONFIG.md](RENOVATE_CONFIG.md) | Renovate dependency updates configuration |
 
 ---

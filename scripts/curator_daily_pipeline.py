@@ -24,7 +24,7 @@ import requests
 project_root = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(project_root))
 
-from app.pubmed_queries import RECOMMENDED_DISCOVERY_QUERY, SEARCH_PRESETS
+from app.services.pubmed_queries import RECOMMENDED_DISCOVERY_QUERY, SEARCH_PRESETS
 from app.services.data_retrieval import PubMedRetriever
 from scripts.cli import render_results
 

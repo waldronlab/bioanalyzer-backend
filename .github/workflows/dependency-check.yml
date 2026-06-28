@@ -7,7 +7,7 @@ on:
       - "feature/**"
       - "chore/**"
     paths:
-      - "config/requirements.txt"
+      - "requirements.txt"
       - "Dockerfile"
       - "docker-compose.yml"
       - ".github/workflows/**"
@@ -39,12 +39,12 @@ jobs:
         run: |
           pip-audit --version
       - name: Validate requirements.txt (pip parse + install simulation)
-        if: hashFiles('config/requirements.txt') != ''
+        if: hashFiles('requirements.txt') != ''
         run: |
-          echo "Validating config/requirements.txt..."
-          python -m pip install --dry-run -r config/requirements.txt
+          echo "Validating requirements.txt..."
+          python -m pip install --dry-run -r requirements.txt
       - name: Run vulnerability scan (pip-audit)
-        if: hashFiles('config/requirements.txt') != ''
+        if: hashFiles('requirements.txt') != ''
         run: |
           echo "Running pip-audit..."
           # pip-audit cannot reliably audit torch CPU wheels from the PyTorch index
@@ -53,8 +53,8 @@ jobs:
           python - <<'PY'
           import re
           from pathlib import Path
-          src = Path("config/requirements.txt")
-          dst = Path("config/requirements.audit.txt")
+          src = Path("requirements.txt")
+          dst = Path("requirements.audit.txt")
           skip = {"torch", "torchvision", "torchaudio"}
           out = []
           for line in src.read_text().splitlines():
@@ -71,7 +71,7 @@ jobs:
           dst.write_text("\n".join(out) + "\n")
           print(f"Created {dst} (torch packages removed)")
           PY
-          pip-audit -r config/requirements.audit.txt --ignore-vuln CVE-2025-68463
+          pip-audit -r requirements.audit.txt --ignore-vuln CVE-2025-68463
       - name: Check Dockerfile base image tag hygiene
         if: hashFiles('Dockerfile') != ''
         run: |

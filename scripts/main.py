@@ -13,7 +13,7 @@ try:
 except ImportError as e:
     print(f"Failed to import application: {e}")
     print("\nPossible causes:")
-    print("  1. Missing dependencies - run: pip install -r config/requirements.txt")
+    print("  1. Missing dependencies - run: pip install -r requirements.txt")
     print("  2. Syntax errors in application code")
     print("  3. Missing environment variables")
     traceback.print_exc()

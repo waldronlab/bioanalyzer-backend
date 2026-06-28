@@ -31,7 +31,7 @@ Optional but useful:
 
 ### Dependencies
 
-All dependencies are in the Docker image or `requirements.txt`. Main ones are FastAPI, Uvicorn, LiteLLM, Paper-QA, and PyTorch (CPU version). See `config/requirements.txt` for the full list.
+All dependencies are in the Docker image or `requirements.txt`. Main ones are FastAPI, Uvicorn, LiteLLM, Paper-QA, and PyTorch (CPU version). See `requirements.txt` for the full list.
 
 ## Deployment Options
 

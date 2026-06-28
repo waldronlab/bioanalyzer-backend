@@ -112,7 +112,7 @@ For help, visit: https://github.com/your-repo/bioanalyzer-backend
 ❌ Error importing BioAnalyzer CLI: {e}
 
 Please ensure all dependencies are installed:
-   pip install -r config/requirements.txt
+   pip install -r requirements.txt
 
 Or use Docker:
    ./docker-setup.sh
@@ -128,11 +128,11 @@ Or use Docker:
 
 This command requires local Python dependencies in your active environment.
 Install them with:
-   pip install -r config/requirements.txt
+   pip install -r requirements.txt
 
 If you prefer a clean environment:
    python -m venv .venv && source .venv/bin/activate
-   pip install -r config/requirements.txt
+   pip install -r requirements.txt
         """)
         sys.exit(1)
     except Exception as e:

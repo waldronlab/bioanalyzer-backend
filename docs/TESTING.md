@@ -75,7 +75,7 @@ tests/
 If you want to run tests locally without Docker, you'll need to install all dependencies:
 
 ```bash
-pip install -r config/requirements.txt
+pip install -r requirements.txt
 pip install pytest pytest-cov
 pytest tests/ -v
 ```

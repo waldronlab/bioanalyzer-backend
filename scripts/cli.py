@@ -772,7 +772,10 @@ class BioAnalyzerCLI:
         fmt: str = "txt",
         output_file: Optional[str] = None,
     ) -> List[str]:
-        from app.pubmed_queries import RECOMMENDED_DISCOVERY_QUERY, SEARCH_PRESETS
+        from app.services.pubmed_queries import (
+            RECOMMENDED_DISCOVERY_QUERY,
+            SEARCH_PRESETS,
+        )
         from app.services.data_retrieval import PubMedRetriever
 
         term = (

@@ -3,7 +3,7 @@ import pytest
 pytest.importorskip("defusedxml")
 
 from unittest.mock import MagicMock
-from app.pubmed_queries import RECOMMENDED_DISCOVERY_QUERY
+from app.services.pubmed_queries import RECOMMENDED_DISCOVERY_QUERY
 from scripts.cli import BioAnalyzerCLI
 
 

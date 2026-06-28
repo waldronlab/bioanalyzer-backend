@@ -268,7 +268,7 @@ class TestUtilityIntegration:
 
     def test_pmid_validation_and_cache_key_workflow(self):
         """Test that PMID validation and cache key creation work together."""
-        from app.utils.utils import validate_pmid, create_cache_key
+        from app.utils.common import validate_pmid, create_cache_key
 
         # Validate PMID
         valid_pmid = "12345678"
@@ -280,7 +280,7 @@ class TestUtilityIntegration:
 
     def test_json_save_load_workflow(self):
         """Test that JSON save and load work together."""
-        from app.utils.utils import save_json, load_json
+        from app.utils.common import save_json, load_json
         import tempfile
         from pathlib import Path
 

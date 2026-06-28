@@ -11,11 +11,11 @@ RUN apt-get update && apt-get install -y \
 RUN pip install --upgrade pip setuptools wheel
 
 # Copy dependency files first (better caching)
-COPY config/requirements.txt ./config/requirements.txt
+COPY requirements.txt ./requirements.txt
 COPY pyproject.toml setup.py README.md ./
 
 # Install Python dependencies
-RUN pip install --no-cache-dir -r config/requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
 COPY app ./app

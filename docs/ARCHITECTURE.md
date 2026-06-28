@@ -81,8 +81,8 @@ Implements business logic and orchestrates operations.
 
 **Components**:
 - `data_retrieval.py`: Core PubMed data retrieval
-- `pubmed_retrieval_service.py`: High-level retrieval service
-- `standalone_pubmed_retriever.py`: Lightweight standalone retriever
+- `standalone_pubmed_retriever.py`: Lightweight standalone retriever (used by the CLI)
+- `pubmed_queries.py`: PubMed discovery search query presets
 - `bugsigdb_analyzer.py`: Field analysis and extraction
 - `cache_manager.py`: Caching and performance optimization
 
