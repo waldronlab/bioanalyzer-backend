@@ -75,3 +75,43 @@ def test_curator_desk_csv_header_and_core_fields():
     # Spec §6.2: five prediction fields in curator-desk CSV (taxa_level is API-only)
     assert "Taxa Level" not in row
     assert "Taxa Level Status" not in row
+    # "16S" came directly from the normalizer with no distinct raw text here.
+    assert row["Sequencing Type Raw"] == ""
+
+
+def test_curator_desk_csv_sequencing_type_raw_shown_only_when_it_differs():
+    cli = BioAnalyzerCLI()
+    csv_text = cli.get_curator_desk_csv_content(
+        [
+            {
+                "pmid": "1",
+                "title": "T1",
+                "journal": "J1",
+                "fields": {
+                    "sequencing_type": {
+                        "value": "other",
+                        "status": "PRESENT",
+                        "raw": "novel long-read chemistry",
+                    },
+                },
+            },
+            {
+                "pmid": "2",
+                "title": "T2",
+                "journal": "J2",
+                "fields": {
+                    "sequencing_type": {
+                        "value": "16S",
+                        "status": "PRESENT",
+                        "raw": "16S",
+                    },
+                },
+            },
+        ]
+    )
+
+    rows = {r["PMID"]: r for r in csv.DictReader(io.StringIO(csv_text.strip()))}
+    assert rows["1"]["Sequencing Type"] == "other"
+    assert rows["1"]["Sequencing Type Raw"] == "novel long-read chemistry"
+    assert rows["2"]["Sequencing Type"] == "16S"
+    assert rows["2"]["Sequencing Type Raw"] == ""

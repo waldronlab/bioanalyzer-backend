@@ -63,7 +63,12 @@ def _build_field_result(
 
 
 def _build_field_result_from_term(term: Any) -> Dict[str, Any]:
-    """Build a FieldDict from a NormalizedTerm."""
+    """Build a FieldDict from a NormalizedTerm.
+
+    Includes a `raw` key holding the pre-normalization text (currently
+    populated only by normalize_sequencing_type, e.g. when it falls back
+    to "other") so the side-by-side original wording isn't lost.
+    """
     from app.normalization.types import NormalizedTerm
 
     if not isinstance(term, NormalizedTerm):
@@ -73,13 +78,15 @@ def _build_field_result_from_term(term: Any) -> Dict[str, Any]:
         if term.status == "PRESENT"
         else (0.65 if term.status == "PARTIALLY_PRESENT" else 0.0)
     )
-    return _build_field_result(
+    result = _build_field_result(
         term.label,
         term.status,
         confidence=conf,
         ontology_id=term.ontology_id,
         mapping_confidence=term.mapping_confidence,
     )
+    result["raw"] = term.raw
+    return result
 
 
 # ---------------------------------------------------------------------------

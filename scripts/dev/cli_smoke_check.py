@@ -4,7 +4,7 @@ BioAnalyzer CLI Test - Simple test without dependencies
 """
 
 
-def test_cli_structure():
+def check_cli_structure():
     """Test that the CLI structure is correct."""
     print("🧪 Testing BioAnalyzer Package CLI Structure...")
 
@@ -36,7 +36,7 @@ def test_cli_structure():
             return False
 
     # Test configuration files
-    config_files = ["config/requirements.txt", "setup.py", "README.md"]
+    config_files = ["requirements.txt", "setup.py", "README.md"]
     for config_file in config_files:
         if os.path.exists(config_file):
             print(f"✅ {config_file} exists")
@@ -48,7 +48,7 @@ def test_cli_structure():
     return True
 
 
-def test_field_info():
+def show_field_info():
     """Test field information display."""
     print("\n📋 BugSigDB Essential Fields:")
     print("=" * 50)
@@ -109,16 +109,15 @@ if __name__ == "__main__":
     print("🚀 BioAnalyzer Package CLI Test")
     print("=" * 40)
 
-    # Test structure
-    if test_cli_structure():
-        # Test field info
-        test_field_info()
+    # Check structure
+    if check_cli_structure():
+        # Show field info
+        show_field_info()
 
         print("\n✅ Package CLI structure is correct!")
         print("📝 To use the CLI, install dependencies:")
-        print("   pip install -r config/requirements.txt")
+        print("   pip install -r requirements.txt")
         print("   python3 scripts/cli.py fields")
         print("   python3 scripts/cli.py analyze 12345678")
     else:
         print("\n❌ Package CLI structure has issues!")
-

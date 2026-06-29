@@ -22,7 +22,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 # Read requirements
 # Filter out PyTorch CPU-specific versions and pip options that aren't valid in install_requires
 requirements = []
-with open("config/requirements.txt", "r", encoding="utf-8") as fh:
+with open("requirements.txt", "r", encoding="utf-8") as fh:
     for line in fh:
         line = line.strip()
         if not line or line.startswith("#"):

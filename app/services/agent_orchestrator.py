@@ -186,6 +186,7 @@ def _field_result_from_raw(value: Optional[str], normalizer_fn=None) -> FieldRes
                 ontology_id=term.ontology_id or "",
                 mapping_confidence=float(term.mapping_confidence or conf),
                 reason_if_missing="" if term.status != "ABSENT" else "Not found",
+                raw=getattr(term, "raw", "") or "",
             )
         except Exception as e:
             from app.utils.credential_masking import mask_exception_message

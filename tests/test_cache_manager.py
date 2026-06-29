@@ -217,6 +217,53 @@ class TestFulltextCache:
         assert retrieved["fulltext"] == fulltext
 
 
+class TestOntologyTermCache:
+    """Tests for the ontology term -> ID cache (NCBI Taxonomy / EBI OLS)."""
+
+    def test_store_and_get_ontology_term(self, cache_manager):
+        ok = cache_manager.store_ontology_term(
+            "efo", "parkinson disease", "Parkinson disease", "EFO:0002508", 1.0
+        )
+        assert ok is True
+
+        result = cache_manager.get_ontology_term("efo", "parkinson disease")
+        assert result == ("Parkinson disease", "EFO:0002508", 1.0)
+
+    def test_get_ontology_term_not_found(self, cache_manager):
+        assert cache_manager.get_ontology_term("efo", "no such term") is None
+
+    def test_ontology_term_cache_is_scoped_by_provider(self, cache_manager):
+        """The same term string under different providers must not collide."""
+        cache_manager.store_ontology_term(
+            "uberon", "skin", "skin", "UBERON:0002097", 1.0
+        )
+        cache_manager.store_ontology_term(
+            "efo", "skin", "skin disease", "EFO:0000000", 0.7
+        )
+
+        assert cache_manager.get_ontology_term("uberon", "skin") == (
+            "skin",
+            "UBERON:0002097",
+            1.0,
+        )
+        assert cache_manager.get_ontology_term("efo", "skin") == (
+            "skin disease",
+            "EFO:0000000",
+            0.7,
+        )
+
+    def test_store_ontology_term_overwrites(self, cache_manager):
+        cache_manager.store_ontology_term(
+            "ncbitaxon", "human", "Homo sapiens", "NCBITaxon:9606", 0.9
+        )
+        cache_manager.store_ontology_term(
+            "ncbitaxon", "human", "Homo sapiens", "NCBITaxon:9606", 1.0
+        )
+
+        result = cache_manager.get_ontology_term("ncbitaxon", "human")
+        assert result == ("Homo sapiens", "NCBITaxon:9606", 1.0)
+
+
 class TestCacheStats:
     """Tests for cache statistics."""
 

@@ -13,7 +13,7 @@ from pathlib import Path  # noqa: E402
 
 import pytest  # noqa: E402
 
-from app.utils.utils import (  # noqa: E402
+from app.utils.common import (  # noqa: E402
     create_cache_key,
     save_json,
     load_json,

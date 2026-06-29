@@ -89,6 +89,11 @@ class FieldResult(BaseModel):
         default="",
         description="Human-readable explanation when status is ABSENT.",
     )
+    raw: str = Field(
+        default="",
+        description="Pre-normalization text; populated only by normalizers "
+        "that preserve it (e.g. sequencing_type's 'other' fallback).",
+    )
 
     @classmethod
     def absent(
@@ -118,6 +123,7 @@ class FieldResult(BaseModel):
             "ontology_id": self.ontology_id,
             "mapping_confidence": self.mapping_confidence,
             "reason_if_missing": self.reason_if_missing,
+            "raw": self.raw,
         }
 
 

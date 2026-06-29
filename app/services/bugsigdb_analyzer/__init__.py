@@ -29,6 +29,8 @@ fields keys  →  curator table column pair
   "body_site"       →  "Body Site"          /  "Body Site Status"
   "condition"       →  "Condition"          /  "Condition Status"
   "sequencing_type" →  "Sequencing Type"    /  "Sequencing Type Status"
+                       (+ "raw"             →  "Sequencing Type Raw" when it
+                        differs from the normalized value, e.g. "other")
   "sample_size"     →  "Sample Size"        /  "Sample Size Status"
   "taxa_level"      →  (hidden in curator table, present in API)
 
@@ -39,6 +41,8 @@ Each FieldDict has:
     ontology_id         str
     mapping_confidence  float
     reason_if_missing   str
+    raw                 str   (pre-normalization text; "" unless set by
+                                the field's normalizer, e.g. sequencing_type)
 """
 
 from app.models.unified_qa import UnifiedQA

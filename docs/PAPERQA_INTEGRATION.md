@@ -27,7 +27,7 @@ pip install paper-qa>=5.0.0
 ### Option 3: Install via requirements.txt
 
 ```bash
-pip install -r config/requirements.txt
+pip install -r requirements.txt
 ```
 
 ## Configuration

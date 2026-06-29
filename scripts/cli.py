@@ -49,6 +49,26 @@ logger = logging.getLogger(__name__)
 COMPOSE_PROJECT_NAME = "bioanalyzer-package"
 
 
+def _read_existing_pmids(path: Path) -> set:
+    """Return the set of PMIDs already present in a curator_desk_csv file.
+
+    The output file IS the de-duplication manifest: there's no separate
+    persisted state to drift out of sync with it. Deleting the file simply
+    starts a clean slate on the next run.
+    """
+    if not path.exists():
+        return set()
+    try:
+        with path.open(encoding="utf-8", newline="") as f:
+            return {
+                (row.get("PMID") or "").strip()
+                for row in csv.DictReader(f)
+                if (row.get("PMID") or "").strip()
+            }
+    except Exception:
+        return set()
+
+
 class BioAnalyzerCLI:
     """User-friendly Command Line Interface for BioAnalyzer."""
 
@@ -432,7 +452,10 @@ class BioAnalyzerCLI:
         fmt: str = "txt",
         output_file: Optional[str] = None,
     ) -> List[str]:
-        from app.pubmed_queries import RECOMMENDED_DISCOVERY_QUERY, SEARCH_PRESETS
+        from app.services.pubmed_queries import (
+            RECOMMENDED_DISCOVERY_QUERY,
+            SEARCH_PRESETS,
+        )
         from app.services.data_retrieval import PubMedRetriever
 
         term = (
@@ -482,6 +505,31 @@ class BioAnalyzerCLI:
         refresh: bool = False,
     ):
         request_timeout = int(os.getenv("BIOANALYZER_ANALYZE_TIMEOUT", "180"))
+
+        # Cumulative output: when re-running against the same curator_desk_csv
+        # file, skip both re-analysis and re-emission for PMIDs it already
+        # contains. The file itself is the de-duplication manifest — there is
+        # no separate state to drift out of sync with it, so deleting the
+        # file simply starts a clean slate on the next run. --refresh bypasses
+        # this (and overwrites, like before) for an intentional full redo.
+        append_mode = False
+        out_path = Path(output_file) if output_file else None
+        if fmt == "curator_desk_csv" and out_path is not None and not refresh:
+            already_emitted = _read_existing_pmids(out_path)
+            if already_emitted:
+                skipped = [p for p in pmids if p in already_emitted]
+                pmids = [p for p in pmids if p not in already_emitted]
+                if skipped:
+                    print(
+                        f"⏭️  Skipping {len(skipped)} PMID(s) already in "
+                        f"{out_path} (use --refresh to redo)"
+                    )
+                append_mode = True
+
+        if append_mode and not pmids:
+            print("✅ Nothing new to add — all PMIDs already present.")
+            return
+
         results, total = [], len(pmids)
         print(f"🔬 Analysing {total} paper(s)...")
         for i, pmid in enumerate(pmids, 1):
@@ -502,9 +550,13 @@ class BioAnalyzerCLI:
         if not results:
             print("❌ No results obtained.")
             return
-        content = render_results(results, fmt)
+        content = render_results(results, fmt, include_header=not append_mode)
         if output_file:
-            Path(output_file).write_text(content, encoding="utf-8")
+            if append_mode:
+                with open(output_file, "a", encoding="utf-8", newline="") as f:
+                    f.write(content)
+            else:
+                Path(output_file).write_text(content, encoding="utf-8")
             print(f"💾 Results saved to: {output_file}")
         else:
             print(content)

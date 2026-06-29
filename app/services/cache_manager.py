@@ -76,6 +76,24 @@ class CacheManager:
             """
             )
 
+            # Ontology term -> ID lookups (NCBI Taxonomy, EBI OLS). Keyed by
+            # (provider, term) rather than PMID, and has no TTL: a confirmed
+            # mapping for a term doesn't go stale the way an LLM extraction
+            # can, so unlike analysis_cache it's never treated as expired.
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS ontology_term_cache (
+                    provider TEXT NOT NULL,
+                    term TEXT NOT NULL,
+                    label TEXT,
+                    ontology_id TEXT,
+                    confidence REAL,
+                    timestamp TEXT,
+                    PRIMARY KEY (provider, term)
+                )
+            """
+            )
+
             cursor.execute(
                 "CREATE INDEX IF NOT EXISTS idx_analysis_timestamp ON analysis_cache(timestamp)"
             )
@@ -340,6 +358,73 @@ class CacheManager:
         except Exception as e:
             logger.error(f"Failed to retrieve fulltext for PMID {pmid}: {str(e)}")
             return None
+
+    def get_ontology_term(self, provider: str, term: str) -> Optional[tuple]:
+        """Return a cached (label, ontology_id, confidence) for *term*, or None.
+
+        No TTL is applied — see ontology_term_cache table comment.
+        """
+        conn = None
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT label, ontology_id, confidence
+                FROM ontology_term_cache
+                WHERE provider = ? AND term = ?
+            """,
+                (provider, term),
+            )
+            result = cursor.fetchone()
+            return tuple(result) if result else None
+        except Exception as e:
+            logger.warning(
+                f"Failed to read ontology cache for {provider}/{term}: {str(e)}"
+            )
+            return None
+        finally:
+            if conn:
+                self._return_connection(conn)
+
+    def store_ontology_term(
+        self,
+        provider: str,
+        term: str,
+        label: str,
+        ontology_id: str,
+        confidence: float,
+    ) -> bool:
+        """Persist a resolved (label, ontology_id, confidence) for *term*."""
+        conn = None
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                INSERT OR REPLACE INTO ontology_term_cache
+                (provider, term, label, ontology_id, confidence, timestamp)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """,
+                (
+                    provider,
+                    term,
+                    label,
+                    ontology_id,
+                    confidence,
+                    datetime.now().isoformat(),
+                ),
+            )
+            conn.commit()
+            return True
+        except Exception as e:
+            logger.warning(
+                f"Failed to store ontology cache for {provider}/{term}: {str(e)}"
+            )
+            return False
+        finally:
+            if conn:
+                self._return_connection(conn)
 
     def is_cache_valid(self, timestamp: str, max_age_hours: int = 24) -> bool:
         """Check if cached data is still valid based on age."""

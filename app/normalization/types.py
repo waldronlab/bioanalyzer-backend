@@ -15,6 +15,7 @@ class NormalizedTerm:
     ontology_id: str
     status: str
     mapping_confidence: float
+    raw: str = ""
 
     @classmethod
     def absent(cls) -> NormalizedTerm:

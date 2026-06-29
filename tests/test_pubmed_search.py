@@ -1,4 +1,4 @@
-from app.pubmed_queries import (
+from app.services.pubmed_queries import (
     HIGH_PRECISION_QUERY,
     RECOMMENDED_DISCOVERY_QUERY,
     SEARCH_PRESETS,

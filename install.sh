@@ -129,7 +129,7 @@ if "$INSTALL_DIR/BioAnalyzer" fields > /dev/null 2>&1; then
 else
     print_warning "Installation completed but command test failed"
     print_warning "You may need to install Python dependencies:"
-    print_warning "pip install -r $CURRENT_DIR/config/requirements.txt"
+    print_warning "pip install -r $CURRENT_DIR/requirements.txt"
 fi
 
 echo ""

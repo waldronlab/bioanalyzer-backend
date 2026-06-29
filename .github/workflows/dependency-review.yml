@@ -7,7 +7,7 @@ on:
   pull_request:
     branches: [main, develop]
     paths:
-      - "config/requirements.txt"
+      - "requirements.txt"
       - "pyproject.toml"
       - "**/requirements*.txt"
       - "setup.py"

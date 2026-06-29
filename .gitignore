@@ -83,6 +83,8 @@ logs/
 .dockerignore
 .docker/
 
+requirements.audit.txt
+
 # Editors/IDE
 .vscode/
 .idea/

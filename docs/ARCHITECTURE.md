@@ -34,7 +34,7 @@ don't write code or docs assuming any of that section is real.
   (see API Endpoints below).
 - **`app/services/`** - business logic: PubMed/PMC retrieval
   (`data_retrieval.py`, `standalone_pubmed_retriever.py`), field analysis orchestration
-  (`bugsigdb_analyzer.py`), the v2 RAG pipeline (`advanced_rag.py`,
+  (`bugsigdb_analyzer/` package), the v2 RAG pipeline (`advanced_rag.py`,
   `chunk_reranking.py`, `contextual_summarization.py`), and the SQLite
   cache (`cache_manager.py`).
 - **`app/models/`** - LLM integration: `llm_provider.py` (LiteLLM-based
@@ -164,7 +164,7 @@ Output rendering (table/csv/curator_desk_csv/xml) lives in
 ### LLM provider fallback chain
 
 `UnifiedQA.chat()` (`app/models/unified_qa.py`) is what the main analysis
-pipeline actually calls (confirmed via `app/services/bugsigdb_analyzer.py`).
+pipeline actually calls (confirmed via `app/services/bugsigdb_analyzer/`).
 It tries providers in this order, falling back on failure: **Paper-QA**
 (`PaperQAAgent`) first when available and a Gemini API key is set, then
 **LiteLLM** (`LLMProviderManager`, supports Gemini/OpenAI/Anthropic/Ollama),

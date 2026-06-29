@@ -17,6 +17,20 @@ from app.normalization.sequencing_type import normalize_sequencing_type
 from app.normalization.taxa_level import normalize_taxa_level
 
 
+@pytest.fixture(autouse=True)
+def _no_ontology_cache(monkeypatch):
+    """These tests exercise the live-lookup fallback paths directly, but
+    host_species.py/ols.py persist resolved terms to a real on-disk SQLite
+    cache (app.normalization.ontology_cache). Different tests below reuse
+    the same example terms (e.g. "domestic cat") across host_species and
+    OLS lookups, so without this, a cache entry written by an earlier test
+    makes a later test's mocked HTTP response never get reached."""
+    monkeypatch.setattr(host_species_module, "get_cached_term", lambda *a: None)
+    monkeypatch.setattr(host_species_module, "store_cached_term", lambda *a: None)
+    monkeypatch.setattr(ols_module, "get_cached_term", lambda *a: None)
+    monkeypatch.setattr(ols_module, "store_cached_term", lambda *a: None)
+
+
 class _DummyResponse:
     """Minimal stand-in for requests.Response used by the fakes below."""
 
@@ -185,8 +199,20 @@ def test_sequencing_type_normalization_variants():
     t = normalize_sequencing_type("")
     assert t.status == "ABSENT"
 
+    # Unmatched text falls back to the "other" vocab value (status PRESENT,
+    # not PARTIALLY_PRESENT — it was found, just not classifiable), and the
+    # original wording is preserved on .raw for the "Sequencing Type Raw"
+    # side column.
     t = normalize_sequencing_type("new custom chemistry")
-    assert t.status == "PARTIALLY_PRESENT"
+    assert t.label == "other"
+    assert t.status == "PRESENT"
+    assert t.raw == "new custom chemistry"
+
+    # A matched phrase still preserves .raw, but callers should treat the
+    # column as unnecessary when raw == normalized value.
+    t = normalize_sequencing_type("16S rRNA gene sequencing")
+    assert t.label == "16S"
+    assert t.raw == "16S rRNA gene sequencing"
 
 
 def test_taxa_level_normalization_variants():
@@ -227,6 +253,33 @@ def test_sample_size_normalization_variants():
     assert t.status == "ABSENT"
 
     t = normalize_sample_size("unknown sample count")
+    assert t.status == "PARTIALLY_PRESENT"
+
+
+def test_sample_size_ambiguous_multi_number_resolution():
+    # Rule (see _resolve_ambiguous_count docstring): the first number
+    # immediately followed by a sample-related noun wins, in reading order.
+    t = normalize_sample_size("98 cases and 45 controls")
+    assert t.label == "98"
+    assert t.status == "PRESENT"
+
+    # An explicit "total of N" overrides the per-cohort numbers.
+    t = normalize_sample_size(
+        "98 cases and 45 controls were included, for a total of 143 participants"
+    )
+    assert t.label == "143"
+
+    # A leading year must not be mistaken for the sample size.
+    t = normalize_sample_size("In 2019, 65 volunteers were enrolled")
+    assert t.label == "65"
+
+    # A percentage mentioned alongside the real count must not be picked up.
+    t = normalize_sample_size("A total of 120 participants (60% female) were recruited")
+    assert t.label == "120"
+
+    # No anchored noun and no "total of" — falls back to the first number,
+    # but a bare year-shaped number is excluded as a likely false positive.
+    t = normalize_sample_size("Collected in 2020")
     assert t.status == "PARTIALLY_PRESENT"
 
 

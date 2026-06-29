@@ -59,25 +59,33 @@ COMPATIBLE_GROUPS = [
 
 
 def normalize_sequencing_type(raw_text: str) -> NormalizedTerm:
-    """Return normalized sequencing type (text vocab only, no ontology ID)."""
+    """Return normalized sequencing type (text vocab only, no ontology ID).
+
+    A value that doesn't match any known phrasing still resolves to a
+    vocabulary member ("other") rather than leaking free text into the
+    "Sequencing Type" column — the original wording is preserved on
+    `.raw` for callers that want to keep it (e.g. a "Sequencing Type Raw"
+    side column). PARTIALLY_PRESENT is reserved for genuinely ambiguous
+    multi-method mentions, not the "other" catch-all.
+    """
     if not raw_text or raw_text.strip() == "":
         return NormalizedTerm.absent()
 
+    stripped = raw_text.strip()
     lowered = raw_text.lower()
     hit = best_lookup_match(lowered, SEQUENCING_LOOKUP)
     if not hit:
-        stripped = raw_text.strip()
         if stripped in BUGSIGDB_SEQ_VOCAB:
-            return NormalizedTerm(stripped, "", "PRESENT", 1.0)
-        return NormalizedTerm(stripped, "", "PARTIALLY_PRESENT", 0.5)
+            return NormalizedTerm(stripped, "", "PRESENT", 1.0, raw=stripped)
+        return NormalizedTerm("other", "", "PRESENT", 0.5, raw=stripped)
 
     matched, _ = hit
     found_types = found_vocab_types(lowered, SEQUENCING_LOOKUP)
     if len(found_types) <= 1:
-        return NormalizedTerm(matched, "", "PRESENT", 1.0)
+        return NormalizedTerm(matched, "", "PRESENT", 1.0, raw=stripped)
 
     groups_hit = [g for g in COMPATIBLE_GROUPS if found_types & g]
     if len(groups_hit) == 1 and found_types <= groups_hit[0]:
-        return NormalizedTerm(matched, "", "PRESENT", 1.0)
+        return NormalizedTerm(matched, "", "PRESENT", 1.0, raw=stripped)
 
-    return NormalizedTerm(matched, "", "PARTIALLY_PRESENT", 0.9)
+    return NormalizedTerm(matched, "", "PARTIALLY_PRESENT", 0.9, raw=stripped)
