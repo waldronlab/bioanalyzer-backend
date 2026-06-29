@@ -1,11 +1,11 @@
-# BugSigDB Analyzer Docker Deployment Guide
+# BioAnalyzer Docker Deployment Guide
 
-Instructions for deploying the BugSigDB Analyzer using Docker and Docker Compose.
+Instructions for deploying BioAnalyzer using Docker and Docker Compose.
 
 ## Prerequisites
 
-- Docker 20.0+ 
-- Docker Compose 2.0+ (or `docker compose` command)
+- Docker 20.0+
+- Docker Compose 2.0+ (or the `docker compose` plugin)
 - At least 4GB RAM available
 - At least 10GB disk space
 
@@ -14,352 +14,244 @@ Instructions for deploying the BugSigDB Analyzer using Docker and Docker Compose
 ### 1. Clone and Setup
 
 ```bash
-# Clone the repository
-git clone https://github.com/waldronlab/BugsigdbAnalyzer.git
-cd BugsigdbAnalyzer
+git clone https://github.com/waldronlab/bioanalyzer-backend.git
+cd BioAnalyzer-Backend
 
-# Run the automated Docker setup
-chmod +x docker-setup.sh
-./docker-setup.sh
+chmod +x install.sh
+./install.sh
 ```
+
+`install.sh` installs the global `BioAnalyzer` CLI wrapper, which delegates
+into this repo's `scripts/cli.py` and drives Docker for you (see below).
+Alternatively, `./docker-setup.sh` builds and smoke-tests the
+`bioanalyzer-package` image directly without installing the wrapper.
 
 ### 2. Configure Environment
 
-Edit the `.env` file with your API keys:
-
 ```bash
+cp .env.example .env
 nano .env
 ```
 
-Required variables:
-```env
-NCBI_API_KEY=your_ncbi_api_key_here
-GEMINI_API_KEY=your_gemini_api_key_here
-EMAIL=your_email@example.com
-DEFAULT_MODEL=gemini
-REDIS_PASSWORD=your_secure_password
-ENVIRONMENT=production
-```
+At minimum set `NCBI_API_KEY`, `EMAIL`, and one LLM provider key (see
+`.env.example` for the full list of supported variables - Gemini, OpenAI,
+Anthropic, and Ollama are all supported via `LLM_PROVIDER`).
 
 ### 3. Start Services
 
-#### Development Environment
+Recommended (via the `BioAnalyzer` CLI wrapper, which builds the image,
+brings up `docker-compose.yml`, and waits for the health check):
+
 ```bash
-docker compose -f docker-compose.dev.yml up -d
+BioAnalyzer build
+BioAnalyzer start
+BioAnalyzer status
 ```
 
-#### Production Environment
+Or manually with Docker Compose directly:
+
 ```bash
+# Default (development) compose file
+docker compose up -d
+
+# Production compose file (adds resource limits and log rotation)
 docker compose -f docker-compose.prod.yml up -d
 ```
 
 ### 4. Verify Deployment
 
 ```bash
-# Check service status
-./docker-health-check.sh
-
-# View logs
-docker compose -f docker-compose.prod.yml logs -f
+curl http://localhost:8000/health
+BioAnalyzer status
+docker compose logs -f
 ```
 
 ## Architecture Overview
 
+The real deployment is two containers - the FastAPI app and Redis. There is
+no Nginx, PostgreSQL, or Prometheus in this repo's Docker setup (an earlier
+version of this doc described a larger topology that was never built; this
+reflects `docker-compose.yml`/`docker-compose.prod.yml` as they actually
+are).
+
 ```
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   Load Balancer │    │   Nginx Proxy   │    │  FastAPI App    │
-│   (Optional)    │────│   (Port 80/443) │────│  (Port 8000)   │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
-                                │                       │
-                                ▼                       ▼
-                       ┌─────────────────┐    ┌─────────────────┐
-                       │     Redis       │    │   PostgreSQL    │
-                       │   (Port 6379)   │    │   (Port 5432)   │
-                       └─────────────────┘    └─────────────────┘
-                                │
-                                ▼
-                       ┌─────────────────┐
-                       │   Prometheus    │
-                       │   (Port 9090)   │
-                       └─────────────────┘
+┌─────────────────────────┐
+│   bioanalyzer-package    │
+│   FastAPI app (8000)     │
+│   /health  /docs  /metrics │
+└────────────┬─────────────┘
+             │ depends_on (healthy)
+             ▼
+┌─────────────────────────┐
+│         Redis            │
+│      (port 6379)         │
+└─────────────────────────┘
 ```
+
+**Important:** Redis is provisioned by both compose files, but it is not
+currently wired into the application's caching logic - BioAnalyzer's actual
+cache is SQLite-backed (`cache/analysis_cache.db`, see
+`app/services/cache_manager.py`). Redis runs but is otherwise idle today;
+don't assume cache reads/writes touch it.
 
 ## Configuration Files
 
 ### Docker Compose Files
 
-- `docker-compose.yml`: Base configuration
-- `docker-compose.dev.yml`: Development environment
-- `docker-compose.prod.yml`: Production environment
+- `docker-compose.yml` - default/development configuration. App + Redis,
+  bind-mounts `cache/`, `logs/`, `results/`, `models/`, `tests/`, and `app/`
+  for live iteration.
+- `docker-compose.prod.yml` - production configuration. Same two services,
+  plus CPU/memory limits and reservations, and bounded JSON-file log
+  rotation. No bind mounts of source code.
 
-### Nginx Configuration
+There is no `docker-compose.dev.yml` - the default `docker-compose.yml`
+*is* the development file.
 
-- `nginx/nginx.conf`: Production Nginx configuration
-- `nginx/nginx.dev.conf`: Development Nginx configuration
+### Other Relevant Files
 
-### Monitoring
-
-- **`monitoring/prometheus.yml`**: Prometheus metrics configuration
+- `Dockerfile` - multi-stage build for the `bioanalyzer-package` image.
+- `docker-setup.sh` - builds the image directly (`docker build`) and runs a
+  smoke test, independent of Compose or the `BioAnalyzer` CLI wrapper.
+- `install.sh` - installs the global `BioAnalyzer` CLI wrapper (see
+  `BioAnalyzer` at the repo root), which wraps `docker build`/`docker
+  compose` for the `build`/`start`/`stop`/`restart`/`status` subcommands.
 
 ## Service Configuration
 
-### FastAPI Application
+### FastAPI Application (`bioanalyzer-package`)
 
-- **Port**: 8000 (internal), 8000 (dev external)
-- **Health Check**: `/health` endpoint
-- **Metrics**: `/metrics` endpoint
-- **API Documentation**: `/docs` endpoint
+- **Port:** 8000
+- **Health check:** `GET /health` (used by Docker's own `healthcheck:` and
+  by `BioAnalyzer status`)
+- **Metrics:** `GET /metrics` - returns a JSON payload of app-level metrics
+  (request counts, response times, cache hit rate, basic system resource
+  usage via `psutil`). This is not a Prometheus-format scrape endpoint;
+  there is no Prometheus deployed alongside it.
+- **API docs:** `GET /docs` (FastAPI's automatic OpenAPI UI)
+- **Runs as:** a non-root user, `${UID:-1000}:${GID:-1000}` (matches your
+  host user by default so bind-mounted volumes aren't root-owned)
 
-### Nginx Reverse Proxy
+### Redis
 
-- **Port**: 80 (HTTP), 443 (HTTPS - future)
-- **Load Balancing**: Round-robin to app instances
-- **Rate Limiting**: 10 req/s for API, 5 req/s for login
-- **Gzip Compression**: Enabled for text-based content
-- **Security Headers**: XSS protection, content type, frame options
+- **Image:** `redis:7-alpine`, AOF persistence enabled
+- **Port:** 6379
+- Provisioned for future use; not currently read from or written to by the
+  application (see the caching note above)
 
-### Redis Cache
-
-- **Port**: 6379 (dev external), internal only (prod)
-- **Persistence**: AOF (Append Only File)
-- **Authentication**: Password protected in production
-
-### PostgreSQL Database
-
-- **Port**: 5432 (dev external), internal only (prod)
-- **Database**: `bugsigdb_dev` (dev), `bugsigdb_prod` (prod)
-- **User**: `bugsigdb_user`
-- **Password**: Configurable via environment
-
-### Prometheus Monitoring
-
-- **Port**: 9090 (prod only)
-- **Metrics Collection**: 15s intervals
-- **Retention**: 200 hours
-- **Targets**: App, Nginx, Redis
-
-## 🚦 Health Checks
-
-### Application Health
+## Health Checks
 
 ```bash
-# Check app health
+# Application
 curl http://localhost:8000/health
 
-# Check nginx health
-curl http://localhost/health
-
-# Check Redis
-docker exec bugsigdb-analyzer-redis redis-cli ping
-
-# Check PostgreSQL
-docker exec bugsigdb-analyzer-postgres-dev pg_isready -U bugsigdb_user
+# Redis
+docker exec bioanalyzer-redis redis-cli ping
 ```
 
-### Docker Health Checks
+Both services also have Docker-native `healthcheck:` blocks (the app polls
+`/health` via `curl`; Redis uses `redis-cli ping`), visible in `docker
+compose ps` and `docker inspect`.
 
-All services include built-in health checks:
+## Logging
 
-- **App**: HTTP GET to `/health` endpoint
-- **Nginx**: HTTP GET to `/health` endpoint  
-- **Redis**: `redis-cli ping` command
-- **PostgreSQL**: `pg_isready` command
-
-## Monitoring and Logging
-
-### Prometheus Metrics
-
-- **App Metrics**: `/metrics` endpoint
-- **Nginx Metrics**: `/nginx_status` endpoint (future)
-- **Redis Metrics**: Redis INFO command (future)
-
-### Log Management
-
-- **Log Driver**: JSON file
-- **Rotation**: 10MB max size, 3 files max
-- **Retention**: Configurable via Docker Compose
-
-### Resource Monitoring
+- **Driver:** JSON file (Docker's default), explicitly configured in
+  `docker-compose.prod.yml`: app logs rotate at 10MB x 5 files, Redis logs
+  rotate at 10MB x 3 files. The default `docker-compose.yml` doesn't pin
+  rotation explicitly and uses Docker's defaults.
+- **App logs:** also written to the bind-mounted `logs/` directory
+  (separate from container stdout/stderr).
 
 ```bash
-# View container stats
-docker stats
-
-# View resource usage
-docker compose -f docker-compose.prod.yml top
-
-# Monitor logs
-docker compose -f docker-compose.prod.yml logs -f [service_name]
+docker compose logs -f                      # all services
+docker compose logs -f bioanalyzer-package  # app only
+docker stats                                # live resource usage
 ```
 
-## 🔒 Security Features
+## Security Notes
 
-### Network Security
+- The app container runs as a non-root user (see above).
+- Secrets (API keys) are supplied via `.env`, never baked into the image.
+- `app/utils/credential_masking.py` scrubs API keys/secrets from logs and
+  error responses before they're written or returned - this applies
+  regardless of how the app is deployed.
+- There's no reverse proxy in front of the app in this repo's Docker setup;
+  if you put one in front of it for TLS/rate-limiting in your own
+  deployment, that's infrastructure you're adding, not something this repo
+  configures for you.
 
-- **Isolated Networks**: Custom bridge network (`172.20.0.0/16`)
-- **Port Exposure**: Minimal external port exposure
-- **Internal Communication**: Services communicate via internal network
+## Resource Limits (production)
 
-### Application Security
+`docker-compose.prod.yml` sets CPU/memory limits and reservations per
+service rather than configuring horizontal scaling or a load balancer
+(neither exists in this repo's Docker setup):
 
-- **Non-root Users**: App runs as `app` user
-- **Security Headers**: XSS protection, content type validation
-- **Rate Limiting**: API and login rate limiting
-- **Input Validation**: Pydantic models for API validation
+- **App:** limit 2 CPU / 4GB RAM, reservation 1 CPU / 2GB RAM
+- **Redis:** limit 0.5 CPU / 1GB RAM, reservation 0.25 CPU / 512MB RAM
 
-### Data Security
+## Troubleshooting
 
-- **Volume Mounts**: Read-only where possible
-- **Environment Variables**: Sensitive data via `.env` file
-- **Database Authentication**: Password-protected databases
-
-## 📈 Scaling and Performance
-
-### Horizontal Scaling
+### Service won't start
 
 ```bash
-# Scale app instances
-docker compose -f docker-compose.prod.yml up -d --scale app=3
-
-# Scale with load balancer
-docker compose -f docker-compose.prod.yml up -d --scale app=5
+docker compose logs bioanalyzer-package
+docker compose ps
+docker compose restart bioanalyzer-package
 ```
 
-### Resource Limits
-
-Production environment includes resource constraints:
-
-- **App**: 1-2GB RAM, 0.5-1.0 CPU
-- **Nginx**: 128-256MB RAM, 0.25-0.5 CPU
-- **Redis**: 256-512MB RAM, 0.25-0.5 CPU
-
-### Performance Optimization
-
-- **Gzip Compression**: Enabled for text content
-- **Keep-alive Connections**: 32 connections per upstream
-- **Connection Pooling**: Database connection pooling
-- **Caching**: Redis-based caching layer
-
-## 🚨 Troubleshooting
-
-### Common Issues
-
-#### Service Won't Start
+### Health check failing
 
 ```bash
-# Check logs
-docker compose -f docker-compose.prod.yml logs [service_name]
-
-# Check container status
-docker compose -f docker-compose.prod.yml ps
-
-# Restart service
-docker compose -f docker-compose.prod.yml restart [service_name]
-```
-
-#### Health Check Failures
-
-```bash
-# Check endpoint manually
 curl -v http://localhost:8000/health
-
-# Check container health
-docker inspect bugsigdb-analyzer-app | grep -A 10 Health
-
-# Restart with health check disabled
-docker compose -f docker-compose.prod.yml up -d --no-healthcheck
+docker inspect bioanalyzer-package | grep -A 10 Health
 ```
 
-#### Port Conflicts
+If the app container is up but unhealthy, check `docker compose logs` for a
+missing required env var (`NCBI_API_KEY`, `EMAIL`, or an LLM provider key) -
+the app will start but the health check can still fail if it can't
+initialize a required client.
+
+### Port conflicts
 
 ```bash
-# Check port usage
-sudo netstat -tulpn | grep :80
-sudo netstat -tulpn | grep :8000
-
-# Change ports in docker-compose file
-ports:
-  - "8080:80"  # Change external port
+sudo lsof -i :8000
+sudo lsof -i :6379
 ```
 
-#### Resource Issues
+Change the host-side port mapping in your compose file's `ports:` section
+if either is already in use (e.g. `"8080:8000"`).
+
+### Debug mode
 
 ```bash
-# Check system resources
-docker system df
-docker stats --no-stream
-
-# Clean up unused resources
-docker system prune -a
+LOG_LEVEL=debug docker compose up
+docker exec -it bioanalyzer-package bash
 ```
 
-### Debug Mode
+## Maintenance
 
 ```bash
-# Start with debug logging
-ENVIRONMENT=development LOG_LEVEL=debug docker compose -f docker-compose.dev.yml up -d
+# Pull a newer base image / rebuild after a Dockerfile change
+docker compose build --no-cache
+docker compose up -d
 
-# Access container shell
-docker exec -it bugsigdb-analyzer-app-dev bash
+# Stop everything
+docker compose down
 
-# View real-time logs
-docker compose -f docker-compose.dev.yml logs -f --tail=100
+# Stop and also remove the Redis volume (Redis isn't used for persisted
+# app data today, so this is safe; cache/results/logs live in the
+# bind-mounted host directories, not in the Redis volume)
+docker compose down -v
 ```
 
-## 🔄 Maintenance
+The data that actually matters for BioAnalyzer - the SQLite analysis
+cache, logs, and analysis results - lives in the bind-mounted `cache/`,
+`logs/`, and `results/` directories on the host, not in a Docker volume.
+Back those directories up directly if you need to.
 
-### Updates and Upgrades
-
-```bash
-# Pull latest images
-docker compose -f docker-compose.prod.yml pull
-
-# Rebuild and restart
-docker compose -f docker-compose.prod.yml up -d --build
-
-# Zero-downtime deployment
-docker compose -f docker-compose.prod.yml up -d --no-deps --build app
-```
-
-### Backup and Recovery
-
-```bash
-# Backup volumes
-docker run --rm -v bugsigdb-analyzer_redis-data:/data -v $(pwd):/backup alpine tar czf /backup/redis-backup.tar.gz -C /data .
-
-# Backup database
-docker exec bugsigdb-analyzer-postgres-dev pg_dump -U bugsigdb_user bugsigdb_dev > backup.sql
-
-# Restore from backup
-docker exec -i bugsigdb-analyzer-postgres-dev psql -U bugsigdb_user bugsigdb_dev < backup.sql
-```
-
-### Cleanup
-
-```bash
-# Stop and remove containers
-docker compose -f docker-compose.prod.yml down
-
-# Remove volumes (WARNING: Data loss)
-docker compose -f docker-compose.prod.yml down -v
-
-# Remove images
-docker compose -f docker-compose.prod.yml down --rmi all
-```
-
-## 📚 Additional Resources
+## Additional Resources
 
 - [Docker Documentation](https://docs.docker.com/)
 - [Docker Compose Documentation](https://docs.docker.com/compose/)
-- [Nginx Documentation](https://nginx.org/en/docs/)
 - [FastAPI Documentation](https://fastapi.tiangolo.com/)
-- [Prometheus Documentation](https://prometheus.io/docs/)
-
-## 🆘 Support
-
-For issues and questions:
-
-1. Check the troubleshooting section above
-2. Review container logs: `docker compose logs [service_name]`
-3. Run health check: `./docker-health-check.sh`
-4. Check GitHub issues: [BugSigDB Analyzer Issues](https://github.com/waldronlab/BugsigdbAnalyzer/issues) 
+- [BioAnalyzer-Backend Issues](https://github.com/waldronlab/bioanalyzer-backend/issues)

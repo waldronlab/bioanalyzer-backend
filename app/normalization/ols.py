@@ -69,5 +69,5 @@ def ols_search(
             return None
         store_cached_term(ontology, query, label, obo_id, mapping_confidence)
         return label, obo_id, mapping_confidence
-    except Exception:
+    except (requests.exceptions.RequestException, ValueError):
         return None

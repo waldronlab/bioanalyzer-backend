@@ -5,8 +5,8 @@ import logging
 from pathlib import Path
 from typing import Optional
 
-from paperqa.readers import parse_text, chunk_text
-from paperqa.types import Doc, ParsedText
+from paperqa.readers import parse_text
+from paperqa.types import ParsedText
 
 logger = logging.getLogger(__name__)
 

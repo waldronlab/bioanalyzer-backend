@@ -308,6 +308,23 @@ BioAnalyzer analyze 12345678 --format json
 BioAnalyzer analyze 12345678 --format csv
 ```
 
+**Curator Desk CSV Format:**
+
+A fixed-schema CSV specifically for handing off predictions to the
+`curator_table`/`curator_table_r` review tools - 5 prediction fields (Taxa
+Level is intentionally excluded; see
+[CURATOR_DESK_CSV_FORMAT.md](CURATOR_DESK_CSV_FORMAT.md) for the full
+column list and contract), ontology IDs, mapping confidence, and a
+computed priority score. Always deduplicated by PMID.
+```bash
+BioAnalyzer analyze --file pmids.txt --format curator_desk_csv -o predictions.csv
+```
+
+**XML Format:**
+```bash
+BioAnalyzer analyze 12345678 --format xml
+```
+
 ### Save Results
 
 **Save to File:**

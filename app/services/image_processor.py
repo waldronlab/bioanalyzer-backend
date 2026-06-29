@@ -8,6 +8,8 @@ from typing import Optional
 
 import aiohttp
 
+from app.utils.url_safety import UnsafeURLError, assert_public_url
+
 logger = logging.getLogger(__name__)
 
 
@@ -63,6 +65,12 @@ class ImageProcessorService:
 
     async def _download_image(self, image_url: str) -> Optional[tuple[Path, str]]:
         """Download image from URL to cache directory."""
+        try:
+            assert_public_url(image_url)
+        except UnsafeURLError as e:
+            logger.warning("Skipping unsafe image URL %s: %s", image_url, e)
+            return None
+
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.get(image_url, timeout=30) as response:

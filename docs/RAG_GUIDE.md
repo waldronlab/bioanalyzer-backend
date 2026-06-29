@@ -343,13 +343,14 @@ curl -X POST "http://localhost:8000/api/v2/analyze" \
     "rag_config": {
       "enabled": true,
       "top_k_chunks": 15,
+      "evidence_k": 25,
+      "max_sources": 15,
       "rerank_method": "hybrid",
       "summary_length": "long",
       "summary_quality": "high",
       "summary_provider": "gemini",
       "summary_model": "gemini/gemini-2.0-flash",
-      "use_cache": true,
-      "max_summary_key_points": 5
+      "use_cache": true
     }
   }'
 ```
@@ -395,6 +396,8 @@ Analyze a paper with RAG features.
 **Query Parameters:**
 - `use_rag` (bool): Enable RAG features (default: `true`)
 - `top_k_chunks` (int, optional): Number of top chunks to use
+- `evidence_k` (int, optional): Number of evidence chunks to retrieve before re-ranking
+- `max_sources` (int, optional): Maximum number of sources to use for the final answer
 - `rerank_method` (str, optional): Re-ranking method (`keyword`, `llm`, `hybrid`)
 - `summary_length` (str, optional): Summary length (`short`, `medium`, `long`)
 - `summary_quality` (str, optional): Summary quality (`fast`, `balanced`, `high`)
@@ -415,16 +418,22 @@ Analyze a paper with custom RAG configuration.
   "rag_config": {
     "enabled": true,
     "top_k_chunks": 10,
+    "evidence_k": 20,
+    "max_sources": 10,
     "rerank_method": "hybrid",
     "summary_length": "medium",
     "summary_quality": "balanced",
     "summary_provider": "gemini",
     "summary_model": "gemini/gemini-2.0-flash",
-    "use_cache": true,
-    "max_summary_key_points": 5
+    "use_cache": true
   }
 }
 ```
+
+Note: `max_summary_key_points` is **not** a field on this request body's
+`rag_config` (the API's `RAGConfig` model) - it's a settings-layer-only
+option (see [Settings File](#settings-file) below). Sending it here is
+silently ignored.
 
 **Response:**
 ```json
@@ -438,17 +447,29 @@ Analyze a paper with custom RAG configuration.
       "confidence": 0.95
     }
   },
-  "rag_metadata": {
-    "enabled": true,
+  "rag_enabled": true,
+  "rag_stats": {
     "chunks_processed": 15,
-    "chunks_used": 10,
+    "chunks_ranked": 10,
+    "chunks_summarized": 10,
+    "avg_relevance_score": 0.82,
+    "avg_confidence": 0.91,
+    "rerank_method": "hybrid",
+    "summary_length": "medium",
+    "processing_time": 8.5
+  },
+  "rag_config_used": {
+    "enabled": true,
+    "top_k_chunks": 10,
     "rerank_method": "hybrid",
     "summary_length": "medium",
     "summary_quality": "balanced"
-  },
-  "processing_time": 8.5
+  }
 }
 ```
+
+(`rag_stats.processing_time` above is illustrative only - there is no
+benchmark in this repo measuring a specific value.)
 
 #### POST `/api/v2/analyze/batch`
 
@@ -472,15 +493,20 @@ Get current RAG configuration.
 **Response:**
 ```json
 {
-  "enabled": true,
-  "top_k_chunks": 10,
-  "rerank_method": "hybrid",
-  "summary_length": "medium",
-  "summary_quality": "balanced",
-  "summary_provider": "gemini",
-  "summary_model": "gemini/gemini-2.0-flash",
-  "use_cache": true,
-  "max_summary_key_points": 5
+  "default_config": {
+    "enabled": true,
+    "top_k_chunks": 10,
+    "rerank_method": "hybrid",
+    "summary_length": "medium",
+    "summary_quality": "balanced",
+    "summary_provider": "gemini",
+    "summary_model": "gemini/gemini-2.0-flash",
+    "use_cache": true
+  },
+  "available_rerank_methods": ["keyword", "llm", "hybrid"],
+  "available_summary_lengths": ["short", "medium", "long"],
+  "available_summary_qualities": ["fast", "balanced", "high"],
+  "available_providers": ["gemini", "openai", "anthropic"]
 }
 ```
 
@@ -542,10 +568,11 @@ v2 responses include RAG metadata:
 {
     "pmid": "12345678",
     "fields": {...},
-    "rag_metadata": {
-        "enabled": true,
+    "rag_enabled": true,
+    "rag_stats": {
         "chunks_processed": 15,
-        "chunks_used": 10
+        "chunks_ranked": 10,
+        "chunks_summarized": 10
     }
 }
 ```

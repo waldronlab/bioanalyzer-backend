@@ -232,6 +232,17 @@ services:
       replicas: 3
 ```
 
+**Caveat:** the `/api/v1/analyze-url` job tracker
+(`app/api/routers/study_analysis.py`'s `job_store`) is an in-memory,
+per-process dict with no shared backing store. With multiple replicas, a
+job created by `POST /analyze-url` on one instance is invisible to a
+`GET /analysis-status/{job_id}`/`GET /analysis-result/{job_id}` request
+routed to a different instance - the load balancer would need
+session affinity (sticky sessions) for that endpoint specifically, or this
+needs a shared store (Redis, a DB) before scaling horizontally. The PMID-based
+`/api/v1/analyze` and `/api/v2/analyze` endpoints don't have this problem -
+they're stateless per request.
+
 ### 2. Load Balancer Configuration
 
 Use sticky sessions or stateless design:

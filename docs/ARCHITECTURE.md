@@ -1,789 +1,248 @@
-# BioAnalyzer Package Architecture
+# BioAnalyzer Architecture
 
-BioAnalyzer Package is a microservices-oriented system for scientific paper analysis and retrieval. Uses a layered architecture with clear separation of concerns.
+BioAnalyzer extracts BugSigDB curation fields from scientific papers: it
+retrieves metadata/full text from PubMed/PMC, then uses an LLM (via
+LiteLLM, or a Gemini/Paper-QA fallback chain) to determine field presence
+and confidence. It's a layered system - CLI/API -> Services ->
+Models/Normalization -> Utils - not a microservices or distributed system.
 
-## System Overview
+This document is split into two parts: **Current Architecture** describes
+what's actually implemented today, verified directly against the code.
+**Roadmap / Not Yet Implemented** lists architectural ideas that have been
+discussed or partially sketched out but don't exist in the codebase yet -
+don't write code or docs assuming any of that section is real.
 
-### Core Responsibilities
+## Current Architecture
 
-- Paper Retrieval: Fetch metadata and full text from PubMed/PMC
-- Field Analysis: Extract 6 essential BugSigDB fields using AI
-- Data Processing: Transform and validate retrieved data
-- API Services: Provide RESTful endpoints for external consumption
-- CLI Interface: Command-line tools for direct user interaction
-
-### System Characteristics
-
-- Scalable: Horizontal scaling through containerization
-- Maintainable: Modular design with clear interfaces
-- Resilient: Comprehensive error handling and fallback mechanisms
-- Observable: Built-in monitoring and logging capabilities
-- Extensible: Plugin architecture for new analysis methods
-
-## Architecture Principles
-
-### 1. Separation of Concerns
-
-Each layer has distinct responsibilities:
+### Layered structure
 
 ```
 ┌─────────────────────────────────────────┐
-│           Presentation Layer            │
-│  (CLI, API Endpoints)                    │
+│   CLI (scripts/cli.py)  /  API (app/api) │
 ├─────────────────────────────────────────┤
-│            Service Layer                │
-│  (Business Logic, Orchestration)        │
+│         Services (app/services/)         │
 ├─────────────────────────────────────────┤
-│            Data Layer                   │
-│  (Retrieval, Storage, Caching)          │
+│  Models (app/models/) / Normalization    │
+│         (app/normalization/)             │
 ├─────────────────────────────────────────┤
-│          Infrastructure Layer           │
-│  (Configuration, Logging, Monitoring)   │
+│           Utils (app/utils/)             │
 └─────────────────────────────────────────┘
 ```
 
-### 2. Dependency Inversion
-
-High-level modules don't depend on low-level modules. Both depend on abstractions.
-
-### 3. Single Responsibility
-
-Each component has one reason to change.
-
-### 4. Open/Closed Principle
-
-Open for extension, closed for modification.
-
-## Component Architecture
-
-### Core Components
-
-#### API Layer (`app/api/`)
-
-Handles HTTP requests and responses.
-
-Components:
-- `app.py`: FastAPI application instance
-- `routers/`: Route handlers for different endpoints
-- `models/`: Pydantic models for request/response validation
-- `utils/`: API-specific utilities
-
-Responsibilities:
-- Request validation and parsing
-- Response formatting
-- Authentication and authorization
-- Rate limiting
-- Error handling and logging
-
-#### Service Layer (`app/services/`)
-
-Implements business logic and orchestrates operations.
-
-**Components**:
-- `data_retrieval.py`: Core PubMed data retrieval
-- `standalone_pubmed_retriever.py`: Lightweight standalone retriever (used by the CLI)
-- `pubmed_queries.py`: PubMed discovery search query presets
-- `bugsigdb_analyzer.py`: Field analysis and extraction
-- `cache_manager.py`: Caching and performance optimization
-
-**Responsibilities**:
-- Business logic implementation
-- Data transformation and validation
-- External service integration
-- Caching strategies
-- Error handling and recovery
-
-#### 3. Model Layer (`app/models/`)
-
-**Purpose**: AI models and analysis engines
-
-**Components**:
-- `gemini_qa.py`: Google Gemini AI integration
-- `unified_qa.py`: Unified question-answering system
-- `conversation_model.py`: Conversational AI capabilities
-- `config.py`: Model configuration and management
-
-**Responsibilities**:
-- AI model integration
-- Text analysis and processing
-- Field extraction algorithms
-- Confidence scoring
-- Model performance optimization
-
-#### 4. Utility Layer (`app/utils/`)
-
-**Purpose**: Shared utilities and helper functions
-
-**Components**:
-- `config.py`: Configuration management
-- `text_processing.py`: Text manipulation utilities
-- `performance_logger.py`: Performance monitoring
-- `field_validator.py`: Data validation
-- `methods_scorer.py`: Quality scoring algorithms
-
-**Responsibilities**:
-- Configuration management
-- Text processing utilities
-- Performance monitoring
-- Data validation
-- Helper functions
-
-### Component Interactions
-
-```mermaid
-graph TB
-    CLI[CLI Interface] --> API[API Layer]
-    API --> SERVICE[Service Layer]
-    SERVICE --> MODEL[Model Layer]
-    SERVICE --> UTIL[Utility Layer]
-    SERVICE --> EXT[External APIs]
-    
-    subgraph "External Services"
-        EXT --> NCBI[NCBI PubMed]
-        EXT --> PMC[PubMed Central]
-        EXT --> GEMINI[Google Gemini]
-    end
-```
-
-## Data Flow
-
-### 1. Paper Analysis Flow
-
-```
-User Input (PMID) 
-    ↓
-CLI/API Validation
-    ↓
-PubMedRetriever.fetch_paper_metadata()
-    ↓
-PubMedRetriever.get_pmc_fulltext()
-    ↓
-BugSigDBAnalyzer.analyze_paper()
-    ↓
-GeminiQA Field Extraction
-    ↓
-Result Processing & Validation
-    ↓
-Response Formatting
-    ↓
-User Output (JSON/CSV/Table)
-```
-
-### 2. Batch Processing Flow
-
-```
-Batch Input (Multiple PMIDs)
-    ↓
-Input Validation & Deduplication
-    ↓
-Concurrent Processing (asyncio.gather)
-    ↓
-Individual Paper Processing
-    ↓
-Result Aggregation
-    ↓
-Progress Reporting
-    ↓
-Batch Output
-```
-
-### 3. Error Handling Flow
-
-```
-Request Processing
-    ↓
-Try Primary Method
-    ↓
-Success? → Return Result
-    ↓
-No → Log Error
-    ↓
-Try Fallback Method
-    ↓
-Success? → Return Partial Result
-    ↓
-No → Return Error Response
-```
-
-## Service Layer Design
-
-### Service Architecture Pattern
-
-Each service follows a consistent pattern:
-
-```python
-class ServiceName:
-    def __init__(self, dependencies):
-        # Initialize dependencies
-        pass
-    
-    async def primary_method(self, params):
-        # Main business logic
-        pass
-    
-    def _helper_method(self, params):
-        # Internal helper methods
-        pass
-    
-    def _validate_input(self, params):
-        # Input validation
-        pass
-    
-    def _handle_error(self, error):
-        # Error handling
-        pass
-```
-
-### Service Dependencies
-
-```mermaid
-graph LR
-    PRS[PubMedRetrievalService] --> PR[PubMedRetriever]
-    PRS --> SPR[StandalonePubMedRetriever]
-    BA[BugSigDBAnalyzer] --> GQ[GeminiQA]
-    BA --> UQ[UnifiedQA]
-    PR --> EXT[External APIs]
-    SPR --> EXT
-```
-
-### Service Interfaces
-
-#### PubMedRetriever Interface
-
-```python
-class PubMedRetriever:
-    def fetch_paper_metadata(self, pmid: str) -> Dict[str, Any]
-    def get_pmc_fulltext(self, pmid: str) -> str
-    def get_full_paper_data(self, pmid: str) -> Dict[str, Any]
-    def search(self, query: str, max_results: int = 10) -> List[str]
-```
-
-#### PubMedRetrievalService Interface
-
-```python
-class PubMedRetrievalService:
-    async def retrieve_paper(self, pmid: str, save_to_file: bool = False) -> Dict[str, Any]
-    async def retrieve_multiple_papers(self, pmids: List[str], save_to_file: bool = False) -> List[Dict[str, Any]]
-    def format_paper_summary(self, paper_data: Dict[str, Any]) -> str
-    def get_paper_stats(self, paper_data: Dict[str, Any]) -> Dict[str, Any]
-```
-
-## API Design
-
-### RESTful API Principles
-
-- **Resource-based URLs**: `/api/v1/analyze/{pmid}`
-- **HTTP Methods**: GET for retrieval, POST for creation
-- **Status Codes**: Proper HTTP status codes
-- **Content Negotiation**: JSON responses with proper headers
-- **Error Responses**: Consistent error format
+- **`app/api/`** - FastAPI app (`app.py`), routers (`routers/`), API-specific
+  utilities (`utils/`). Mounts four routers, each with its own URL prefix
+  (see API Endpoints below).
+- **`app/services/`** - business logic: PubMed/PMC retrieval
+  (`data_retrieval.py`, `standalone_pubmed_retriever.py`), field analysis orchestration
+  (`bugsigdb_analyzer/` package), the v2 RAG pipeline (`advanced_rag.py`,
+  `chunk_reranking.py`, `contextual_summarization.py`), and the SQLite
+  cache (`cache_manager.py`).
+- **`app/models/`** - LLM integration: `llm_provider.py` (LiteLLM-based
+  provider abstraction for Gemini/OpenAI/Anthropic/Ollama), `unified_qa.py`
+  (the common QA interface with the fallback chain described below),
+  `gemini_qa.py` and `paperqa_agent.py` (provider-specific
+  implementations), `extraction_schemas.py`.
+- **`app/normalization/`** - maps extracted free-text fields to controlled
+  ontology vocabularies (NCBITaxon, UBERON, EFO via OLS, plus BugSigDB's
+  own controlled vocab for sequencing type/taxa level, and numeric parsing
+  for sample size).
+- **`app/utils/`** - `config.py` (env-based settings, bridges to
+  `app/core/settings.py`'s Pydantic model), `credential_masking.py`
+  (scrubs secrets from logs/errors - the global exception handler in
+  `app/api/app.py` always routes through it), `text_processing.py`,
+  `chunking.py`, `field_validator.py`, `performance_logger.py`.
 
 ### API Endpoints
 
-#### Analysis Endpoints
+Four routers, each independently prefixed (verified against
+`app/api/routers/*.py` and `app/api/app.py`):
 
 ```http
-GET /api/v1/analyze/{pmid}
-POST /api/v1/analyze/batch
-GET /api/v1/fields
+# app/api/routers/bugsigdb_analysis.py (v1 - direct LLM query per field)
+GET  /api/v1/analyze/{pmid}
+POST /api/v1/analyze/{pmid}
+GET  /api/v1/fields
+GET  /api/v1/fields/{field_name}
+
+# app/api/routers/bugsigdb_analysis_v2.py (v2 - adds the RAG pipeline)
+GET  /api/v2/analyze/{pmid}
+POST /api/v2/analyze
+POST /api/v2/analyze/batch
+GET  /api/v2/rag/config
+GET  /api/v2/fields
+GET  /api/v2/fields/{field_name}
+
+# app/api/routers/study_analysis.py (arbitrary-URL analysis, background jobs)
+POST /api/v1/analyze-url
+GET  /api/v1/analysis-status/{job_id}
+GET  /api/v1/analysis-result/{job_id}
+
+# app/api/routers/system.py
+GET  /api/v1/             GET /api/v1/status   GET /api/v1/version
+GET  /api/v1/health        GET /api/v1/config   GET /api/v1/ping
+GET  /api/v1/health/gemini GET /api/v1/health/ncbi
+GET  /api/v1/metrics       POST /api/v1/qa
+
+# app/api/app.py (top-level, outside any router prefix)
+GET  /health
 ```
 
-#### Retrieval Endpoints
+There is no `/retrieve` API endpoint - PubMed/PMC retrieval is exposed via
+the CLI (`BioAnalyzer retrieve`) and used internally by the analysis
+endpoints, not as its own REST resource. There's no `/health/live` or
+`/health/ready` (liveness/readiness probes) either - just the single
+`/health` check plus the provider-specific `/health/gemini` and
+`/health/ncbi`.
 
-```http
-GET /api/v1/retrieve/{pmid}
-POST /api/v1/retrieve/batch
-GET /api/v1/retrieve/search
-```
+### URL-based analysis pipeline (`/api/v1/analyze-url`)
 
-#### System Endpoints
+A third analysis pipeline, separate from v1/v2 above and not PMID-based -
+it takes an arbitrary URL. Implemented as a background-task workflow in
+`app/api/routers/study_analysis.py`:
 
-```http
-GET /health
-GET /metrics
-GET /docs
-```
+1. Scrape the URL to Markdown (`app/services/web_scraper.py`).
+2. Describe up to 10 images via an LLM if `GEMINI_API_KEY` is set, else a
+   static placeholder (`app/services/image_processor.py`).
+3. Merge scraped content + image descriptions + any downloaded
+   supplementary files into one enhanced Markdown document
+   (`app/services/converter_service.py` - note: downloaded PDFs are never
+   actually parsed into this merge, only a placeholder note is inserted).
+4. Chunk the merged Markdown (`app/utils/chunking.py`, wraps Paper-QA's
+   `chunk_text`).
+5. Vectorize the chunks (`app/services/vector_store_service.py` - supports
+   both NumPy and Qdrant backends, but this pipeline's only caller always
+   selects NumPy/in-memory; Qdrant is never actually exercised here).
+6. Extract experiments and microbial signatures via Paper-QA's
+   `agent_query`, orchestrated by
+   `app/services/agent_orchestrator.py::AgentOrchestrator`. Parsing of the
+   LLM's free-text response is line-based/regex heuristics, not
+   structured/JSON-mode extraction. Output is a `StudyAnalysisResult`
+   (`app/models/extraction_schemas.py`), deliberately shaped to be
+   drop-in compatible with v1/v2's result dict so the curator table can
+   consume either source.
+7. Store the result in a module-level `job_store` dict, polled via
+   `GET /api/v1/analysis-status/{job_id}` and
+   `GET /api/v1/analysis-result/{job_id}`.
 
-### Request/Response Models
+**Known limitations** (verified, not speculative):
 
-#### Analysis Request
-```python
-class AnalysisRequest(BaseModel):
-    pmid: str
-    include_full_text: bool = True
-    format: str = "json"
-```
+- `job_store` is an in-memory Python dict - **lost on process restart,
+  unbounded** (no TTL/eviction), and **not shared across worker
+  processes**. Running multiple Uvicorn/Gunicorn workers (or multiple
+  Docker replicas, see `docs/PRODUCTION_DEPLOYMENT.md`'s horizontal
+  scaling section) means a job created on one worker is invisible to a
+  status/result request routed to another.
+- This router has its own `try`/`except` around the background task, so
+  it does **not** go through `app/api/app.py`'s global exception handler -
+  `mask_exception_message` must be (and is) called explicitly here rather
+  than relying on the global policy.
+- No automated test coverage for `AgentOrchestrator` or this router itself
+  (steps 1-5 are tested in isolation in `tests/test_vector_store.py` and
+  `tests/test_integration_workflow.py`).
 
-#### Analysis Response
-```python
-class AnalysisResponse(BaseModel):
-    pmid: str
-    title: str
-    fields: Dict[str, FieldResult]
-    curation_summary: str
-    processing_time: float
-    timestamp: datetime
-```
+### CLI structure
 
-### API Error Handling
-
-```python
-class APIError(BaseModel):
-    error_code: str
-    message: str
-    details: Optional[Dict[str, Any]] = None
-    timestamp: datetime
-```
-
-## CLI Architecture
-
-### CLI Design Principles
-
-- **Command-based**: Clear command structure
-- **Subcommand Support**: Nested commands for organization
-- **Help System**: Comprehensive help and documentation
-- **Error Handling**: User-friendly error messages
-- **Output Formats**: Multiple output options
-
-### CLI Command Structure
+`scripts/cli.py`'s `BioAnalyzerCLI`, invoked via the `BioAnalyzer` wrapper
+or `python scripts/cli.py`:
 
 ```
 BioAnalyzer
-├── build                    # Build containers
-├── start                    # Start application
-├── stop                     # Stop application
-├── restart                  # Restart application
-├── status                   # Check system status
-├── analyze                  # Analyze papers
-│   ├── <pmid>              # Single paper
-│   ├── <pmid1,pmid2>       # Multiple papers
-│   └── --file <file>       # From file
-├── retrieve                 # Retrieve papers
-│   ├── <pmid>              # Single paper
-│   ├── <pmid1,pmid2>       # Multiple papers
-│   ├── --file <file>       # From file
-│   ├── --save              # Save individual files
-│   ├── --format <format>   # Output format
-│   └── --output <file>     # Save to file
-└── fields                   # Show field information
+├── build / start / stop / restart / status   # Docker lifecycle
+├── run table [--port N]                      # launches the Streamlit curator table
+├── search [--preset discovery|broad|precision] [-n N] [-o FILE] [--query Q]
+├── analyze <pmid|pmids> [--file F] [--format table|json|csv|curator_desk_csv|xml] [-o FILE]
+├── analyze-url <url> [--file F] [--format table|json] [-o FILE]
+├── retrieve <pmid|pmids> [--file F] [--format table|json|csv] [-o FILE] [--save]
+├── qa [question] [--interactive]
+├── fields
+└── settings view|save|load|preset|migrate
 ```
 
-### CLI Implementation Pattern
-
-```python
-class BioAnalyzerCLI:
-    def __init__(self):
-        # Initialize CLI components
-        pass
-    
-    def _create_parser(self):
-        # Create argument parser
-        pass
-    
-    def _handle_command(self, args):
-        # Route to appropriate handler
-        pass
-    
-    def _validate_input(self, args):
-        # Validate command arguments
-        pass
-    
-    def _format_output(self, results, format_type):
-        # Format output based on type
-        pass
-```
-
-## Error Handling Strategy
-
-### Error Classification
-
-1. **Network Errors**: Connection timeouts, DNS failures
-2. **API Errors**: Rate limiting, authentication failures
-3. **Data Errors**: Invalid PMIDs, parsing failures
-4. **System Errors**: Memory issues, disk space
-5. **Business Logic Errors**: Invalid parameters, missing data
-
-### Error Handling Patterns
-
-#### Retry Pattern
-```python
-def retry_with_backoff(func, max_retries=3, backoff_factor=2):
-    for attempt in range(max_retries):
-        try:
-            return func()
-        except RetryableError as e:
-            if attempt < max_retries - 1:
-                time.sleep(backoff_factor ** attempt)
-                continue
-            raise
-```
-
-#### Circuit Breaker Pattern
-```python
-class CircuitBreaker:
-    def __init__(self, failure_threshold=5, timeout=60):
-        self.failure_threshold = failure_threshold
-        self.timeout = timeout
-        self.failure_count = 0
-        self.last_failure_time = None
-        self.state = "CLOSED"  # CLOSED, OPEN, HALF_OPEN
-```
-
-#### Fallback Pattern
-```python
-def get_paper_data_with_fallback(pmid):
-    try:
-        return primary_retriever.get_data(pmid)
-    except PrimaryError:
-        try:
-            return fallback_retriever.get_data(pmid)
-        except FallbackError:
-            return create_error_response(pmid)
-```
-
-### Error Response Format
-
-```python
-class ErrorResponse(BaseModel):
-    error_code: str
-    message: str
-    details: Optional[Dict[str, Any]]
-    timestamp: datetime
-    request_id: str
-    suggestions: Optional[List[str]]
-```
-
-## Performance Considerations
-
-### Caching Strategy
-
-#### Multi-Level Caching
-
-1. **Memory Cache**: In-process caching for frequently accessed data
-2. **Redis Cache**: Distributed caching for multi-instance deployments
-3. **File Cache**: Persistent caching for large datasets
-
-#### Cache Invalidation
-
-- **TTL-based**: Time-to-live expiration
-- **Event-based**: Invalidation on data updates
-- **Manual**: Administrative cache clearing
-
-### Async Processing
-
-#### Concurrent Operations
-
-```python
-async def process_multiple_papers(pmids):
-    tasks = [process_single_paper(pmid) for pmid in pmids]
-    results = await asyncio.gather(*tasks, return_exceptions=True)
-    return results
-```
-
-#### Resource Pooling
-
-- **Connection Pools**: HTTP connection reuse
-- **Thread Pools**: CPU-intensive task execution
-- **Process Pools**: Parallel processing for heavy workloads
-
-### Performance Monitoring
-
-#### Metrics Collection
-
-- **Response Times**: API endpoint performance
-- **Throughput**: Requests per second
-- **Error Rates**: Failure percentages
-- **Resource Usage**: CPU, memory, disk usage
-
-#### Performance Optimization
-
-- **Lazy Loading**: Load data only when needed
-- **Pagination**: Handle large datasets efficiently
-- **Compression**: Reduce network payload size
-- **CDN**: Content delivery for static assets
-
-## Security Architecture
-
-### Authentication and Authorization
-
-#### API Key Management
-
-```python
-class APIKeyManager:
-    def validate_key(self, key: str) -> bool:
-        # Validate API key format and permissions
-        pass
-    
-    def get_rate_limits(self, key: str) -> Dict[str, int]:
-        # Get rate limits for API key
-        pass
-```
-
-#### Rate Limiting
-
-```python
-class RateLimiter:
-    def __init__(self, requests_per_minute: int):
-        self.requests_per_minute = requests_per_minute
-        self.requests = {}
-    
-    def is_allowed(self, client_id: str) -> bool:
-        # Check if client is within rate limits
-        pass
-```
-
-### Data Security
-
-#### Input Validation
-
-- **Sanitization**: Clean user inputs
-- **Validation**: Verify data formats and ranges
-- **Escaping**: Prevent injection attacks
-
-#### Output Encoding
-
-- **JSON Encoding**: Proper JSON serialization
-- **HTML Encoding**: Prevent XSS attacks
-- **SQL Escaping**: Prevent SQL injection
-
-### Network Security
-
-#### HTTPS/TLS
-
-- **Certificate Management**: SSL/TLS certificates
-- **Cipher Suites**: Strong encryption algorithms
-- **HSTS**: HTTP Strict Transport Security
-
-#### CORS Configuration
-
-```python
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["https://example.com"],
-    allow_credentials=True,
-    allow_methods=["GET", "POST"],
-    allow_headers=["*"],
-)
-```
-
-## Deployment Architecture
-
-### Container Architecture
-
-#### Docker Services
-
-```yaml
-services:
-  api:
-    build: .
-    ports:
-      - "8000:8000"
-    environment:
-      - GEMINI_API_KEY=${GEMINI_API_KEY}
-      - NCBI_API_KEY=${NCBI_API_KEY}
-    depends_on:
-      - redis
-      - postgres
-  
-  redis:
-    image: redis:alpine
-    ports:
-      - "6379:6379"
-  
-  postgres:
-    image: postgres:13
-    environment:
-      - POSTGRES_DB=bioanalyzer
-      - POSTGRES_USER=user
-      - POSTGRES_PASSWORD=password
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-```
-
-#### Multi-Stage Builds
-
-```dockerfile
-# Build stage
-FROM python:3.9-slim as builder
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Runtime stage
-FROM python:3.9-slim
-COPY --from=builder /usr/local/lib/python3.9/site-packages /usr/local/lib/python3.9/site-packages
-COPY . /app
-WORKDIR /app
-CMD ["python", "main.py"]
-```
-
-### Orchestration
-
-#### Docker Compose
-
-- **Development**: Hot reloading, debug tools
-- **Testing**: Isolated test environment
-- **Production**: Optimized for performance
-
-#### Kubernetes (Future)
-
-- **Horizontal Scaling**: Auto-scaling based on load
-- **Service Discovery**: Dynamic service registration
-- **Load Balancing**: Traffic distribution
-- **Health Checks**: Automatic failure detection
-
-### Environment Management
-
-#### Configuration Management
-
-```python
-class Config:
-    def __init__(self):
-        self.environment = os.getenv("ENVIRONMENT", "development")
-        self.load_config()
-    
-    def load_config(self):
-        if self.environment == "production":
-            self.load_production_config()
-        else:
-            self.load_development_config()
-```
-
-#### Secrets Management
-
-- **Environment Variables**: Runtime configuration
-- **Secret Stores**: Encrypted secret storage
-- **Key Rotation**: Regular key updates
-
-## Monitoring and Observability
-
-### Logging Architecture
-
-#### Structured Logging
-
-```python
-import structlog
-
-logger = structlog.get_logger()
-
-logger.info(
-    "paper_analyzed",
-    pmid="12345678",
-    processing_time=2.5,
-    fields_extracted=6,
-    confidence_score=0.92
-)
-```
-
-#### Log Levels
-
-- **DEBUG**: Detailed diagnostic information
-- **INFO**: General information about system operation
-- **WARNING**: Warning messages for potential issues
-- **ERROR**: Error messages for failed operations
-- **CRITICAL**: Critical errors requiring immediate attention
-
-### Metrics Collection
-
-#### Application Metrics
-
-```python
-from prometheus_client import Counter, Histogram, Gauge
-
-# Counters
-requests_total = Counter('http_requests_total', 'Total HTTP requests', ['method', 'endpoint'])
-errors_total = Counter('errors_total', 'Total errors', ['error_type'])
-
-# Histograms
-request_duration = Histogram('http_request_duration_seconds', 'HTTP request duration')
-
-# Gauges
-active_connections = Gauge('active_connections', 'Number of active connections')
-```
-
-#### System Metrics
-
-- **CPU Usage**: Processor utilization
-- **Memory Usage**: RAM consumption
-- **Disk Usage**: Storage utilization
-- **Network I/O**: Network traffic
-
-### Health Checks
-
-#### Liveness Probe
-
-```python
-@app.get("/health/live")
-async def liveness_check():
-    return {"status": "alive", "timestamp": datetime.utcnow()}
-```
-
-#### Readiness Probe
-
-```python
-@app.get("/health/ready")
-async def readiness_check():
-    checks = {
-        "database": check_database_connection(),
-        "redis": check_redis_connection(),
-        "external_apis": check_external_apis()
-    }
-    
-    if all(checks.values()):
-        return {"status": "ready", "checks": checks}
-    else:
-        raise HTTPException(status_code=503, detail="Service not ready")
-```
-
-### Alerting
-
-#### Alert Rules
-
-```yaml
-groups:
-  - name: bioanalyzer
-    rules:
-      - alert: HighErrorRate
-        expr: rate(errors_total[5m]) > 0.1
-        for: 2m
-        labels:
-          severity: warning
-        annotations:
-          summary: "High error rate detected"
-      
-      - alert: ServiceDown
-        expr: up == 0
-        for: 1m
-        labels:
-          severity: critical
-        annotations:
-          summary: "Service is down"
-```
-
-#### Notification Channels
-
-- **Email**: Critical alerts
-- **Slack**: Team notifications
-- **PagerDuty**: On-call alerts
-- **Webhooks**: Custom integrations
-
-## Future Enhancements
-
-### Planned Improvements
-
-1. **Microservices Architecture**: Split into smaller, focused services
-2. **Event-Driven Architecture**: Implement event streaming
-3. **Machine Learning Pipeline**: Automated model training and deployment
-4. **GraphQL API**: More flexible query interface
-5. **Real-time Processing**: WebSocket-based real-time updates
-
-### Scalability Roadmap
-
-1. **Horizontal Scaling**: Multi-instance deployment
-2. **Database Sharding**: Distribute data across multiple databases
-3. **CDN Integration**: Global content delivery
-4. **Edge Computing**: Deploy closer to users
-5. **Auto-scaling**: Dynamic resource allocation
-
----
-
-This architecture documentation provides a comprehensive overview of the BioAnalyzer Package system design, implementation patterns, and operational considerations. It serves as a guide for developers, operators, and stakeholders to understand the system's structure and capabilities.
+Output rendering (table/csv/curator_desk_csv/xml) lives in
+`scripts/cli_rendering.py`, separate from argument parsing/dispatch.
+
+### LLM provider fallback chain
+
+`UnifiedQA.chat()` (`app/models/unified_qa.py`) is what the main analysis
+pipeline actually calls (confirmed via `app/services/bugsigdb_analyzer/`).
+It tries providers in this order, falling back on failure: **Paper-QA**
+(`PaperQAAgent`) first when available and a Gemini API key is set, then
+**LiteLLM** (`LLMProviderManager`, supports Gemini/OpenAI/Anthropic/Ollama),
+then **GeminiQA** directly as the last resort. `UnifiedQA`'s other public
+method, `ask_question()`, checks LiteLLM first instead - a real
+inconsistency between the two methods, not just stale docs; left as a
+future cleanup rather than fixed here since reconciling them changes
+runtime behavior. Provider auto-detects from whichever API key is set;
+override with `LLM_PROVIDER`.
+
+### Error handling
+
+No circuit breaker, no generic retry-with-backoff framework. The actual
+pattern is: services catch specific exceptions close to where they occur
+(e.g. `app/normalization/host_species.py` narrows to
+`requests.exceptions.RequestException`/`ValueError`/`KeyError` around its
+NCBI lookup) and fall back to a lower-confidence result rather than
+raising; API-level errors are caught by FastAPI exception handlers in
+`app/api/app.py`, which always mask credentials via
+`app/utils/credential_masking.py` before logging or returning error detail.
+The one exception is `app/api/routers/study_analysis.py`'s background
+task, which has its own `try`/`except` and calls `mask_exception_message`
+explicitly rather than relying on the global handler (see the URL-based
+analysis pipeline section above).
+
+### Caching
+
+SQLite-backed (`cache/analysis_cache.db`, `app/services/cache_manager.py`),
+TTL-based (`CACHE_VALIDITY_HOURS`, default 24h). There is no Redis-backed
+or in-memory caching layer today - see the Docker topology note below.
+
+### Configuration
+
+`app/core/settings.py` (Pydantic-based, supports JSON/YAML config files and
+named presets, exposed via `BioAnalyzer settings`) is the structured
+source of truth. `app/utils/config.py` bridges to it - it sets its own
+`os.getenv`-based defaults first, then overwrites them with
+`get_settings()`'s values - and is what the 13 other modules that need
+flat config constants actually import. See `.env.example` for the full set
+of supported environment variables.
+
+### Deployment topology
+
+Two Docker services - the FastAPI app and Redis (see
+[DOCKER_DEPLOYMENT.md](DOCKER_DEPLOYMENT.md) for the full picture). Redis
+is provisioned but **not** currently used by the app's caching logic
+(that's SQLite, as above) - don't assume cache reads/writes touch it.
+No Nginx, no PostgreSQL, no Prometheus in this repo's Docker setup.
+
+## Roadmap / Not Yet Implemented
+
+None of the following exists in the codebase today. Treat this section as
+a list of ideas, not architecture to build against:
+
+- **Kubernetes orchestration** - auto-scaling, service discovery, rolling
+  deployments. Today's deployment is `docker compose` only.
+- **Circuit breaker pattern** for external API calls (NCBI, LLM providers).
+  Today's resilience is narrowed exception handling + fallback values, not
+  a stateful breaker with open/closed/half-open states.
+- **Multi-level caching** (in-memory + Redis + file). Today's cache is
+  SQLite only.
+- **Prometheus-style metrics and alerting** (counters/histograms/gauges,
+  alert rules, Slack/PagerDuty/email notification channels). The real
+  `/metrics` endpoint returns a JSON payload of app-level stats
+  (`psutil`-based resource usage, request counts, cache hit rate) - it's
+  not a Prometheus scrape target, and there's no alerting system.
+- **Structured logging** via `structlog` or similar. Today's logging is
+  the standard library `logging` module with a fixed format string.
+- **API key-based authentication/authorization and per-key rate limits.**
+  Today's rate limiting (`ENABLE_RATE_LIMITING`, `RATE_LIMIT_PER_MINUTE` in
+  `.env.example`) is a simple global limiter, not per-API-key.
+- **Microservices split, event-driven architecture, GraphQL API,
+  WebSocket-based real-time updates** - all previously listed as "planned
+  improvements"; none started.
+- **Horizontal scaling, database sharding, CDN/edge deployment** - none
+  applicable yet; there's no database to shard (SQLite cache is local to
+  one instance) and no multi-instance deployment story today.
+
+If you want to design toward any of these, treat it as new architecture
+work with its own design doc - this file shouldn't be the place that
+quietly grows speculative content again.

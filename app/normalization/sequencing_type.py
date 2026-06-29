@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from app.normalization.types import NormalizedTerm
+from app.normalization.types import NormalizedTerm, best_lookup_match, found_vocab_types
 
 BUGSIGDB_SEQ_VOCAB = [
     "16S",
@@ -58,22 +58,6 @@ COMPATIBLE_GROUPS = [
 ]
 
 
-def _found_vocab_types(lowered: str) -> set[str]:
-    return {value for key, value in SEQUENCING_LOOKUP.items() if key in lowered}
-
-
-def _best_match(lowered: str) -> tuple[str, int] | None:
-    matched = None
-    matched_len = 0
-    for key, value in SEQUENCING_LOOKUP.items():
-        if key in lowered and len(key) > matched_len:
-            matched = value
-            matched_len = len(key)
-    if matched is None:
-        return None
-    return matched, matched_len
-
-
 def normalize_sequencing_type(raw_text: str) -> NormalizedTerm:
     """Return normalized sequencing type (text vocab only, no ontology ID).
 
@@ -89,14 +73,14 @@ def normalize_sequencing_type(raw_text: str) -> NormalizedTerm:
 
     stripped = raw_text.strip()
     lowered = raw_text.lower()
-    hit = _best_match(lowered)
+    hit = best_lookup_match(lowered, SEQUENCING_LOOKUP)
     if not hit:
         if stripped in BUGSIGDB_SEQ_VOCAB:
             return NormalizedTerm(stripped, "", "PRESENT", 1.0, raw=stripped)
         return NormalizedTerm("other", "", "PRESENT", 0.5, raw=stripped)
 
     matched, _ = hit
-    found_types = _found_vocab_types(lowered)
+    found_types = found_vocab_types(lowered, SEQUENCING_LOOKUP)
     if len(found_types) <= 1:
         return NormalizedTerm(matched, "", "PRESENT", 1.0, raw=stripped)
 

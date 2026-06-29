@@ -58,25 +58,38 @@ qa = UnifiedQA(use_gemini=True, gemini_api_key="...", use_paperqa=False)
 
 ## How It Works
 
-1. **Initialization**: `UnifiedQA` tries to initialize `PaperQAAgent` first
-2. **Fallback**: If Paper-QA is not available or fails, it falls back to `GeminiQA` (direct API)
-3. **Interface**: Both provide the same interface, so existing code works without changes
+`UnifiedQA.chat()` - what the main analysis pipeline actually calls
+(`app/services/bugsigdb_analyzer.py`) - tries providers in this order,
+verified against `app/models/unified_qa.py`:
+
+1. **Paper-QA** (`PaperQAAgent`), when available and a Gemini API key is set
+2. **LiteLLM** (`LLMProviderManager`), if Paper-QA is unavailable or errors -
+   this is also how non-Gemini providers (OpenAI, Anthropic, Ollama) get
+   used, since Paper-QA in this integration is Gemini-only
+3. **GeminiQA** direct API call, as the last resort
+
+All three provide a compatible `chat()` interface, so callers don't need to
+know which one actually answered.
 
 ## Architecture
 
 ```
 BioAnalyzer Code
     ↓
-UnifiedQA (wrapper)
+UnifiedQA.chat() (wrapper)
     ↓
-PaperQAAgent (Paper-QA agent) → Gemini via litellm
-    OR
-GeminiQA (direct API) → Gemini API
+PaperQAAgent (Gemini via litellm)   -- tried first
+    ↓ (if unavailable/fails)
+LLMProviderManager (LiteLLM: Gemini/OpenAI/Anthropic/Ollama)  -- tried second
+    ↓ (if unavailable/fails)
+GeminiQA (direct Gemini API call)  -- last resort
 ```
 
 ## Benefits
 
-1. **No Direct API Calls**: All LLM requests go through Paper-QA agent
+1. **Agent-First**: LLM requests go through the Paper-QA agent first when
+   it's available, falling back to LiteLLM or a direct Gemini call only if
+   Paper-QA is unavailable or errors (see How It Works above)
 2. **Better Analysis**: Agent-based reasoning improves paper analysis quality
 3. **LLM Flexibility**: Easy to switch to other LLMs (OpenAI, Claude, etc.) by changing settings
 4. **Backward Compatible**: Existing code continues to work

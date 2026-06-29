@@ -2,22 +2,9 @@
 
 import re
 import logging
-from typing import Dict, List, Optional, Tuple, Union
-from dataclasses import dataclass
+from typing import Dict, List, Optional
 
 logger = logging.getLogger(__name__)
-
-
-@dataclass
-class FieldValidationResult:
-    """Result of field validation."""
-
-    is_valid: bool
-    confidence: float
-    status: str
-    extracted_value: str
-    reason_if_missing: str
-    suggestions_for_curation: str
 
 
 class EnhancedFieldValidator:

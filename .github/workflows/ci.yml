@@ -57,11 +57,19 @@ jobs:
 
       - name: Install PyTorch CPU
         run: |
+          # torch==2.1.0+cpu is below the torch>=2.4 floor that recent
+          # `transformers` releases (pulled in transitively via
+          # sentence-transformers, for ".[dev]") check for. Below that floor,
+          # transformers takes a "torch disabled" code path that has a bug —
+          # it references `nn` without importing it, raising NameError at
+          # import time. 2.7.1 clears that floor and has cp310/cp311 CPU
+          # wheels; bump together with the matching torchvision/torchaudio
+          # per PyTorch's release compatibility matrix.
           pip install --no-cache-dir \
             --extra-index-url https://download.pytorch.org/whl/cpu \
-            "torch==2.1.0+cpu" \
-            "torchvision==0.16.0+cpu" \
-            "torchaudio==2.1.0+cpu"
+            "torch==2.7.1+cpu" \
+            "torchvision==0.22.1+cpu" \
+            "torchaudio==2.7.1+cpu"
 
       - name: Install package and dev dependencies
         run: |
