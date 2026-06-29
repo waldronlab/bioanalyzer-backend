@@ -8,6 +8,7 @@ from typing import Dict, Tuple
 
 import requests
 
+from app.normalization.ontology_cache import get_cached_term, store_cached_term
 from app.normalization.types import NormalizedTerm
 
 # keyword -> (scientific name, NCBITaxon ID)
@@ -96,6 +97,11 @@ def normalize_host_species(raw_text: str) -> NormalizedTerm:
         label, tax_id = hit
         return NormalizedTerm(label, tax_id, "PRESENT", 1.0)
 
+    cached = get_cached_term("ncbitaxon", raw_text)
+    if cached is not None:
+        label, tax_id, conf = cached
+        return NormalizedTerm(label, tax_id, "PRESENT", conf)
+
     try:
         search_params = _with_api_key(
             {
@@ -121,9 +127,11 @@ def normalize_host_species(raw_text: str) -> NormalizedTerm:
             sci_name = record.get("scientificname", "")
             tax_id = record.get("taxid", ids[0])
             if sci_name:
+                ncbi_id = f"NCBITaxon:{tax_id}"
+                store_cached_term("ncbitaxon", raw_text, sci_name, ncbi_id, 0.9)
                 return NormalizedTerm(
                     sci_name,
-                    f"NCBITaxon:{tax_id}",
+                    ncbi_id,
                     "PRESENT",
                     0.9,
                 )

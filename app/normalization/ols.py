@@ -7,6 +7,8 @@ from typing import Optional, Tuple
 
 import requests
 
+from app.normalization.ontology_cache import get_cached_term, store_cached_term
+
 OLS_SEARCH_URL = "https://www.ebi.ac.uk/ols4/api/search"
 
 
@@ -35,9 +37,19 @@ def ols_search(
     *,
     mapping_confidence: float = 0.9,
 ) -> Optional[Tuple[str, str, float]]:
-    """Return (label, ontology_id, confidence) for the top OLS hit, or None."""
+    """Return (label, ontology_id, confidence) for the top OLS hit, or None.
+
+    Successful resolutions are cached by (ontology, term) — see
+    app.normalization.ontology_cache — since the same disease/body-site term
+    recurs often and a confirmed mapping doesn't go stale.
+    """
     if not query or not query.strip():
         return None
+
+    cached = get_cached_term(ontology, query)
+    if cached is not None:
+        return cached
+
     try:
         params = {
             "q": query.strip(),
@@ -55,6 +67,7 @@ def ols_search(
         obo_id = format_ontology_id(docs[0].get("obo_id", ""), id_prefix)
         if not label:
             return None
+        store_cached_term(ontology, query, label, obo_id, mapping_confidence)
         return label, obo_id, mapping_confidence
     except Exception:
         return None

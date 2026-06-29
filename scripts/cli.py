@@ -69,6 +69,14 @@ def _field_mapping_confidence(fields: dict, key: str) -> str:
         return "0.00"
 
 
+def _sequencing_type_raw(fields: dict) -> str:
+    """Original pre-normalization text, shown only when it differs from
+    the normalized "Sequencing Type" value (e.g. the "other" fallback)."""
+    raw = str(fields.get("sequencing_type", {}).get("raw", "") or "")
+    normalized = _field_val(fields, "sequencing_type")
+    return raw if raw and raw != normalized else ""
+
+
 def _status_normalise(value: Any) -> str:
     s = str(value).strip().upper() if value else ""
     return s if s in {"PRESENT", "PARTIALLY_PRESENT", "ABSENT"} else "ABSENT"
@@ -126,16 +134,38 @@ def _priority_score(fields: dict) -> float:
     return round(score, 2)
 
 
-def render_results(results: List[Dict[str, Any]], fmt: str) -> str:
+def render_results(
+    results: List[Dict[str, Any]], fmt: str, *, include_header: bool = True
+) -> str:
     if fmt == "json":
         return json.dumps(results, indent=2, ensure_ascii=False)
     if fmt == "csv":
         return _render_csv(results)
     if fmt == "curator_desk_csv":
-        return _render_curator_desk_csv(results)
+        return _render_curator_desk_csv(results, include_header=include_header)
     if fmt == "xml":
         return _render_xml(results)
     return _render_table(results)
+
+
+def _read_existing_pmids(path: Path) -> set:
+    """Return the set of PMIDs already present in a curator_desk_csv file.
+
+    The output file IS the de-duplication manifest: there's no separate
+    persisted state to drift out of sync with it. Deleting the file simply
+    starts a clean slate on the next run.
+    """
+    if not path.exists():
+        return set()
+    try:
+        with path.open(encoding="utf-8", newline="") as f:
+            return {
+                (row.get("PMID") or "").strip()
+                for row in csv.DictReader(f)
+                if (row.get("PMID") or "").strip()
+            }
+    except Exception:
+        return set()
 
 
 def _render_table(results: List[Dict[str, Any]]) -> str:
@@ -185,7 +215,9 @@ def _render_csv(results: List[Dict[str, Any]]) -> str:
     return out.getvalue()
 
 
-def _render_curator_desk_csv(results: List[Dict[str, Any]]) -> str:
+def _render_curator_desk_csv(
+    results: List[Dict[str, Any]], *, include_header: bool = True
+) -> str:
     # Curator Desk spec §3.1 / §6.2: five prediction fields + ontology IDs + triage flags + priority.
     columns = [
         "PMID",
@@ -206,6 +238,7 @@ def _render_curator_desk_csv(results: List[Dict[str, Any]]) -> str:
         "Condition Mapping Confidence",
         "Sequencing Type",
         "Sequencing Type Status",
+        "Sequencing Type Raw",
         "Sample Size",
         "Sample Size Status",
         "has_differential_abundance",
@@ -217,7 +250,8 @@ def _render_curator_desk_csv(results: List[Dict[str, Any]]) -> str:
     ]
     out = io.StringIO()
     w = csv.DictWriter(out, fieldnames=columns, extrasaction="ignore")
-    w.writeheader()
+    if include_header:
+        w.writeheader()
     seen: set = set()
     for r in results:
         pmid = str(r.get("pmid", "") or "").strip()
@@ -267,6 +301,7 @@ def _render_curator_desk_csv(results: List[Dict[str, Any]]) -> str:
                 "Sequencing Type Status": _status_normalise(
                     _field_val(fields, "sequencing_type", "status")
                 ),
+                "Sequencing Type Raw": _sequencing_type_raw(fields),
                 "Sample Size": _field_val(fields, "sample_size"),
                 "Sample Size Status": _status_normalise(
                     _field_val(fields, "sample_size", "status")
@@ -825,6 +860,31 @@ class BioAnalyzerCLI:
         refresh: bool = False,
     ):
         request_timeout = int(os.getenv("BIOANALYZER_ANALYZE_TIMEOUT", "180"))
+
+        # Cumulative output: when re-running against the same curator_desk_csv
+        # file, skip both re-analysis and re-emission for PMIDs it already
+        # contains. The file itself is the de-duplication manifest — there is
+        # no separate state to drift out of sync with it, so deleting the
+        # file simply starts a clean slate on the next run. --refresh bypasses
+        # this (and overwrites, like before) for an intentional full redo.
+        append_mode = False
+        out_path = Path(output_file) if output_file else None
+        if fmt == "curator_desk_csv" and out_path is not None and not refresh:
+            already_emitted = _read_existing_pmids(out_path)
+            if already_emitted:
+                skipped = [p for p in pmids if p in already_emitted]
+                pmids = [p for p in pmids if p not in already_emitted]
+                if skipped:
+                    print(
+                        f"⏭️  Skipping {len(skipped)} PMID(s) already in "
+                        f"{out_path} (use --refresh to redo)"
+                    )
+                append_mode = True
+
+        if append_mode and not pmids:
+            print("✅ Nothing new to add — all PMIDs already present.")
+            return
+
         results, total = [], len(pmids)
         print(f"🔬 Analysing {total} paper(s)...")
         for i, pmid in enumerate(pmids, 1):
@@ -845,9 +905,13 @@ class BioAnalyzerCLI:
         if not results:
             print("❌ No results obtained.")
             return
-        content = render_results(results, fmt)
+        content = render_results(results, fmt, include_header=not append_mode)
         if output_file:
-            Path(output_file).write_text(content, encoding="utf-8")
+            if append_mode:
+                with open(output_file, "a", encoding="utf-8", newline="") as f:
+                    f.write(content)
+            else:
+                Path(output_file).write_text(content, encoding="utf-8")
             print(f"💾 Results saved to: {output_file}")
         else:
             print(content)
