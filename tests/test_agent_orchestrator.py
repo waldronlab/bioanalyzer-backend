@@ -18,10 +18,15 @@ from app.models.extraction_schemas import (
     MicrobialSignature,
 )
 from app.services.agent_orchestrator import (
+    PAPERQA_AGENT_API_AVAILABLE,
     AgentOrchestrator,
     _avg_confidence,
     _check_missing_fields,
     _field_result_from_raw,
+)
+
+_SKIP_REASON = (
+    "requires paper-qa>=5.0 (Settings-based agent API), which needs Python>=3.11"
 )
 
 
@@ -315,6 +320,8 @@ def test_aggregate_diff_abundance_takes_max_confidence():
 
 @pytest.fixture
 def orchestrator():
+    if not PAPERQA_AGENT_API_AVAILABLE:
+        pytest.skip(_SKIP_REASON)
     return AgentOrchestrator(
         llm_model="gemini/gemini-2.0-flash",
         embedding_model="gemini/text-embedding-004",
@@ -323,6 +330,8 @@ def orchestrator():
 
 @pytest.fixture
 def sample_chunks():
+    if not PAPERQA_AGENT_API_AVAILABLE:
+        pytest.skip(_SKIP_REASON)
     from paperqa.types import Doc, Text
 
     doc = Doc(docname="study_1", dockey="key_1", citation="Citation")

@@ -83,10 +83,33 @@ except (ImportError, AttributeError):
     _pqa_base_directory = [None]
 
 
-from paperqa import Docs, Settings  # noqa: E402
-from paperqa.settings import AgentSettings  # noqa: E402
-from paperqa.agents import agent_query  # noqa: E402
-from paperqa.types import Doc, Text  # noqa: E402
+try:
+    from paperqa import Docs, Settings  # noqa: E402
+    from paperqa.settings import AgentSettings  # noqa: E402
+    from paperqa.agents import agent_query  # noqa: E402
+    from paperqa.types import Doc, Text  # noqa: E402
+
+    PAPERQA_AGENT_API_AVAILABLE = True
+except ImportError:
+    # The Settings-based agent API was introduced in paper-qa>=5.0, which
+    # requires Python>=3.11 (see pyproject.toml). On older paper-qa (e.g.
+    # the last 4.x release, which a Python<3.11 interpreter is pinned to)
+    # these names don't exist at all. Define placeholders so this module —
+    # and its type hints, which Python evaluates eagerly without `from
+    # __future__ import annotations` — still imports cleanly; the pure
+    # helpers below (_field_result_from_raw, _check_missing_fields, etc.)
+    # stay usable/testable even when the agent feature itself isn't.
+    # AgentOrchestrator.__init__ raises a clear error instead of failing
+    # at import time.
+    Docs = Settings = AgentSettings = Doc = Text = object  # type: ignore
+
+    async def agent_query(*args, **kwargs):  # type: ignore[misc]
+        raise RuntimeError(
+            "AgentOrchestrator requires paper-qa>=5.0 (Settings-based agent "
+            "API), which requires Python>=3.11."
+        )
+
+    PAPERQA_AGENT_API_AVAILABLE = False
 
 
 # ---------------------------------------------------------------------------
@@ -203,6 +226,13 @@ class AgentOrchestrator:
         llm_model: str = "gemini/gemini-2.0-flash",
         embedding_model: str = "gemini/text-embedding-004",
     ) -> None:
+        if not PAPERQA_AGENT_API_AVAILABLE:
+            raise RuntimeError(
+                "AgentOrchestrator requires paper-qa>=5.0 (Settings-based "
+                "agent API), which requires Python>=3.11. The installed "
+                "paper-qa version lacks this API — upgrade paper-qa or run "
+                "under Python>=3.11 to use this feature."
+            )
         self.llm_model = llm_model
         self.embedding_model = embedding_model
 
