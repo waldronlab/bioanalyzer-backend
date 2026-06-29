@@ -43,6 +43,16 @@ RUN apt-get update && apt-get install -y \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
+# This base image ships its own (older) setuptools/wheel. COPY below is
+# additive - it won't remove files that aren't in the source - so without
+# this step those stock versions survive alongside the builder's upgraded
+# ones as duplicate, conflicting dist-info metadata. That left `import
+# setuptools` resolving to this image's old, vulnerable 65.5.1
+# (CVE-2024-6345, PYSEC-2025-49) at runtime even though the builder stage
+# correctly resolved 81.0.0 - confirmed via `python -c "import setuptools;
+# print(setuptools.__version__)"` returning 65.5.1 before this fix.
+RUN pip uninstall -y setuptools wheel || true
+
 # Copy installed packages + app from builder
 COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
 COPY --from=builder /usr/local/bin /usr/local/bin

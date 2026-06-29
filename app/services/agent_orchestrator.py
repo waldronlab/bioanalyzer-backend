@@ -58,7 +58,10 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 _pqa_temp_dir = Path(tempfile.gettempdir()) / "bioanalyzer_paperqa"
-_pqa_temp_dir.mkdir(parents=True, exist_ok=True)
+_pqa_temp_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+# mkdir's mode= only applies on creation; chmod explicitly so a
+# pre-existing directory from an earlier run is restricted too.
+os.chmod(_pqa_temp_dir, 0o700)
 os.environ["PQA_DIRECTORY"] = str(_pqa_temp_dir.absolute())
 os.environ["HOME"] = str(_pqa_temp_dir.parent.absolute())
 
@@ -80,10 +83,33 @@ except (ImportError, AttributeError):
     _pqa_base_directory = [None]
 
 
-from paperqa import Docs, Settings  # noqa: E402
-from paperqa.settings import AgentSettings  # noqa: E402
-from paperqa.agents import agent_query  # noqa: E402
-from paperqa.types import Doc, Text  # noqa: E402
+try:
+    from paperqa import Docs, Settings  # noqa: E402
+    from paperqa.settings import AgentSettings  # noqa: E402
+    from paperqa.agents import agent_query  # noqa: E402
+    from paperqa.types import Doc, Text  # noqa: E402
+
+    PAPERQA_AGENT_API_AVAILABLE = True
+except ImportError:
+    # The Settings-based agent API was introduced in paper-qa>=5.0, which
+    # requires Python>=3.11 (see pyproject.toml). On older paper-qa (e.g.
+    # the last 4.x release, which a Python<3.11 interpreter is pinned to)
+    # these names don't exist at all. Define placeholders so this module —
+    # and its type hints, which Python evaluates eagerly without `from
+    # __future__ import annotations` — still imports cleanly; the pure
+    # helpers below (_field_result_from_raw, _check_missing_fields, etc.)
+    # stay usable/testable even when the agent feature itself isn't.
+    # AgentOrchestrator.__init__ raises a clear error instead of failing
+    # at import time.
+    Docs = Settings = AgentSettings = Doc = Text = object  # type: ignore
+
+    async def agent_query(*args, **kwargs):  # type: ignore[misc]
+        raise RuntimeError(
+            "AgentOrchestrator requires paper-qa>=5.0 (Settings-based agent "
+            "API), which requires Python>=3.11."
+        )
+
+    PAPERQA_AGENT_API_AVAILABLE = False
 
 
 # ---------------------------------------------------------------------------
@@ -161,8 +187,16 @@ def _field_result_from_raw(value: Optional[str], normalizer_fn=None) -> FieldRes
                 mapping_confidence=float(term.mapping_confidence or conf),
                 reason_if_missing="" if term.status != "ABSENT" else "Not found",
             )
-        except Exception:
-            pass  # Fall through to heuristic
+        except Exception as e:
+            from app.utils.credential_masking import mask_exception_message
+
+            logger.debug(
+                "Normalizer %s failed for %r: %s",
+                normalizer_fn,
+                value,
+                mask_exception_message(e),
+            )
+            # Fall through to heuristic
 
     # Heuristic: non-empty value → PRESENT with modest confidence
     return FieldResult(
@@ -192,6 +226,13 @@ class AgentOrchestrator:
         llm_model: str = "gemini/gemini-2.0-flash",
         embedding_model: str = "gemini/text-embedding-004",
     ) -> None:
+        if not PAPERQA_AGENT_API_AVAILABLE:
+            raise RuntimeError(
+                "AgentOrchestrator requires paper-qa>=5.0 (Settings-based "
+                "agent API), which requires Python>=3.11. The installed "
+                "paper-qa version lacks this API — upgrade paper-qa or run "
+                "under Python>=3.11 to use this feature."
+            )
         self.llm_model = llm_model
         self.embedding_model = embedding_model
 
@@ -234,13 +275,16 @@ class AgentOrchestrator:
 
     @staticmethod
     def _resolve_paper_dir() -> Path:
-        candidates = [
-            Path(tempfile.gettempdir()) / "bioanalyzer_paperqa",
-            Path("cache") / "paperqa",
-        ]
+        temp_candidate = Path(tempfile.gettempdir()) / "bioanalyzer_paperqa"
+        candidates = [temp_candidate, Path("cache") / "paperqa"]
         for candidate in candidates:
             try:
                 candidate.mkdir(parents=True, exist_ok=True)
+                if candidate == temp_candidate:
+                    # Shared system temp dir is world-writable; restrict
+                    # this subdirectory (mode= only applies on creation,
+                    # so chmod explicitly to cover pre-existing dirs too).
+                    os.chmod(candidate, 0o700)
                 probe = candidate / ".write_test"
                 probe.write_text("ok")
                 probe.unlink()
@@ -251,6 +295,7 @@ class AgentOrchestrator:
         # Last-resort
         fallback = Path(tempfile.gettempdir()) / "bioanalyzer_paperqa"
         fallback.mkdir(parents=True, exist_ok=True)
+        os.chmod(fallback, 0o700)
         return fallback
 
     @staticmethod

@@ -56,5 +56,5 @@ def ols_search(
         if not label:
             return None
         return label, obo_id, mapping_confidence
-    except Exception:
+    except (requests.exceptions.RequestException, ValueError):
         return None

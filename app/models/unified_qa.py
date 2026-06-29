@@ -30,8 +30,10 @@ if not PAPERQA_AVAILABLE:
 class UnifiedQA:
     """Wrapper around LLM providers for question answering.
 
-    Tries LiteLLM first (supports multiple providers), falls back to Paper-QA,
-    then GeminiQA if those fail. Auto-detects provider from available API keys.
+    chat() (used by the main analysis pipeline) tries Paper-QA first when a
+    Gemini API key is available and Paper-QA initialized successfully, then
+    falls back to LiteLLM (supports multiple providers), then to GeminiQA
+    directly. Auto-detects provider from available API keys.
     """
 
     def __init__(
@@ -103,7 +105,9 @@ class UnifiedQA:
                     f"UnifiedQA: Using LiteLLM with provider={self.llm_manager.provider.value}, model={self.llm_manager.model}"
                 )
             except Exception as e:
-                logger.warning(f"UnifiedQA: Failed to initialize LiteLLM: {e}")
+                logger.warning(
+                    f"UnifiedQA: Failed to initialize LiteLLM: {mask_exception_message(e)}"
+                )
                 self.llm_manager = None
 
         if self.qa_system is None:
@@ -114,7 +118,9 @@ class UnifiedQA:
                     self.qa_system = GeminiQA(api_key=api_key_candidate)
                     logger.info("UnifiedQA: GeminiQA initialized successfully.")
                 except Exception as e:
-                    logger.error(f"UnifiedQA: failed to initialize QA system: {e}")
+                    logger.error(
+                        f"UnifiedQA: failed to initialize QA system: {mask_exception_message(e)}"
+                    )
             elif self.llm_manager is None:
                 logger.warning(
                     "UnifiedQA: QA system not initialized (no API keys). Chat functionality will be limited."
@@ -211,7 +217,9 @@ class UnifiedQA:
                 confidence = float(resp.get("confidence", 0.0) or 0.0)
                 return {"answer": text, "confidence": confidence, "pmid": pmid}
             except Exception as e:
-                logger.error(f"UnifiedQA.ask_question (LiteLLM) error: {e}")
+                logger.error(
+                    f"UnifiedQA.ask_question (LiteLLM) error: {mask_exception_message(e)}"
+                )
 
         if not self.qa_system:
             return {
@@ -224,7 +232,9 @@ class UnifiedQA:
             try:
                 return await self.qa_system.ask_question(question, context, pmid)
             except Exception as e:
-                logger.error(f"UnifiedQA.ask_question (PaperQA) error: {e}")
+                logger.error(
+                    f"UnifiedQA.ask_question (PaperQA) error: {mask_exception_message(e)}"
+                )
 
         prompt = question
         if context:
@@ -236,8 +246,9 @@ class UnifiedQA:
             confidence = float(resp.get("confidence", 0.0) or 0.0)
             return {"answer": text, "confidence": confidence, "pmid": pmid}
         except Exception as e:
-            logger.error(f"UnifiedQA.ask_question error: {e}")
-            return {"answer": "", "confidence": 0.0, "error": str(e), "pmid": pmid}
+            safe_error = mask_exception_message(e)
+            logger.error(f"UnifiedQA.ask_question error: {safe_error}")
+            return {"answer": "", "confidence": 0.0, "error": safe_error, "pmid": pmid}
 
     async def analyze_paper(self, paper_content: Dict[str, str]) -> dict:
         """Analyze a paper using the QA system."""
@@ -250,8 +261,9 @@ class UnifiedQA:
         try:
             return await self.qa_system.analyze_paper(paper_content)
         except Exception as e:
-            logger.error(f"UnifiedQA.analyze_paper error: {e}")
-            return {"error": str(e), "confidence": 0.0, "status": "error"}
+            safe_error = mask_exception_message(e)
+            logger.error(f"UnifiedQA.analyze_paper error: {safe_error}")
+            return {"error": safe_error, "confidence": 0.0, "status": "error"}
 
     async def analyze_image(
         self, image_url: str, prompt: str, model: Optional[str] = None
@@ -274,7 +286,9 @@ class UnifiedQA:
 
                 return result
             except Exception as e:
-                logger.error(f"UnifiedQA.analyze_image (LiteLLM) error: {e}")
+                logger.error(
+                    f"UnifiedQA.analyze_image (LiteLLM) error: {mask_exception_message(e)}"
+                )
 
         if not GEMINI_API_KEY and not self.llm_manager:
             logger.warning("Image analysis requested but no API keys are configured.")
@@ -378,8 +392,9 @@ class UnifiedQA:
             )
 
         except Exception as e:  # pragma: no cover - last-resort guard
-            logger.error(f"Error analyzing image: {e}")
-            return f"Error analyzing image: {str(e)}"
+            safe_error = mask_exception_message(e)
+            logger.error(f"Error analyzing image: {safe_error}")
+            return f"Error analyzing image: {safe_error}"
 
     async def analyze_paper_enhanced(
         self, prompt: str

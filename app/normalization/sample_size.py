@@ -9,7 +9,7 @@ from app.normalization.types import NormalizedTerm
 
 try:
     from word2number import w2n
-except Exception:  # pragma: no cover - optional dependency at runtime
+except ImportError:  # pragma: no cover - optional dependency at runtime
     w2n = None
 
 
@@ -95,7 +95,7 @@ def normalize_sample_size(raw_value: Any) -> NormalizedTerm:
         try:
             parsed = w2n.word_to_num(value)
             return NormalizedTerm(str(int(parsed)), "", "PRESENT", 1.0)
-        except Exception:
+        except ValueError:
             pass
     else:
         parsed = _simple_word_to_num(value)

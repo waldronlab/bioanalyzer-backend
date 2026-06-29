@@ -1,8 +1,8 @@
 """Vector store service using Paper-QA's implementations."""
 
 import asyncio
+import inspect
 import logging
-from pathlib import Path
 from typing import Optional
 
 from paperqa.llms import NumpyVectorStore, embedding_model_factory
@@ -13,10 +13,37 @@ try:
 except Exception:  # pragma: no cover - handled via runtime fallback
     QdrantVectorStore = None  # type: ignore[assignment]
 
-from paperqa.types import Text, Doc
-from paperqa import Docs
+from paperqa.types import Text
 
 logger = logging.getLogger(__name__)
+
+
+def _embed_documents_is_modern_single_arg(embedding_model) -> bool:
+    """True if embedding_model.embed_documents() takes one positional arg.
+
+    paper-qa>=5.0 (Python>=3.11 only) uses `embed_documents(self, texts)`.
+    The last paper-qa 4.x release — the only version installable on
+    Python<3.11, since every later release requires Python>=3.11 — used
+    `embed_documents(self, client, texts)` instead and resolved unknown
+    model-name strings (like the "st-<model>" convention used below) to
+    OpenAIEmbeddingModel rather than raising, so the mismatch only surfaces
+    as a confusing TypeError deep inside add_texts(). This code only ever
+    calls the single-arg form, so check for it explicitly. Mocked test
+    doubles (most commonly an AsyncMock with no spec) introspect as a bare
+    `(*args, **kwargs)` signature, which counts as zero required positional
+    params and is therefore treated as modern.
+    """
+    try:
+        sig = inspect.signature(embedding_model.embed_documents)
+    except (TypeError, ValueError):
+        return True
+    required = [
+        p
+        for p in sig.parameters.values()
+        if p.default is inspect.Parameter.empty
+        and p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD)
+    ]
+    return len(required) <= 1
 
 
 async def _get_embeddable_text(text: Text) -> str:
@@ -46,6 +73,13 @@ class VectorStoreService:
         self.embedding_model_name = embedding_model
 
         self.embedding_model = embedding_model_factory(embedding_model)
+        if not _embed_documents_is_modern_single_arg(self.embedding_model):
+            raise RuntimeError(
+                "VectorStoreService requires paper-qa>=5.0's single-argument "
+                "EmbeddingModel.embed_documents(texts) API, which requires "
+                "Python>=3.11. The installed paper-qa version predates this "
+                "API — upgrade paper-qa or run under Python>=3.11."
+            )
         logger.info(f"Initialized embedding model: {embedding_model}")
 
         if self.store_type == "numpy":

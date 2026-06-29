@@ -28,6 +28,8 @@ from typing import Any, Dict, List, Optional
 import requests
 from defusedxml import ElementTree
 
+from app.utils.credential_masking import mask_exception_message
+
 logger = logging.getLogger(__name__)
 
 
@@ -83,7 +85,10 @@ class StandalonePubMedRetriever:
                 return response.text
             except requests.RequestException as e:
                 logger.warning(
-                    f"NCBI request failed (attempt {attempt + 1}/{retries}): {e}"
+                    "NCBI request failed (attempt %d/%d): %s",
+                    attempt + 1,
+                    retries,
+                    mask_exception_message(e),
                 )
                 if attempt < retries - 1:
                     time.sleep(2**attempt)
@@ -111,8 +116,9 @@ class StandalonePubMedRetriever:
             root = ElementTree.fromstring(xml_data)
             article = root.find(".//PubmedArticle/MedlineCitation/Article")
         except ElementTree.ParseError as e:
-            logger.error(f"XML parse error for PMID {pmid}: {e}")
-            return {"error": f"XML parsing failed: {e}"}
+            safe_error = mask_exception_message(e)
+            logger.error("XML parse error for PMID %s: %s", pmid, safe_error)
+            return {"error": f"XML parsing failed: {safe_error}"}
 
         if article is None:
             return {"error": "No article metadata found."}
@@ -226,10 +232,11 @@ class StandalonePubMedRetriever:
             return result
 
         except Exception as e:
-            logger.error(f"Error retrieving PMID {pmid}: {e}")
+            safe_error = mask_exception_message(e)
+            logger.error("Error retrieving PMID %s: %s", pmid, safe_error)
             return {
                 "pmid": pmid,
-                "error": f"Failed to retrieve paper data: {e}",
+                "error": f"Failed to retrieve paper data: {safe_error}",
                 "title": "",
                 "abstract": "",
                 "journal": "",
@@ -254,5 +261,5 @@ class StandalonePubMedRetriever:
             root = ElementTree.fromstring(xml_data)
             return [el.text for el in root.findall(".//Id") if el.text]
         except ElementTree.ParseError as e:
-            logger.error(f"Error parsing search results: {e}")
+            logger.error("Error parsing search results: %s", mask_exception_message(e))
             return []

@@ -22,14 +22,15 @@ SPECIES_LOOKUP: Dict[str, Tuple[str, str]] = {
     "volunteers": ("Homo sapiens", "NCBITaxon:9606"),
     "subject": ("Homo sapiens", "NCBITaxon:9606"),
     "subjects": ("Homo sapiens", "NCBITaxon:9606"),
-    "infant": ("Homo sapiens", "NCBITaxon:9606"),
-    "infants": ("Homo sapiens", "NCBITaxon:9606"),
     "children": ("Homo sapiens", "NCBITaxon:9606"),
-    "neonate": ("Homo sapiens", "NCBITaxon:9606"),
-    "neonates": ("Homo sapiens", "NCBITaxon:9606"),
-    "adult": ("Homo sapiens", "NCBITaxon:9606"),
-    "adults": ("Homo sapiens", "NCBITaxon:9606"),
     "homo sapiens": ("Homo sapiens", "NCBITaxon:9606"),
+    # Deliberately NOT mapped to Homo sapiens: "adult", "infant", "neonate"
+    # (and plurals) are life-stage descriptors, not species-identifying -
+    # they're used for animal cohorts just as often ("adult mice", "infant
+    # rats", "neonate pigs"). Because _lookup_species() picks the longest
+    # matching key, these (5-7 chars) used to outrank short animal nouns
+    # like "mice"/"rat"/"pig" (3-4 chars), silently misclassifying animal
+    # studies as human whenever both appeared in the same text.
     "mouse": ("Mus musculus", "NCBITaxon:10090"),
     "mice": ("Mus musculus", "NCBITaxon:10090"),
     "mus musculus": ("Mus musculus", "NCBITaxon:10090"),
@@ -127,7 +128,7 @@ def normalize_host_species(raw_text: str) -> NormalizedTerm:
                     "PRESENT",
                     0.9,
                 )
-    except Exception:
+    except (requests.exceptions.RequestException, ValueError, KeyError):
         pass
 
     return NormalizedTerm(raw_text.strip(), "", "PARTIALLY_PRESENT", 0.5)

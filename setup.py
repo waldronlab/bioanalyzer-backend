@@ -43,7 +43,7 @@ setup(
     description="A specialized AI-powered tool for analyzing scientific papers for BugSigDB curation readiness",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/your-repo/bioanalyzer-package",
+    url="https://github.com/waldronlab/bioanalyzer-backend",
     packages=find_packages(),
     classifiers=[
         "Development Status :: 4 - Beta",
@@ -62,14 +62,11 @@ setup(
         "dev": [
             "pytest>=7.4.0",
             "pytest-cov>=4.1.0",
+            "pytest-asyncio>=0.21.0",
+            "sentence-transformers>=2.2.0",
             "black>=23.0.0",
             "flake8>=6.0.0",
             "mypy>=1.5.0",
-        ],
-        "cli": [
-            "click>=8.0.1",
-            "rich>=13.0.0",
-            "tabulate>=0.9.0",
         ],
     },
     entry_points={
@@ -84,8 +81,8 @@ setup(
     },
     keywords="bioinformatics, microbiome, bugsigdb, curation, ai, analysis",
     project_urls={
-        "Bug Reports": "https://github.com/your-repo/bioanalyzer-package/issues",
-        "Source": "https://github.com/your-repo/bioanalyzer-package",
-        "Documentation": "https://github.com/your-repo/bioanalyzer-package/docs",
+        "Bug Reports": "https://github.com/waldronlab/bioanalyzer-backend/issues",
+        "Source": "https://github.com/waldronlab/bioanalyzer-backend",
+        "Documentation": "https://github.com/waldronlab/bioanalyzer-backend/docs",
     },
 )
