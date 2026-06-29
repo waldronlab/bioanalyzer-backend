@@ -359,9 +359,7 @@ class CacheManager:
             logger.error(f"Failed to retrieve fulltext for PMID {pmid}: {str(e)}")
             return None
 
-    def get_ontology_term(
-        self, provider: str, term: str
-    ) -> Optional[tuple]:
+    def get_ontology_term(self, provider: str, term: str) -> Optional[tuple]:
         """Return a cached (label, ontology_id, confidence) for *term*, or None.
 
         No TTL is applied — see ontology_term_cache table comment.
@@ -408,7 +406,14 @@ class CacheManager:
                 (provider, term, label, ontology_id, confidence, timestamp)
                 VALUES (?, ?, ?, ?, ?, ?)
             """,
-                (provider, term, label, ontology_id, confidence, datetime.now().isoformat()),
+                (
+                    provider,
+                    term,
+                    label,
+                    ontology_id,
+                    confidence,
+                    datetime.now().isoformat(),
+                ),
             )
             conn.commit()
             return True

@@ -46,7 +46,9 @@ def test_second_run_skips_already_emitted_pmids(tmp_path, monkeypatch):
     monkeypatch.setattr("scripts.cli.requests.get", fake_get)
 
     asyncio.run(
-        cli.analyze_papers(["1", "2"], fmt="curator_desk_csv", output_file=str(out_path))
+        cli.analyze_papers(
+            ["1", "2"], fmt="curator_desk_csv", output_file=str(out_path)
+        )
     )
     assert call_log == ["1", "2"]
     rows = _rows(out_path)
@@ -109,7 +111,9 @@ def test_refresh_bypasses_dedup_and_overwrites(tmp_path, monkeypatch):
     monkeypatch.setattr("scripts.cli.requests.get", fake_get)
 
     asyncio.run(
-        cli.analyze_papers(["1", "2"], fmt="curator_desk_csv", output_file=str(out_path))
+        cli.analyze_papers(
+            ["1", "2"], fmt="curator_desk_csv", output_file=str(out_path)
+        )
     )
     asyncio.run(
         cli.analyze_papers(

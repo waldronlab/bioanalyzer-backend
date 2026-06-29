@@ -253,8 +253,12 @@ class TestOntologyTermCache:
         )
 
     def test_store_ontology_term_overwrites(self, cache_manager):
-        cache_manager.store_ontology_term("ncbitaxon", "human", "Homo sapiens", "NCBITaxon:9606", 0.9)
-        cache_manager.store_ontology_term("ncbitaxon", "human", "Homo sapiens", "NCBITaxon:9606", 1.0)
+        cache_manager.store_ontology_term(
+            "ncbitaxon", "human", "Homo sapiens", "NCBITaxon:9606", 0.9
+        )
+        cache_manager.store_ontology_term(
+            "ncbitaxon", "human", "Homo sapiens", "NCBITaxon:9606", 1.0
+        )
 
         result = cache_manager.get_ontology_term("ncbitaxon", "human")
         assert result == ("Homo sapiens", "NCBITaxon:9606", 1.0)

@@ -11,14 +11,18 @@ import app.normalization.ols as ols
 def _fake_ols_response(label: str, obo_id: str):
     resp = MagicMock()
     resp.raise_for_status = MagicMock()
-    resp.json.return_value = {"response": {"docs": [{"label": label, "obo_id": obo_id}]}}
+    resp.json.return_value = {
+        "response": {"docs": [{"label": label, "obo_id": obo_id}]}
+    }
     return resp
 
 
 class TestOlsSearchCaching:
     def test_cache_hit_skips_network_call(self, monkeypatch):
         monkeypatch.setattr(
-            ols, "get_cached_term", lambda provider, term: ("Parkinson disease", "EFO:0002508", 1.0)
+            ols,
+            "get_cached_term",
+            lambda provider, term: ("Parkinson disease", "EFO:0002508", 1.0),
         )
         store_mock = MagicMock()
         monkeypatch.setattr(ols, "store_cached_term", store_mock)
@@ -87,8 +91,10 @@ class TestHostSpeciesNcbiCaching:
         store_mock = MagicMock()
         monkeypatch.setattr(host_species, "store_cached_term", store_mock)
 
-        with patch("app.normalization.host_species.requests.get") as mock_get, \
-             patch("app.normalization.host_species.time.sleep"):
+        with (
+            patch("app.normalization.host_species.requests.get") as mock_get,
+            patch("app.normalization.host_species.time.sleep"),
+        ):
             result = host_species.normalize_host_species("Oryzias latipes")
 
         mock_get.assert_not_called()
@@ -98,12 +104,16 @@ class TestHostSpeciesNcbiCaching:
         assert result.status == "PRESENT"
 
     def test_cache_miss_calls_network_and_stores_result(self, monkeypatch):
-        monkeypatch.setattr(host_species, "get_cached_term", lambda provider, term: None)
+        monkeypatch.setattr(
+            host_species, "get_cached_term", lambda provider, term: None
+        )
         store_mock = MagicMock()
         monkeypatch.setattr(host_species, "store_cached_term", store_mock)
 
-        with patch("app.normalization.host_species.requests.get") as mock_get, \
-             patch("app.normalization.host_species.time.sleep"):
+        with (
+            patch("app.normalization.host_species.requests.get") as mock_get,
+            patch("app.normalization.host_species.time.sleep"),
+        ):
             mock_get.side_effect = [
                 self._fake_search_response("8090"),
                 self._fake_summary_response("8090", "Oryzias latipes"),
