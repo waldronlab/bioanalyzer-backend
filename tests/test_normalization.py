@@ -17,6 +17,20 @@ from app.normalization.sequencing_type import normalize_sequencing_type
 from app.normalization.taxa_level import normalize_taxa_level
 
 
+@pytest.fixture(autouse=True)
+def _no_ontology_cache(monkeypatch):
+    """These tests exercise the live-lookup fallback paths directly, but
+    host_species.py/ols.py persist resolved terms to a real on-disk SQLite
+    cache (app.normalization.ontology_cache). Different tests below reuse
+    the same example terms (e.g. "domestic cat") across host_species and
+    OLS lookups, so without this, a cache entry written by an earlier test
+    makes a later test's mocked HTTP response never get reached."""
+    monkeypatch.setattr(host_species_module, "get_cached_term", lambda *a: None)
+    monkeypatch.setattr(host_species_module, "store_cached_term", lambda *a: None)
+    monkeypatch.setattr(ols_module, "get_cached_term", lambda *a: None)
+    monkeypatch.setattr(ols_module, "store_cached_term", lambda *a: None)
+
+
 class _DummyResponse:
     """Minimal stand-in for requests.Response used by the fakes below."""
 

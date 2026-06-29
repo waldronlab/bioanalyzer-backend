@@ -115,10 +115,14 @@ async def test_complete_workflow():
             store_type="numpy",
             embedding_model="st-all-MiniLM-L6-v2",  # Fast local model for testing
         )
+        await vector_store.add_texts(chunks)
     except RuntimeError as e:
         pytest.skip(str(e))
-
-    await vector_store.add_texts(chunks)
+    except OSError as e:
+        # add_texts() lazily downloads the embedding model from HuggingFace
+        # Hub on first use; CI runners share IP ranges that HF rate-limits
+        # (429), and outright network restrictions raise the same OSError.
+        pytest.skip(f"Could not load embedding model from HuggingFace Hub: {e}")
 
     stats = vector_store.get_stats()
     assert stats["num_texts"] == len(chunks)
