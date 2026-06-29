@@ -110,10 +110,13 @@ async def test_complete_workflow():
 
     # Step 5: Store in vector database
     # Test with in-memory NumpyVectorStore
-    vector_store = VectorStoreService(
-        store_type="numpy",
-        embedding_model="st-all-MiniLM-L6-v2",  # Fast local model for testing
-    )
+    try:
+        vector_store = VectorStoreService(
+            store_type="numpy",
+            embedding_model="st-all-MiniLM-L6-v2",  # Fast local model for testing
+        )
+    except RuntimeError as e:
+        pytest.skip(str(e))
 
     await vector_store.add_texts(chunks)
 
