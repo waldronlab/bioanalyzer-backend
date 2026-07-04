@@ -90,7 +90,6 @@ Extract the following fields and return as a single JSON object:
   "body_site_raw":                   "<anatomical sample site(s) as written, e.g. 'faeces' or 'gut and oral cavity'>",
   "condition_raw":                   "<disease or condition name only, stripped of clinical preamble>",
   "sequencing_type_raw":             "<sequencing or molecular method name only>",
-  "taxa_level_raw":                  "<taxonomic rank analysed, e.g. 'genus', 'species', 'OTU', 'ASV', or null if not stated>",
   "sample_size_raw":                 <integer total participants/samples, or null if not stated>,
   "has_differential_abundance":      <true if specific microbial taxa are reported as statistically more/less abundant between groups>,
   "differential_abundance_confidence": <float 0.0–1.0 confidence in the above>
@@ -98,14 +97,15 @@ Extract the following fields and return as a single JSON object:
 
 Rules:
 - host_species_raw   : Give the species name(s) as written. Prefer METHODS or ABSTRACT if sections are present, otherwise extract from any available text. If multiple species, join with " and ".
+  If no species is named anywhere in the text, return null — do NOT default to "Homo sapiens" just because the study concerns a human disease or clinical condition.
 - body_site_raw      : Give the anatomical sample site(s) as written. Prefer METHODS or ABSTRACT if sections are present, otherwise extract from any available text. If multiple sites, join with " and ".
+  If no sample site is stated, return null — do NOT guess a typical site (e.g. "gut") just because the paper is about microbiome research.
 - condition_raw      : Give the disease/condition name only. Prefer ABSTRACT or INTRODUCTION if sections are present, otherwise extract from any available text.
   Do NOT include phrases like "patients with" or "diagnosed with".
   If the study compares diseased vs. healthy controls, give the disease name only.
+  If the study is on healthy subjects with no disease/condition studied, return null — do NOT invent a condition.
 - sequencing_type_raw: Give the sequencing or molecular method name only. Prefer METHODS if sections are present, otherwise extract from any available text. Give the method name exactly as written
-  (e.g. "16S rRNA gene sequencing", "shotgun metagenomics", "whole-genome sequencing").
-- taxa_level_raw     : Give the taxonomic rank analysed (e.g. genus, species, phylum, OTU, ASV). Prefer METHODS or RESULTS if sections are present.
-  If multiple ranks are reported, give the finest rank stated. If not stated, return null.
+  (e.g. "16S rRNA gene sequencing", "shotgun metagenomics", "whole-genome sequencing"). If no sequencing/molecular method is stated, return null.
 - sample_size_raw    : Give ONLY an integer. Prefer METHODS if sections are present, otherwise extract from any available text. Convert word-numbers
   (e.g. "forty-two" → 42). If a range or multiple cohorts, give the total or largest number.
   If completely absent from the paper, return null.

@@ -79,6 +79,21 @@ def _lookup_species(lowered: str) -> Tuple[str, str] | None:
     return best
 
 
+def _lookup_species_candidates(
+    lowered: str, exclude: Tuple[str, str] | None, limit: int = 2
+) -> Tuple[Tuple[str, str], ...]:
+    """Other distinct SPECIES_LOOKUP matches besides the winning one, for
+    curators to choose from when the mapping isn't auto-applied. Doesn't
+    affect which match wins (see _lookup_species's longest-match rule)."""
+    found: list[Tuple[str, str]] = []
+    for key, pair in SPECIES_LOOKUP.items():
+        if key in lowered and pair != exclude and pair not in found:
+            found.append(pair)
+        if len(found) >= limit:
+            break
+    return tuple(found)
+
+
 def normalize_host_species(raw_text: str) -> NormalizedTerm:
     """Return normalized host species label, NCBITaxon ID, status, and mapping confidence."""
     if not raw_text or raw_text.strip() == "":
@@ -90,7 +105,10 @@ def normalize_host_species(raw_text: str) -> NormalizedTerm:
         hit = _lookup_species(lowered)
         if hit:
             label, tax_id = hit
-            return NormalizedTerm(label, tax_id, "PARTIALLY_PRESENT", 0.9)
+            candidates = _lookup_species_candidates(lowered, hit)
+            return NormalizedTerm(
+                label, tax_id, "PARTIALLY_PRESENT", 0.9, candidates=candidates
+            )
         return NormalizedTerm(raw_text.strip(), "", "PARTIALLY_PRESENT", 0.5)
 
     hit = _lookup_species(lowered)

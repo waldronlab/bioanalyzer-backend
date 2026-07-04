@@ -173,12 +173,16 @@ def _field_result_from_raw(value: Optional[str], normalizer_fn=None) -> FieldRes
 
     if normalizer_fn is not None:
         try:
+            from app.normalization.grounding import TIER_AUTO, tier_for
+
             term = normalizer_fn(value)
             conf = (
                 0.85
                 if term.status == "PRESENT"
                 else (0.65 if term.status == "PARTIALLY_PRESENT" else 0.0)
             )
+            tier = tier_for(term)
+            candidates = getattr(term, "candidates", ()) or ()
             return FieldResult(
                 value=term.label if term.status != "ABSENT" else "",
                 status=term.status,
@@ -187,6 +191,12 @@ def _field_result_from_raw(value: Optional[str], normalizer_fn=None) -> FieldRes
                 mapping_confidence=float(term.mapping_confidence or conf),
                 reason_if_missing="" if term.status != "ABSENT" else "Not found",
                 raw=getattr(term, "raw", "") or "",
+                mapping_tier=tier,
+                mapping_candidates=(
+                    [{"label": label, "ontology_id": oid} for label, oid in candidates]
+                    if tier != TIER_AUTO
+                    else []
+                ),
             )
         except Exception as e:
             from app.utils.credential_masking import mask_exception_message

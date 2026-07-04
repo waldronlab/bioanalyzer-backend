@@ -2,14 +2,12 @@
 """
 BioAnalyzer Curator Table (with column-level validation + curator ground truth)
 =============================================================================
-
 Streamlit dashboard for real-world validation of BioAnalyzer predictions:
-sortable/searchable/filterable table, curator feedback by PMID, column-level
-correctness + ground truth, exportable feedback for confusion matrices and MCC.
+sortable/searchable/filterable table, curator feedback by PMID, per-field
+value + ontology-mapping confirmation, exportable feedback.
 
 Run: streamlit run curator_table/app.py
-Input: CSV or Parquet with PMID (recommended: Title, Journal, Year, Summary).
-Status values: ABSENT | PARTIALLY_PRESENT | PRESENT.
+Input: CSV or Parquet with PMID (recommended: Title, Journal, Year).
 Feedback: results/curator_feedback.csv and .parquet (upserted by PMID + curator_id).
 """
 
@@ -40,24 +38,33 @@ FEEDBACK_PARQUET = CONFIG["feedback_dir"] / "curator_feedback.parquet"
 logger = logging.getLogger(__name__)
 
 # -----------------------------
-# Schema (single source of truth)
+# Schema (single source of truth) - simplified curator-desk schema, see
+# docs/CURATOR_DESK_CSV_FORMAT.md: plain value per field, ontology ID for
+# the 3 fields mapped to an external ontology, no Status/Mapping-Confidence/
+# Priority columns.
 # -----------------------------
-STATUS_COLUMNS = [
-    "Host Species Status",
-    "Body Site Status",
-    "Condition Status",
-    "Sequencing Type Status",
-    "Sample Size Status",
+VALUE_COLUMNS = [
+    "Host Species",
+    "Body Site",
+    "Condition",
+    "Sample Size",
+    "Sequencing Type",
 ]
-MAPPING_CONFIDENCE_COLUMNS = [
-    "Host Species Mapping Confidence",
-    "Body Site Mapping Confidence",
-    "Condition Mapping Confidence",
+ONTOLOGY_ID_COLUMNS = [
+    "Host Species Ontology ID",
+    "Body Site Ontology ID",
+    "Condition Ontology ID",
 ]
+# Picker metadata (not shown as a table column) - "label|ontology_id;
+# label|ontology_id", populated only when a field's mapping tier isn't auto.
+ONTOLOGY_CANDIDATES_COLUMNS = [
+    "Host Species Ontology Candidates",
+    "Body Site Ontology Candidates",
+    "Condition Ontology Candidates",
+]
+BOOLEAN_COLUMNS = ["Differential Abundance", "In bsgdb"]
 OPTIONS = {
-    "valid_states": ["ABSENT", "PARTIALLY_PRESENT", "PRESENT"],
     "col_feedback": ["Not reviewed", "Correct", "Incorrect", "Unclear"],
-    "true_label": ["Not reviewed", "ABSENT", "PARTIALLY_PRESENT", "PRESENT"],
 }
 
 _safe = lambda col: col.replace(" ", "_")
@@ -67,16 +74,45 @@ FEEDBACK_BASE_COLS = [
 PRED_PREFIX, TRUE_PREFIX, COL_FB_PREFIX = "pred__", "true__", "col_feedback__"
 
 
+def _ontology_id_col_for(value_col: str) -> Optional[str]:
+    candidate = f"{value_col} Ontology ID"
+    return candidate if candidate in ONTOLOGY_ID_COLUMNS else None
+
+
+def _ontology_candidates_col_for(value_col: str) -> str:
+    return f"{value_col} Ontology Candidates"
+
+
+def _parse_candidates(raw: str) -> list[tuple[str, str]]:
+    """Parse the compact 'label|ontology_id; label|ontology_id' string (see
+    scripts/cli_rendering.py::_field_ontology_candidates)."""
+    if not raw or not str(raw).strip():
+        return []
+    out = []
+    for part in str(raw).split(";"):
+        part = part.strip()
+        if not part or "|" not in part:
+            continue
+        label, _, oid = part.partition("|")
+        if oid:
+            out.append((label.strip(), oid.strip()))
+    return out
+
+
 def _feedback_schema() -> list[str]:
-    """Full feedback column schema (dynamic from STATUS_COLUMNS)."""
-    derived = [
-        f"{PRED_PREFIX}{_safe(c)}" for c in STATUS_COLUMNS
-    ] + [
-        f"{TRUE_PREFIX}{_safe(c)}" for c in STATUS_COLUMNS
-    ] + [
-        f"{COL_FB_PREFIX}{_safe(c)}" for c in STATUS_COLUMNS
+    """Full feedback column schema: every value field gets a pred/true/
+    col_feedback triplet; the 3 ontology-mapped fields additionally get a
+    pred/true Ontology ID pair (no col_feedback - only value fields get the
+    'was BioAnalyzer correct?' dropdown)."""
+    value_triplets = (
+        [f"{PRED_PREFIX}{_safe(c)}" for c in VALUE_COLUMNS]
+        + [f"{TRUE_PREFIX}{_safe(c)}" for c in VALUE_COLUMNS]
+        + [f"{COL_FB_PREFIX}{_safe(c)}" for c in VALUE_COLUMNS]
+    )
+    onto_pairs = [f"{PRED_PREFIX}{_safe(c)}" for c in ONTOLOGY_ID_COLUMNS] + [
+        f"{TRUE_PREFIX}{_safe(c)}" for c in ONTOLOGY_ID_COLUMNS
     ]
-    return FEEDBACK_BASE_COLS + derived
+    return FEEDBACK_BASE_COLS + value_triplets + onto_pairs
 
 
 # -----------------------------
@@ -94,47 +130,6 @@ def _safe_int(x) -> Optional[int]:
         return int(float(x))
     except (TypeError, ValueError):
         return None
-
-
-def _normalize_status(x: str) -> str:
-    if pd.isna(x):
-        return ""
-    x = str(x).strip().upper()
-    if x in OPTIONS["valid_states"]:
-        return x
-    if x in {"PARTIAL", "PARTIALLY", "PARTLY"}:
-        return "PARTIALLY_PRESENT"
-    if x in {"YES", "TRUE"}:
-        return "PRESENT"
-    if x in {"NO", "FALSE"}:
-        return "ABSENT"
-    return x
-
-
-def _priority_score(row: pd.Series) -> float:
-    """Confidence-weighted priority score (spec §6.4 + long-term vision)."""
-    weights = {"PRESENT": 1.0, "PARTIALLY_PRESENT": 0.5}
-    score = 0.0
-    for i, col in enumerate(STATUS_COLUMNS):
-        base = weights.get(str(row.get(col, "")).strip().upper(), 0.0)
-        if base == 0:
-            continue
-        conf = 1.0
-        if i < len(MAPPING_CONFIDENCE_COLUMNS):
-            map_col = MAPPING_CONFIDENCE_COLUMNS[i]
-            if map_col in row.index and pd.notna(row.get(map_col)):
-                try:
-                    conf = float(row.get(map_col))
-                except (TypeError, ValueError):
-                    conf = 1.0
-        score += base * conf
-    if row.get("has_differential_abundance") in (True, "TRUE", "True", 1, "1"):
-        try:
-            da_conf = float(row.get("differential_abundance_confidence", 0) or 0)
-            score += 0.25 * da_conf
-        except (TypeError, ValueError):
-            pass
-    return round(score, 3)
 
 
 # -----------------------------
@@ -163,7 +158,7 @@ def _load_data(source, is_path: bool) -> pd.DataFrame:
 
 
 def normalize_dataset(df: pd.DataFrame) -> pd.DataFrame:
-    """Normalize PMID, statuses, derive year/link/priority. Returns empty DataFrame if invalid."""
+    """Normalize PMID, booleans, derive year/link. Returns empty DataFrame if invalid."""
     if df.empty or "PMID" not in df.columns:
         if not df.empty:
             st.error("Data must contain a 'PMID' column.")
@@ -182,10 +177,7 @@ def normalize_dataset(df: pd.DataFrame) -> pd.DataFrame:
             df = df.assign(Year=pd.to_datetime(df["Publication Date"], errors="coerce").dt.year)
         except Exception:
             pass
-    for col in STATUS_COLUMNS:
-        if col in df.columns:
-            df = df.assign(**{col: df[col].apply(_normalize_status)})
-    for col in ("has_differential_abundance", "in_bugsigdb"):
+    for col in BOOLEAN_COLUMNS:
         if col in df.columns:
             df[col] = df[col].map(
                 lambda v: str(v).strip().upper() in {"TRUE", "T", "1", "YES"}
@@ -194,12 +186,12 @@ def normalize_dataset(df: pd.DataFrame) -> pd.DataFrame:
             )
         else:
             df[col] = False
-    if "differential_abundance_confidence" not in df.columns:
-        df["differential_abundance_confidence"] = 0.0
-    df = df.assign(
-        **{"Priority Score": df.apply(_priority_score, axis=1)},
-        **{"PubMed Link": df["PMID"].apply(_make_pmid_link)},
-    )
+    for col in ONTOLOGY_ID_COLUMNS + ONTOLOGY_CANDIDATES_COLUMNS:
+        if col not in df.columns:
+            df[col] = ""
+        else:
+            df[col] = df[col].fillna("")
+    df = df.assign(**{"PubMed Link": df["PMID"].apply(_make_pmid_link)})
     return df
 
 
@@ -253,14 +245,9 @@ def upsert_feedback(existing: pd.DataFrame, row: dict) -> pd.DataFrame:
 def render_filters(df: pd.DataFrame) -> pd.DataFrame:
     st.sidebar.header("Filters")
     search = st.sidebar.text_input(
-        "Search (PMID, title, journal, summary)",
+        "Search (PMID, title, journal, condition)",
         placeholder="e.g. obesity, 2019, Lactobacillus",
     ).strip().lower()
-    status_filters = {
-        col: st.sidebar.multiselect(col, options=OPTIONS["valid_states"], default=[])
-        for col in STATUS_COLUMNS
-        if col in df.columns
-    }
     year_range = None
     if "Year" in df.columns:
         years = df["Year"].dropna()
@@ -270,34 +257,33 @@ def render_filters(df: pd.DataFrame) -> pd.DataFrame:
     da_only = st.sidebar.checkbox(
         "Only differential abundance papers",
         value=True,
-        help="Show papers where has_differential_abundance is TRUE (spec §8.2 default)",
-    )
-    min_da_conf = st.sidebar.slider(
-        "Min differential abundance confidence",
-        0.0,
-        1.0,
-        0.0,
-        0.05,
     )
     hide_bugsigdb = st.sidebar.checkbox("Hide papers already in BugSigDB", value=False)
+    needs_mapping_only = st.sidebar.checkbox(
+        "Only papers needing an ontology mapping",
+        value=False,
+        help="Show rows where at least one of Host Species/Body Site/Condition has no Ontology ID yet.",
+    )
     out = df.copy()
     if search:
         mask = out["PMID"].astype(str).str.contains(search, na=False)
-        for col in ["Title", "Journal", "Summary"]:
+        for col in ["Title", "Journal", "Condition"]:
             if col in out.columns:
                 mask = mask | out[col].astype(str).str.lower().str.contains(search, na=False)
         out = out.loc[mask]
-    for col, allowed in status_filters.items():
-        if allowed:
-            out = out[out[col].isin(allowed)]
     if year_range and "Year" in out.columns:
         out = out[(out["Year"] >= year_range[0]) & (out["Year"] <= year_range[1])]
-    if da_only and "has_differential_abundance" in out.columns:
-        out = out[out["has_differential_abundance"] == True]  # noqa: E712
-    if min_da_conf > 0 and "differential_abundance_confidence" in out.columns:
-        out = out[out["differential_abundance_confidence"].fillna(0) >= min_da_conf]
-    if hide_bugsigdb and "in_bugsigdb" in out.columns:
-        out = out[out["in_bugsigdb"] != True]  # noqa: E712
+    if da_only and "Differential Abundance" in out.columns:
+        out = out[out["Differential Abundance"] == True]  # noqa: E712
+    if hide_bugsigdb and "In bsgdb" in out.columns:
+        out = out[out["In bsgdb"] != True]  # noqa: E712
+    if needs_mapping_only:
+        present_onto_cols = [c for c in ONTOLOGY_ID_COLUMNS if c in out.columns]
+        if present_onto_cols:
+            missing_any = pd.Series(False, index=out.index)
+            for col in present_onto_cols:
+                missing_any = missing_any | (out[col].astype(str).str.strip() == "")
+            out = out[missing_any]
     return out
 
 
@@ -306,11 +292,12 @@ def render_table(df: pd.DataFrame) -> Optional[int]:
         st.warning("No rows match your filters.")
         return None
     st.subheader("Candidate curatable articles")
-    st.caption("Tip: Sort by Priority Score to review the most promising candidates first.")
-    sort_options = ["Priority Score", "PMID"]
+    st.caption("Tip: an empty Ontology ID cell means that field needs a curator-confirmed mapping.")
+    sort_options = ["PMID"]
+    if "Year" in df.columns:
+        sort_options.insert(0, "Year")
     if "Title" in df.columns:
         sort_options.append("Title")
-    sort_options.extend(c for c in STATUS_COLUMNS if c in df.columns)
     sort_col = st.selectbox("Sort by", options=sort_options, index=0)
     ascending = st.checkbox("Ascending", value=False)
     if sort_col in df.columns:
@@ -318,7 +305,12 @@ def render_table(df: pd.DataFrame) -> Optional[int]:
     st.divider()
     max_rows = st.slider("Rows to display", 50, 2000, 300, 50)
     df_show = df.head(max_rows).copy()
-    want = ["PMID", "PubMed Link", "Priority Score", "Title", "Journal", "Year"] + list(STATUS_COLUMNS) + ["Summary"]
+    want = (
+        ["PMID", "PubMed Link", "Title", "Journal", "Year"]
+        + list(VALUE_COLUMNS)
+        + list(ONTOLOGY_ID_COLUMNS)
+        + ["Differential Abundance", "In bsgdb"]
+    )
     display_cols = [c for c in want if c in df_show.columns]
     df_show = df_show[display_cols]
     st.dataframe(
@@ -340,38 +332,76 @@ def render_table(df: pd.DataFrame) -> Optional[int]:
 
 
 def render_column_level_validation(selected_row: pd.Series) -> dict[str, str]:
-    """Per-column correctness + curator true label UI. Returns col_feedback__* and true__*."""
+    """Per-field value + ontology-mapping confirmation. Returns
+    true__*/col_feedback__* for value fields and true__* for ontology ID fields."""
     st.markdown("### Field-by-field validation (ground truth)")
     st.caption(
-        "For each field, provide the curator TRUE label. "
-        "Optionally mark whether BioAnalyzer's predicted status was correct."
+        "For each field, correct BioAnalyzer's predicted value if needed. For "
+        "Host Species/Body Site/Condition, confirm or pick the ontology mapping."
     )
-    out = {}
+    out: dict[str, str] = {}
     left, right = st.columns(2)
-    for pane, cols in zip([left, right], [STATUS_COLUMNS[:3], STATUS_COLUMNS[3:]]):
+    for pane, cols in zip([left, right], [VALUE_COLUMNS[:3], VALUE_COLUMNS[3:]]):
         with pane:
             for col in cols:
                 if col not in selected_row.index:
                     continue
                 safe = _safe(col)
                 pred = str(selected_row.get(col, "")).strip()
-                label = col.replace(" Status", "")
-                st.markdown(f"**{label}**")
+                st.markdown(f"**{col}**")
                 st.write(f"BioAnalyzer predicted: `{pred}`")
                 true_key = f"{TRUE_PREFIX}{safe}"
-                out[true_key] = st.selectbox(
-                    f"Curator TRUE label for {label}",
-                    options=OPTIONS["true_label"],
-                    index=0,
+                out[true_key] = st.text_input(
+                    f"Curator value for {col}",
+                    value="",
                     key=f"ui__{true_key}",
                 )
                 fb_key = f"{COL_FB_PREFIX}{safe}"
                 out[fb_key] = st.selectbox(
-                    f"Was BioAnalyzer correct for {label}?",
+                    f"Was BioAnalyzer correct for {col}?",
                     options=OPTIONS["col_feedback"],
                     index=0,
                     key=f"ui__{fb_key}",
                 )
+
+                onto_col = _ontology_id_col_for(col)
+                if onto_col and onto_col in selected_row.index:
+                    onto_safe = _safe(onto_col)
+                    predicted_id = str(selected_row.get(onto_col, "")).strip()
+                    st.write(
+                        f"Ontology ID: `{predicted_id}`" if predicted_id else "Ontology ID: _(none - needs mapping)_"
+                    )
+                    candidates = _parse_candidates(
+                        str(selected_row.get(_ontology_candidates_col_for(col), ""))
+                    )
+                    option_labels = ["Not reviewed"]
+                    option_values = [""]
+                    if predicted_id:
+                        option_labels.append(f"Confirm predicted: {predicted_id}")
+                        option_values.append(predicted_id)
+                    for label, oid in candidates:
+                        if oid == predicted_id:
+                            continue
+                        option_labels.append(f"{label} ({oid})")
+                        option_values.append(oid)
+                    option_labels.append("Other (enter manually)")
+                    option_values.append("__other__")
+                    onto_true_key = f"{TRUE_PREFIX}{onto_safe}"
+                    choice_idx = st.selectbox(
+                        f"Ontology mapping for {col}",
+                        options=range(len(option_labels)),
+                        format_func=lambda i: option_labels[i],
+                        index=0,
+                        key=f"ui__{onto_true_key}",
+                    )
+                    chosen_value = option_values[choice_idx]
+                    if chosen_value == "__other__":
+                        chosen_value = st.text_input(
+                            f"Enter ontology ID manually for {col}",
+                            value="",
+                            key=f"ui__{onto_true_key}__manual",
+                        ).strip()
+                    out[onto_true_key] = chosen_value
                 st.divider()
     return out
 
@@ -442,14 +472,21 @@ def render_feedback_section(selected_pmid: Optional[int], dataset_df: pd.DataFra
                 "timestamp": pd.Timestamp.now(tz="UTC").isoformat(),
                 "bioanalyzer_version": bioanalyzer_version,
             }
-            for col in STATUS_COLUMNS:
+            for col in VALUE_COLUMNS:
                 s = _safe(col)
                 row[f"{PRED_PREFIX}{s}"] = (
                     str(selected_row.get(col, "")).strip()
                     if selected_row is not None and col in selected_row.index else ""
                 )
-                row[f"{TRUE_PREFIX}{s}"] = field_validation.get(f"{TRUE_PREFIX}{s}", "Not reviewed")
+                row[f"{TRUE_PREFIX}{s}"] = field_validation.get(f"{TRUE_PREFIX}{s}", "")
                 row[f"{COL_FB_PREFIX}{s}"] = field_validation.get(f"{COL_FB_PREFIX}{s}", "Not reviewed")
+            for onto_col in ONTOLOGY_ID_COLUMNS:
+                s = _safe(onto_col)
+                row[f"{PRED_PREFIX}{s}"] = (
+                    str(selected_row.get(onto_col, "")).strip()
+                    if selected_row is not None and onto_col in selected_row.index else ""
+                )
+                row[f"{TRUE_PREFIX}{s}"] = field_validation.get(f"{TRUE_PREFIX}{s}", "")
             feedback_df = upsert_feedback(feedback_df, row)
             save_feedback(feedback_df)
             logger.info("Saved feedback for PMID %s (curator=%s)", pid, curator_id)
@@ -461,7 +498,14 @@ def render_feedback_section(selected_pmid: Optional[int], dataset_df: pd.DataFra
         st.info("No feedback recorded yet.")
         return
     compact_cols = [c for c in FEEDBACK_BASE_COLS if c in feedback_df.columns] + [
-        k for c in STATUS_COLUMNS for k in (f"{PRED_PREFIX}{_safe(c)}", f"{TRUE_PREFIX}{_safe(c)}", f"{COL_FB_PREFIX}{_safe(c)}")
+        k
+        for c in VALUE_COLUMNS
+        for k in (f"{PRED_PREFIX}{_safe(c)}", f"{TRUE_PREFIX}{_safe(c)}", f"{COL_FB_PREFIX}{_safe(c)}")
+        if k in feedback_df.columns
+    ] + [
+        k
+        for c in ONTOLOGY_ID_COLUMNS
+        for k in (f"{PRED_PREFIX}{_safe(c)}", f"{TRUE_PREFIX}{_safe(c)}")
         if k in feedback_df.columns
     ]
     st.dataframe(
@@ -484,9 +528,8 @@ def main() -> None:
         """
 This dashboard provides a **sortable, searchable, filterable** table of BioAnalyzer predictions.
 
-- Curators review predictions and capture feedback by PMID.
-- Stored: predicted statuses, curator ground truth, correctness flags.
-- Export suitable for confusion matrices, per-field error profiling, MCC for PARTIALLY_PRESENT.
+- Curators review extracted values and ontology mappings, and capture feedback by PMID.
+- Stored: predicted values/ontology IDs, curator ground truth, correctness flags.
         """
     )
     st.sidebar.header("Data source")
@@ -520,10 +563,10 @@ This dashboard provides a **sortable, searchable, filterable** table of BioAnaly
     if df.empty:
         st.error("Dataset loaded, but no valid rows found after normalization.")
         st.stop()
-    missing = [c for c in STATUS_COLUMNS if c not in df.columns]
+    missing = [c for c in VALUE_COLUMNS if c not in df.columns]
     if missing:
         st.warning(
-            "Some expected status columns are missing. Priority and filtering will be partial.\n\n"
+            "Some expected value columns are missing. The table and filtering will be partial.\n\n"
             f"Missing: {missing}"
         )
     filtered_df = render_filters(df)

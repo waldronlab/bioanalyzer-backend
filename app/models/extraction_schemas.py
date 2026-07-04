@@ -94,6 +94,18 @@ class FieldResult(BaseModel):
         description="Pre-normalization text; populated only by normalizers "
         "that preserve it (e.g. sequencing_type's 'other' fallback).",
     )
+    mapping_tier: str = Field(
+        default="none",
+        description="Ontology-mapping confidence tier: 'auto' (static "
+        "lookup match, applied without review), 'review' (live OLS/NCBI "
+        "fallback or ambiguous match, curator should confirm), or 'none' "
+        "(no ontology_id). See app.normalization.grounding.tier_for().",
+    )
+    mapping_candidates: List[Dict[str, str]] = Field(
+        default_factory=list,
+        description="Up to 2 alternative {label, ontology_id} candidates "
+        "for curator review; populated only when mapping_tier != 'auto'.",
+    )
 
     @classmethod
     def absent(
@@ -124,6 +136,8 @@ class FieldResult(BaseModel):
             "mapping_confidence": self.mapping_confidence,
             "reason_if_missing": self.reason_if_missing,
             "raw": self.raw,
+            "mapping_tier": self.mapping_tier,
+            "mapping_candidates": self.mapping_candidates,
         }
 
 

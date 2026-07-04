@@ -66,7 +66,7 @@ def test_second_run_skips_already_emitted_pmids(tmp_path, monkeypatch):
     rows = _rows(out_path)
     assert [r["PMID"] for r in rows] == ["1", "2", "3"]
     # Exactly one header line, even after the append.
-    assert out_path.read_text().count("PMID,Title") == 1
+    assert out_path.read_text().count("PMID,Year,Title") == 1
 
 
 def test_nothing_new_skips_network_entirely(tmp_path, monkeypatch):

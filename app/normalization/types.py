@@ -3,8 +3,8 @@ normalization."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Dict
+from dataclasses import dataclass, field
+from typing import Dict, Tuple
 
 
 @dataclass(frozen=True)
@@ -16,6 +16,11 @@ class NormalizedTerm:
     status: str
     mapping_confidence: float
     raw: str = ""
+    # Up to 2 runner-up (label, ontology_id) pairs from the same lookup dict,
+    # surfaced so curators can pick an alternative when the mapping tier isn't
+    # "auto" (see app.normalization.grounding). Empty for API-resolved terms,
+    # which only ever produce a single candidate.
+    candidates: Tuple[Tuple[str, str], ...] = field(default_factory=tuple)
 
     @classmethod
     def absent(cls) -> NormalizedTerm:

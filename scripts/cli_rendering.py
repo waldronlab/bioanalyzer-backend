@@ -34,76 +34,28 @@ def _field_ontology_id(fields: dict, key: str) -> str:
     return str(fields.get(key, {}).get("ontology_id", "") or "")
 
 
-def _field_mapping_confidence(fields: dict, key: str) -> str:
-    try:
-        return f"{float(fields.get(key, {}).get('mapping_confidence', 0.0)):.2f}"
-    except (TypeError, ValueError):
-        return "0.00"
+def _field_ontology_candidates(fields: dict, key: str) -> str:
+    """Compact 'label|ontology_id; label|ontology_id' string of alternate
+    candidates, populated only when the field's mapping wasn't auto-applied
+    (see app.normalization.grounding). Consumed by curator_table_r's mapping
+    picker, not shown as a visible table column."""
+    field_data = fields.get(key, {})
+    if field_data.get("mapping_tier") == "auto":
+        return ""
+    candidates = field_data.get("mapping_candidates") or []
+    return "; ".join(
+        f"{c.get('label', '')}|{c.get('ontology_id', '')}" for c in candidates if c.get("ontology_id")
+    )
 
 
-def _sequencing_type_raw(fields: dict) -> str:
-    """Original pre-normalization text, shown only when it differs from
-    the normalized "Sequencing Type" value (e.g. the "other" fallback)."""
-    raw = str(fields.get("sequencing_type", {}).get("raw", "") or "")
-    normalized = _field_val(fields, "sequencing_type")
-    return raw if raw and raw != normalized else ""
-
-
-def _status_normalise(value: Any) -> str:
-    s = str(value).strip().upper() if value else ""
-    return s if s in {"PRESENT", "PARTIALLY_PRESENT", "ABSENT"} else "ABSENT"
-
-
-def _bool_upper(value: Any) -> str:
-    return "TRUE" if bool(value) else "FALSE"
+def _bool_yes_no(value: Any) -> str:
+    return "Yes" if bool(value) else "No"
 
 
 def _extract_year(publication_date: Any) -> str:
     s = str(publication_date or "").strip()
     m = re.search(r"\b(19|20)\d{2}\b", s)
     return m.group(0) if m else ""
-
-
-def _priority_score(fields: dict) -> float:
-    """
-    Calculate curation priority score (0-5 range).
-
-    Weights each field by its extraction confidence:
-    - PRESENT: weight = 1.0
-    - PARTIALLY_PRESENT: weight = 0.5
-    - ABSENT: weight = 0.0
-
-    Score = sum(weight × mapping_confidence) for each of 5 fields.
-    Higher scores = more promising candidates for curation.
-    """
-    field_keys = [
-        "host_species",
-        "body_site",
-        "condition",
-        "sequencing_type",
-        "sample_size",
-    ]
-    weights = {"PRESENT": 1.0, "PARTIALLY_PRESENT": 0.5, "ABSENT": 0.0}
-    score = 0.0
-
-    for key in field_keys:
-        field_data = fields.get(key, {})
-        status = str(field_data.get("status", "ABSENT")).strip().upper()
-        base_weight = weights.get(status, 0.0)
-
-        if base_weight == 0.0:
-            continue
-
-        # Get mapping confidence (default to 1.0 if not available)
-        try:
-            mapping_conf = float(field_data.get("mapping_confidence", 1.0))
-            mapping_conf = max(0.0, min(1.0, mapping_conf))  # Clamp to [0, 1]
-        except (TypeError, ValueError):
-            mapping_conf = 1.0
-
-        score += base_weight * mapping_conf
-
-    return round(score, 2)
 
 
 def render_results(
@@ -170,35 +122,29 @@ def _render_csv(results: List[Dict[str, Any]]) -> str:
 def _render_curator_desk_csv(
     results: List[Dict[str, Any]], *, include_header: bool = True
 ) -> str:
-    # Curator Desk spec §3.1 / §6.2: five prediction fields + ontology IDs + triage flags + priority.
+    # Simplified curator-desk schema (per Levi Waldron review): plain value +
+    # ontology ID per mapped field, no Status/Mapping-Confidence/Priority
+    # columns. The *_Ontology_Candidates columns are curator-picker metadata,
+    # not meant to be read as a visible table column (curator_table_r hides
+    # them from DISPLAY_COLUMNS but uses them to populate a mapping picker).
     columns = [
         "PMID",
+        "Year",
         "Title",
         "Journal",
-        "Year",
         "Host Species",
-        "Host Species ID",
-        "Host Species Status",
-        "Host Species Mapping Confidence",
+        "Host Species Ontology ID",
+        "Host Species Ontology Candidates",
         "Body Site",
-        "Body Site ID",
-        "Body Site Status",
-        "Body Site Mapping Confidence",
+        "Body Site Ontology ID",
+        "Body Site Ontology Candidates",
         "Condition",
-        "Condition ID",
-        "Condition Status",
-        "Condition Mapping Confidence",
-        "Sequencing Type",
-        "Sequencing Type Status",
-        "Sequencing Type Raw",
+        "Condition Ontology ID",
+        "Condition Ontology Candidates",
         "Sample Size",
-        "Sample Size Status",
-        "has_differential_abundance",
-        "differential_abundance_confidence",
-        "in_bugsigdb",
-        "Priority",
-        "Summary",
-        "Processing Time",
+        "Sequencing Type",
+        "Differential Abundance",
+        "In bsgdb",
     ]
     out = io.StringIO()
     w = csv.DictWriter(out, fieldnames=columns, extrasaction="ignore")
@@ -211,61 +157,33 @@ def _render_curator_desk_csv(
             continue
         seen.add(pmid)
         fields = r.get("fields", {}) or {}
-        try:
-            conf = f"{float(r.get('differential_abundance_confidence', 0.0)):.2f}"
-        except (TypeError, ValueError):
-            conf = "0.00"
-        try:
-            proc_time = f"{float(r.get('processing_time', 0.0)):.2f}"
-        except (TypeError, ValueError):
-            proc_time = "0.00"
         w.writerow(
             {
                 "PMID": pmid,
+                "Year": _extract_year(r.get("year") or r.get("publication_date", "")),
                 "Title": r.get("title", ""),
                 "Journal": r.get("journal", ""),
-                "Year": _extract_year(r.get("year") or r.get("publication_date", "")),
                 "Host Species": _field_val(fields, "host_species"),
-                "Host Species ID": _field_ontology_id(fields, "host_species"),
-                "Host Species Status": _status_normalise(
-                    _field_val(fields, "host_species", "status")
-                ),
-                "Host Species Mapping Confidence": _field_mapping_confidence(
+                "Host Species Ontology ID": _field_ontology_id(fields, "host_species"),
+                "Host Species Ontology Candidates": _field_ontology_candidates(
                     fields, "host_species"
                 ),
                 "Body Site": _field_val(fields, "body_site"),
-                "Body Site ID": _field_ontology_id(fields, "body_site"),
-                "Body Site Status": _status_normalise(
-                    _field_val(fields, "body_site", "status")
-                ),
-                "Body Site Mapping Confidence": _field_mapping_confidence(
+                "Body Site Ontology ID": _field_ontology_id(fields, "body_site"),
+                "Body Site Ontology Candidates": _field_ontology_candidates(
                     fields, "body_site"
                 ),
                 "Condition": _field_val(fields, "condition"),
-                "Condition ID": _field_ontology_id(fields, "condition"),
-                "Condition Status": _status_normalise(
-                    _field_val(fields, "condition", "status")
-                ),
-                "Condition Mapping Confidence": _field_mapping_confidence(
+                "Condition Ontology ID": _field_ontology_id(fields, "condition"),
+                "Condition Ontology Candidates": _field_ontology_candidates(
                     fields, "condition"
                 ),
-                "Sequencing Type": _field_val(fields, "sequencing_type"),
-                "Sequencing Type Status": _status_normalise(
-                    _field_val(fields, "sequencing_type", "status")
-                ),
-                "Sequencing Type Raw": _sequencing_type_raw(fields),
                 "Sample Size": _field_val(fields, "sample_size"),
-                "Sample Size Status": _status_normalise(
-                    _field_val(fields, "sample_size", "status")
-                ),
-                "has_differential_abundance": _bool_upper(
+                "Sequencing Type": _field_val(fields, "sequencing_type"),
+                "Differential Abundance": _bool_yes_no(
                     r.get("has_differential_abundance")
                 ),
-                "differential_abundance_confidence": conf,
-                "in_bugsigdb": _bool_upper(r.get("in_bugsigdb")),
-                "Priority": _priority_score(fields),
-                "Summary": r.get("curation_summary", ""),
-                "Processing Time": proc_time,
+                "In bsgdb": _bool_yes_no(r.get("in_bugsigdb")),
             }
         )
     return out.getvalue()

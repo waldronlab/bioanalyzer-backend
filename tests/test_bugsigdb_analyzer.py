@@ -146,6 +146,25 @@ class TestBuildFieldResultFromTerm:
         assert result["value"] == "Homo sapiens"
         assert result["ontology_id"] == "NCBITaxon:9606"
         assert result["confidence"] == 0.85
+        # Full-confidence dict match -> auto tier, no candidates needed.
+        assert result["mapping_tier"] == "auto"
+        assert result["mapping_candidates"] == []
+
+    def test_review_tier_surfaces_candidates(self):
+        from app.normalization.types import NormalizedTerm
+
+        term = NormalizedTerm(
+            label="Mus musculus",
+            ontology_id="NCBITaxon:10090",
+            status="PARTIALLY_PRESENT",
+            mapping_confidence=0.9,
+            candidates=(("Rattus norvegicus", "NCBITaxon:10116"),),
+        )
+        result = _build_field_result_from_term(term)
+        assert result["mapping_tier"] == "review"
+        assert result["mapping_candidates"] == [
+            {"label": "Rattus norvegicus", "ontology_id": "NCBITaxon:10116"}
+        ]
 
     def test_rejects_non_normalized_term(self):
         with pytest.raises(TypeError):

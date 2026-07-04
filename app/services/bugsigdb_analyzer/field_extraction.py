@@ -59,6 +59,8 @@ def _build_field_result(
         "reason_if_missing": (
             "" if status != "ABSENT" else "Information not found in the paper"
         ),
+        "mapping_tier": "none",
+        "mapping_candidates": [],
     }
 
 
@@ -69,6 +71,7 @@ def _build_field_result_from_term(term: Any) -> Dict[str, Any]:
     populated only by normalize_sequencing_type, e.g. when it falls back
     to "other") so the side-by-side original wording isn't lost.
     """
+    from app.normalization.grounding import TIER_AUTO, tier_for
     from app.normalization.types import NormalizedTerm
 
     if not isinstance(term, NormalizedTerm):
@@ -86,6 +89,13 @@ def _build_field_result_from_term(term: Any) -> Dict[str, Any]:
         mapping_confidence=term.mapping_confidence,
     )
     result["raw"] = term.raw
+    tier = tier_for(term)
+    result["mapping_tier"] = tier
+    result["mapping_candidates"] = (
+        [{"label": label, "ontology_id": oid} for label, oid in term.candidates]
+        if tier != TIER_AUTO
+        else []
+    )
     return result
 
 
@@ -434,10 +444,11 @@ def _resolve_diff_abundance(
     payload: Dict[str, Any], fallback_text: str
 ) -> Tuple[bool, float]:
     try:
-        return (
-            bool(payload.get("has_differential_abundance", False)),
-            float(payload.get("differential_abundance_confidence", 0.0)),
+        has_da = bool(payload.get("has_differential_abundance", False))
+        conf = max(
+            0.0, min(1.0, float(payload.get("differential_abundance_confidence", 0.0)))
         )
+        return has_da, conf
     except (TypeError, ValueError):
         return detect_differential_abundance(fallback_text)
 
@@ -462,6 +473,8 @@ def create_empty_field_result(field_name: str) -> Dict:
         "ontology_id": "",
         "mapping_confidence": 0.0,
         "reason_if_missing": "Analysis failed or timed out",
+        "mapping_tier": "none",
+        "mapping_candidates": [],
     }
 
 
