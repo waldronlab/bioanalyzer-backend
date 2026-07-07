@@ -18,22 +18,27 @@ bugsigdb_analyzer.py emits a result dict whose `fields` key holds exactly:
         "taxa_level":       FieldResult,   # present in API; hidden in curator table
     }
 
-data.R / normalize_dataset() flattens those into the curator table columns:
+scripts/cli_rendering.py::_render_curator_desk_csv (see
+docs/CURATOR_DESK_CSV_FORMAT.md) flattens those into the curator-desk CSV
+columns consumed by curator_table_r / curator_table/app.py:
 
-    Host Species          <- fields.host_species.value
-    Host Species Status   <- fields.host_species.status
-    Body Site             <- fields.body_site.value
-    Body Site Status      <- fields.body_site.status
-    Condition             <- fields.condition.value
-    Condition Status      <- fields.condition.status
-    Sequencing Type       <- fields.sequencing_type.value
-    Sequencing Type Status <- fields.sequencing_type.status
-    Sample Size           <- fields.sample_size.value
-    Sample Size Status    <- fields.sample_size.status
-    has_differential_abundance
-    differential_abundance_confidence
-    in_bugsigdb
-    Priority
+    Host Species                     <- fields.host_species.value
+    Host Species Ontology ID         <- fields.host_species.ontology_id
+    Host Species Ontology Candidates <- fields.host_species.mapping_candidates
+                                         (only when mapping_tier != "auto")
+    Body Site / Body Site Ontology ID / Body Site Ontology Candidates       <- fields.body_site.*
+    Condition / Condition Ontology ID / Condition Ontology Candidates       <- fields.condition.*
+    Sequencing Type                  <- fields.sequencing_type.value
+    Sample Size                      <- fields.sample_size.value
+    Differential Abundance           <- has_differential_abundance
+    In bsgdb                         <- in_bugsigdb
+
+Per-field status/confidence/mapping_confidence are still populated on every
+FieldResult (and still drive mapping_tier's auto/review/none classification,
+see app.normalization.grounding), but are no longer part of the curator-desk
+CSV - they remain available via the separate, unchanged `--format csv`
+export. taxa_level is never in the curator-desk CSV and is no longer
+requested from the LLM.
 
 Every model here mirrors that contract so that the agent orchestrator and
 the simple analyzer produce structurally identical outputs.

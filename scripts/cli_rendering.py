@@ -1,9 +1,17 @@
 #!/usr/bin/env python3
-"""Output rendering for the BioAnalyzer CLI (table/csv/curator_desk_csv/xml/json).
+"""Output rendering for the BioAnalyzer CLI (table/csv/detailed_csv/xml/json).
 
 Split out of scripts/cli.py: this module is pure formatting logic over
 already-computed analysis/retrieval results, with no argument parsing or
 network/service calls of its own.
+
+`--format csv` (and its long-form alias `curator_desk_csv`) is THE canonical,
+curator-facing CSV shape - the one that matches curator_table_r/curator_table
+exactly (see docs/CURATOR_DESK_CSV_FORMAT.md). `--format detailed_csv` is a
+separate, older, Status-inclusive shape over all 6 ANALYSIS_FIELDS (including
+Taxa Level) kept only for internal validation tooling
+(scripts/eval/confusion_matrix_analysis.py) - it is deliberately NOT what
+`--format csv` produces, precisely to avoid the two being confused.
 """
 
 from __future__ import annotations
@@ -63,10 +71,12 @@ def render_results(
 ) -> str:
     if fmt == "json":
         return json.dumps(results, indent=2, ensure_ascii=False)
-    if fmt == "csv":
-        return _render_csv(results)
-    if fmt == "curator_desk_csv":
+    # "csv" and "curator_desk_csv" are the same output - the curator-facing
+    # schema matching curator_table_r/curator_table (see module docstring).
+    if fmt in ("csv", "curator_desk_csv"):
         return _render_curator_desk_csv(results, include_header=include_header)
+    if fmt == "detailed_csv":
+        return _render_detailed_csv(results)
     if fmt == "xml":
         return _render_xml(results)
     return _render_table(results)
@@ -101,7 +111,9 @@ def _render_table(results: List[Dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
-def _render_csv(results: List[Dict[str, Any]]) -> str:
+def _render_detailed_csv(results: List[Dict[str, Any]]) -> str:
+    """Older, Status-inclusive CSV over all 6 ANALYSIS_FIELDS (incl. Taxa
+    Level) - only for internal validation tooling, see module docstring."""
     out = io.StringIO()
     w = csv.writer(out)
     headers = ["PMID", "Title", "Journal"]

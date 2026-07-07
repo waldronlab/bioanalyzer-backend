@@ -17,27 +17,27 @@
 
 ## 2. Minimum Fields in the Table
 
-Suggested **minimum columns** for the sortable table:
+> **Note:** this section originally proposed a Status-per-field + confidence
+> design. The table actually implemented (per Levi Waldron's review) is
+> simpler — plain values plus an ontology ID for the three ontology-mapped
+> fields, no Status/Priority/Confidence columns. **`docs/CURATOR_DESK_CSV_FORMAT.md`
+> is the authoritative, current column spec** — the table below reflects it.
 
 | Column | Source | Notes |
 |--------|--------|--------|
 | **PMID** | BioAnalyzer / PubMed | Link to `https://pubmed.ncbi.nlm.nih.gov/{PMID}` |
-| **Title** | PubMed / BioAnalyzer | For quick scanning |
 | **Year** | PubMed (publication_date) | For sorting/filtering |
+| **Title** | PubMed / BioAnalyzer | For quick scanning |
 | **Journal** | PubMed / BioAnalyzer | Optional but useful |
-| **Host Species** | BioAnalyzer | Status + value |
-| **Body Site** | BioAnalyzer | Status + value |
-| **Condition** | BioAnalyzer | Status + value |
-| **Sequencing Type** | BioAnalyzer | Status + value |
-| **Taxa Level** | BioAnalyzer | Status + value |
-| **Sample Size** | BioAnalyzer | Status + value |
-| **Confidence** | BioAnalyzer | e.g. average or min across fields |
-| **Curation summary** | BioAnalyzer | One-line readiness summary |
-| **Evidence snippet** (optional) | BioAnalyzer | Short quote per field if we store it; can add later |
+| **Host Species** (+ **Ontology ID** / **Ontology Candidates**) | BioAnalyzer | Value + NCBITaxon ID; candidates populated only when the mapping needs curator review |
+| **Body Site** (+ **Ontology ID** / **Ontology Candidates**) | BioAnalyzer | Value + UBERON ID |
+| **Condition** (+ **Ontology ID** / **Ontology Candidates**) | BioAnalyzer | Value + EFO ID |
+| **Sample Size** | BioAnalyzer | Value only - no ontology |
+| **Sequencing Type** | BioAnalyzer | Value only - BugSigDB controlled vocab, not an external ontology |
+| **Differential Abundance** | BioAnalyzer | `Yes` / `No` |
+| **In bsgdb** | BioAnalyzer | `Yes` / `No` - already present in BugSigDB |
 
-**Status values:** `PRESENT` / `PARTIALLY_PRESENT` / `ABSENT` (same as validation).
-
-We can start with **PMID, Title, Year, Journal, the 6 field statuses, and one confidence score**, then add evidence snippets in a second iteration if curators want them.
+Taxa Level is tracked internally by BioAnalyzer's API but is never a curator-table column - curators assign it directly during BugSigDB curation.
 
 ---
 
@@ -77,7 +77,7 @@ We can start with **PMID, Title, Year, Journal, the 6 field statuses, and one co
 1. **Define CSV/Parquet schema** for “predictions table” export (from BioAnalyzer batch or from existing validation CSVs).  
 2. **Build Streamlit app** that:
    - Loads one or more prediction files (CSV/Parquet).
-   - Shows a **sortable, searchable** table (PMID, title, year, journal, 6 statuses, confidence, summary).  
+   - Shows a **sortable, searchable** table (PMID, title, year, journal, the 5 value fields + 3 ontology IDs, differential abundance, BugSigDB status - see §2 above).  
    - Links PMID to PubMed.  
    - Optional: **curator feedback** (Correct / Incorrect / Uncertain) stored in a separate file/table.  
 3. **Document** how to run a batch (CLI or API) and export the result into the format the table expects.  

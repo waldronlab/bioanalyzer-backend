@@ -2,6 +2,7 @@ import csv
 import io
 
 from scripts.cli import BioAnalyzerCLI
+from scripts.cli_rendering import render_results
 
 
 def test_curator_desk_csv_header_and_core_fields():
@@ -138,3 +139,51 @@ def test_curator_desk_csv_ontology_candidates_only_shown_when_not_auto():
         == "Rattus norvegicus|NCBITaxon:10116"
     )
     assert rows["2"]["Host Species Ontology Candidates"] == ""
+
+
+def test_format_csv_is_an_alias_for_curator_desk_csv():
+    """`--format csv` must be THE curator-facing schema, not a different,
+    older format - this is the exact confusion (predictions.csv not matching
+    curator_table_r's columns) that motivated collapsing the two names."""
+    results = [
+        {
+            "pmid": "42",
+            "title": "T",
+            "journal": "J",
+            "fields": {
+                "host_species": {
+                    "value": "Homo sapiens",
+                    "status": "PRESENT",
+                    "ontology_id": "NCBITaxon:9606",
+                    "mapping_confidence": 1.0,
+                    "mapping_tier": "auto",
+                    "mapping_candidates": [],
+                },
+            },
+        }
+    ]
+    assert render_results(results, "csv") == render_results(results, "curator_desk_csv")
+    csv_cols = next(csv.DictReader(io.StringIO(render_results(results, "csv")))).keys()
+    assert "Host Species Ontology ID" in csv_cols
+    assert "Host Species Status" not in csv_cols
+
+
+def test_format_detailed_csv_is_the_separate_status_inclusive_export():
+    """--format detailed_csv is the older, distinct format kept only for
+    scripts/eval/confusion_matrix_analysis.py - it must NOT match --format csv."""
+    results = [
+        {
+            "pmid": "42",
+            "title": "T",
+            "journal": "J",
+            "fields": {
+                "host_species": {"value": "Homo sapiens", "status": "PRESENT"},
+                "taxa_level": {"value": "genus", "status": "PRESENT"},
+            },
+        }
+    ]
+    detailed = render_results(results, "detailed_csv")
+    row = next(csv.DictReader(io.StringIO(detailed)))
+    assert row["Host Species Status"] == "PRESENT"
+    assert row["Taxa Level"] == "genus"
+    assert detailed != render_results(results, "csv")

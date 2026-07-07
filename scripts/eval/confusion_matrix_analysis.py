@@ -7,12 +7,12 @@ Following guidance from Levi Waldron:
 - Hold off on MCC calculations for now (will help inform whether "partially present"
   is more likely to be present or absent by comparison to gold standard reference)
 
-Predictions input must be generated with `--format csv` (the plain,
-Status-inclusive export over all ANALYSIS_FIELDS), not `--format
-curator_desk_csv` — the latter is the simplified, curator-facing schema
-(Host Species/Body Site/Condition/Sample Size/Sequencing Type/Differential
-Abundance/In bsgdb) and no longer carries per-field PRESENT/PARTIALLY_PRESENT/
-ABSENT Status columns, which this script requires.
+Predictions input must be generated with `--format detailed_csv` (the
+Status-inclusive export over all ANALYSIS_FIELDS), not `--format csv` (nor
+its `curator_desk_csv` alias) — those are the simplified, curator-facing
+schema (Host Species/Body Site/Condition/Sample Size/Sequencing Type/
+Differential Abundance/In bsgdb) and no longer carry per-field
+PRESENT/PARTIALLY_PRESENT/ABSENT Status columns, which this script requires.
 """
 
 from pathlib import Path

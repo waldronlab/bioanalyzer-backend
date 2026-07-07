@@ -50,7 +50,8 @@ COMPOSE_PROJECT_NAME = "bioanalyzer-package"
 
 
 def _read_existing_pmids(path: Path) -> set:
-    """Return the set of PMIDs already present in a curator_desk_csv file.
+    """Return the set of PMIDs already present in a curator-desk CSV file
+    (--format csv / curator_desk_csv).
 
     The output file IS the de-duplication manifest: there's no separate
     persisted state to drift out of sync with it. Deleting the file simply
@@ -433,8 +434,14 @@ class BioAnalyzerCLI:
             ],
             capture_output=True,
             text=True,
-            check=True,
         )
+        if result.returncode != 0:
+            # subprocess.CalledProcessError's default str() omits stderr, which
+            # hides the actual pandas/Python error - raise with it included.
+            raise RuntimeError(
+                f"Failed to read Excel file in container: "
+                f"{result.stderr.strip() or result.stdout.strip()}"
+            )
         return json.loads(result.stdout.strip())
 
     def get_curator_desk_csv_content(self, results: List[Dict[str, Any]]) -> str:
@@ -497,6 +504,53 @@ class BioAnalyzerCLI:
     # Analysis commands
     # ------------------------------------------------------------------
 
+    def _fetch_analysis(
+        self,
+        pmid: str,
+        refresh: bool,
+        request_timeout: int,
+        *,
+        retry_wait: float = 5.0,
+    ):
+        """GET /api/v1/analyze/{pmid}, waiting out the API's own 60-req/min
+        rate limiter (app/api/middleware/rate_limit.py) instead of treating
+        a 429 as a permanent failure. Retries on 429 are unbounded by design
+        (a batch of any size - even far more than 60 PMIDs - should always
+        run to completion, just pausing whenever it hits the cap) since 429
+        is a distinct, reliable signal here: it can no longer be confused
+        with a genuine server error now that the rate-limit middleware
+        returns it directly instead of via `raise HTTPException` (which used
+        to get silently flattened into a 500 by the app's catch-all handler,
+        see app/api/middleware/rate_limit.py). Any other error status still
+        fails immediately, same as before.
+
+        Returns (result_dict, None) on success, or (None, error_message).
+        """
+        attempt = 0
+        while True:
+            try:
+                r = requests.get(
+                    f"http://localhost:8000/api/v1/analyze/{pmid}",
+                    params={"refresh": "true"} if refresh else None,
+                    timeout=request_timeout,
+                )
+            except Exception as e:
+                return None, str(e)
+            if r.status_code == 200:
+                return r.json(), None
+            if r.status_code == 429:
+                attempt += 1
+                print(
+                    f"   ⏳ Rate limited, waiting {retry_wait:.0f}s before retry ({attempt})..."
+                )
+                time.sleep(retry_wait)
+                continue
+            try:
+                detail = r.json().get("detail", "Unknown error")
+            except Exception:
+                detail = f"HTTP {r.status_code}"
+            return None, detail
+
     async def analyze_papers(
         self,
         pmids: List[str],
@@ -506,15 +560,16 @@ class BioAnalyzerCLI:
     ):
         request_timeout = int(os.getenv("BIOANALYZER_ANALYZE_TIMEOUT", "180"))
 
-        # Cumulative output: when re-running against the same curator_desk_csv
-        # file, skip both re-analysis and re-emission for PMIDs it already
-        # contains. The file itself is the de-duplication manifest — there is
-        # no separate state to drift out of sync with it, so deleting the
-        # file simply starts a clean slate on the next run. --refresh bypasses
-        # this (and overwrites, like before) for an intentional full redo.
+        # Cumulative output: when re-running against the same curator-desk CSV
+        # file (--format csv or its curator_desk_csv alias), skip both
+        # re-analysis and re-emission for PMIDs it already contains. The file
+        # itself is the de-duplication manifest — there is no separate state
+        # to drift out of sync with it, so deleting the file simply starts a
+        # clean slate on the next run. --refresh bypasses this (and
+        # overwrites, like before) for an intentional full redo.
         append_mode = False
         out_path = Path(output_file) if output_file else None
-        if fmt == "curator_desk_csv" and out_path is not None and not refresh:
+        if fmt in ("csv", "curator_desk_csv") and out_path is not None and not refresh:
             already_emitted = _read_existing_pmids(out_path)
             if already_emitted:
                 skipped = [p for p in pmids if p in already_emitted]
@@ -534,19 +589,12 @@ class BioAnalyzerCLI:
         print(f"🔬 Analysing {total} paper(s)...")
         for i, pmid in enumerate(pmids, 1):
             print(f"[{i}/{total}] PMID: {pmid}")
-            try:
-                r = requests.get(
-                    f"http://localhost:8000/api/v1/analyze/{pmid}",
-                    params={"refresh": "true"} if refresh else None,
-                    timeout=request_timeout,
-                )
-                if r.status_code == 200:
-                    results.append(r.json())
-                    print("✅ Done")
-                else:
-                    print(f"❌ {r.json().get('detail', 'Unknown error')}")
-            except Exception as e:
-                print(f"❌ {e}")
+            data, err = self._fetch_analysis(pmid, refresh, request_timeout)
+            if data is not None:
+                results.append(data)
+                print("✅ Done")
+            else:
+                print(f"❌ {err}")
         if not results:
             print("❌ No results obtained.")
             return
@@ -951,16 +999,23 @@ class BioAnalyzerCLI:
   build / start / stop / restart / status
   run table [--port N]
   search [--preset discovery|broad|precision] [-n N] [-o FILE] [--query Q]
-  analyze <pmid|pmids>  [--file F] [--format table|json|csv|curator_desk_csv|xml] [-o FILE]
+  analyze <pmid|pmids>  [--file F] [--format table|json|csv|detailed_csv|xml] [-o FILE]
   analyze-url <url>     [--file F] [--format table|json] [-o FILE]
   retrieve <pmid|pmids> [--file F] [--format table|json|csv] [-o FILE] [--save]
   qa [question]         [--interactive]
   fields
   settings view|save|load|preset|migrate
 
+  --format csv is the curator-facing CSV matching curator_table_r/
+  curator_table exactly (curator_desk_csv is an accepted alias for the same
+  thing). --format detailed_csv is a separate, older format with a full
+  PRESENT/PARTIALLY_PRESENT/ABSENT status per field, for validation tooling
+  only (see scripts/eval/confusion_matrix_analysis.py) - not what you want
+  for the curator table.
+
 📖 Examples
   BioAnalyzer search --preset discovery -n 50 -o pmids.txt
-  BioAnalyzer analyze --file pmids.txt --format curator_desk_csv -o predictions.csv
+  BioAnalyzer analyze --file pmids.txt --format csv -o predictions.csv
   BioAnalyzer analyze 12345678
   BioAnalyzer analyze --file PMID.xls --format csv -o results.csv
   BioAnalyzer analyze-url https://example.com/study
@@ -1011,7 +1066,7 @@ def _build_parser() -> argparse.ArgumentParser:
     an.add_argument("--file", "-f")
     an.add_argument(
         "--format",
-        choices=["table", "json", "csv", "curator_desk_csv", "xml"],
+        choices=["table", "json", "csv", "curator_desk_csv", "detailed_csv", "xml"],
         default="table",
     )
     an.add_argument("--output", "-o")

@@ -15,20 +15,22 @@ bugsigdb_analyzer.analyze_paper_simple(), which means:
   - the cache_manager can store it unchanged
   - the curator table will display the correct columns with correct names
 
-Field name mapping (Python → curator table column)
-  fields["host_species"]["value"]    → Host Species
-  fields["host_species"]["status"]   → Host Species Status
-  fields["body_site"]["value"]       → Body Site
-  fields["body_site"]["status"]      → Body Site Status
-  fields["condition"]["value"]       → Condition
-  fields["condition"]["status"]      → Condition Status
-  fields["sequencing_type"]["value"] → Sequencing Type
-  fields["sequencing_type"]["status"]→ Sequencing Type Status
-  fields["sample_size"]["value"]     → Sample Size
-  fields["sample_size"]["status"]    → Sample Size Status
-  has_differential_abundance         → has_differential_abundance
-  differential_abundance_confidence  → differential_abundance_confidence
-  in_bugsigdb                        → in_bugsigdb
+Field name mapping (Python → curator-desk CSV column, see
+docs/CURATOR_DESK_CSV_FORMAT.md)
+  fields["host_species"]["value"]        → Host Species
+  fields["host_species"]["ontology_id"]  → Host Species Ontology ID
+  fields["body_site"]["value"]           → Body Site
+  fields["body_site"]["ontology_id"]     → Body Site Ontology ID
+  fields["condition"]["value"]           → Condition
+  fields["condition"]["ontology_id"]     → Condition Ontology ID
+  fields["sequencing_type"]["value"]     → Sequencing Type
+  fields["sample_size"]["value"]         → Sample Size
+  has_differential_abundance             → Differential Abundance
+  in_bugsigdb                            → In bsgdb
+
+Per-field status/mapping_confidence still feed `mapping_tier` (auto/review/
+none, see app.normalization.grounding) but are not curator-desk CSV columns
+themselves; they remain available via the separate `--format csv` export.
 """
 
 import asyncio

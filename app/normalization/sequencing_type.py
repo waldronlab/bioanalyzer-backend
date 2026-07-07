@@ -64,9 +64,10 @@ def normalize_sequencing_type(raw_text: str) -> NormalizedTerm:
     A value that doesn't match any known phrasing still resolves to a
     vocabulary member ("other") rather than leaking free text into the
     "Sequencing Type" column — the original wording is preserved on
-    `.raw` for callers that want to keep it (e.g. a "Sequencing Type Raw"
-    side column). PARTIALLY_PRESENT is reserved for genuinely ambiguous
-    multi-method mentions, not the "other" catch-all.
+    `.raw` for callers that want it (not currently exported as its own
+    curator-desk CSV column, but still available in the API's FieldDict).
+    PARTIALLY_PRESENT is reserved for genuinely ambiguous multi-method
+    mentions, not the "other" catch-all.
     """
     if not raw_text or raw_text.strip() == "":
         return NormalizedTerm.absent()

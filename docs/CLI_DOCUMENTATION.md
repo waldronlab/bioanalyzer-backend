@@ -303,21 +303,32 @@ BioAnalyzer analyze 12345678
 BioAnalyzer analyze 12345678 --format json
 ```
 
-**CSV Format:**
+**CSV Format (curator-facing, matches `curator_table`/`curator_table_r`):**
+
+A fixed-schema CSV for handing off predictions to the `curator_table`/
+`curator_table_r` review tools - 5 value fields (Host Species, Body Site,
+Condition, Sample Size, Sequencing Type; Taxa Level is intentionally
+excluded), plus an Ontology ID for the first three, plus Differential
+Abundance and In bsgdb. See [CURATOR_DESK_CSV_FORMAT.md](CURATOR_DESK_CSV_FORMAT.md)
+for the full column list and contract. Always deduplicated by PMID.
+
 ```bash
 BioAnalyzer analyze 12345678 --format csv
+BioAnalyzer analyze --file pmids.txt --format csv -o predictions.csv
 ```
 
-**Curator Desk CSV Format:**
+`--format curator_desk_csv` is an accepted alias for the exact same output
+(kept for older scripts/docs) - there is no difference between the two.
 
-A fixed-schema CSV specifically for handing off predictions to the
-`curator_table`/`curator_table_r` review tools - 5 prediction fields (Taxa
-Level is intentionally excluded; see
-[CURATOR_DESK_CSV_FORMAT.md](CURATOR_DESK_CSV_FORMAT.md) for the full
-column list and contract), ontology IDs, mapping confidence, and a
-computed priority score. Always deduplicated by PMID.
+**Detailed CSV Format (validation tooling only):**
+
+A separate, older CSV covering all 6 fields (including Taxa Level) with a
+full `PRESENT`/`PARTIALLY_PRESENT`/`ABSENT` status per field. This is *not*
+what `curator_table`/`curator_table_r` expect - it exists only for internal
+validation scripts (e.g. `scripts/eval/confusion_matrix_analysis.py`).
+
 ```bash
-BioAnalyzer analyze --file pmids.txt --format curator_desk_csv -o predictions.csv
+BioAnalyzer analyze 12345678 --format detailed_csv
 ```
 
 **XML Format:**

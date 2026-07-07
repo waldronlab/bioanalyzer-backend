@@ -22,15 +22,13 @@ def _current_timestamp() -> str:
 # Canonical field keys — single source of truth
 # ---------------------------------------------------------------------------
 
-# These are the keys used inside result["fields"].
-# data.R / normalize_dataset() maps them to display columns as follows:
-#   snake_case key           → Title Case display name    / Title Case Status col
-#   "host_species"           → "Host Species"             / "Host Species Status"
-#   "body_site"              → "Body Site"                / "Body Site Status"
-#   "condition"              → "Condition"                / "Condition Status"
-#   "sequencing_type"        → "Sequencing Type"          / "Sequencing Type Status"
-#   "sample_size"            → "Sample Size"              / "Sample Size Status"
-#   "taxa_level"             → hidden in curator table, present in API response
+# These are the keys used inside result["fields"]. The curator-desk CSV
+# (scripts/cli_rendering.py::_render_curator_desk_csv, see
+# docs/CURATOR_DESK_CSV_FORMAT.md) surfaces "host_species"/"body_site"/
+# "condition"/"sequencing_type"/"sample_size" as plain value columns (plus an
+# Ontology ID/Candidates pair for the first three); "taxa_level" is API-only
+# (never in the curator-desk CSV, and no longer requested from the LLM -
+# curators assign it during manual curation).
 FIELD_KEYS: Tuple[str, ...] = (
     "host_species",
     "body_site",
@@ -40,8 +38,11 @@ FIELD_KEYS: Tuple[str, ...] = (
     "taxa_level",
 )
 
-# STATUS_COLUMNS (as used inside the R layer for colour-coding / filtering)
-# Kept here for reference; the R layer defines its own equivalent.
+# STATUS_COLUMNS: the 6 fields' internal PRESENT/PARTIALLY_PRESENT/ABSENT
+# status keys. No longer surfaced in the curator-desk CSV/curator_table_r/
+# curator_table (which use VALUE_COLUMNS/ONTOLOGY_ID_COLUMNS instead) - still
+# computed internally per field and used by the older, Status-inclusive
+# `--format csv` export (see scripts/eval/confusion_matrix_analysis.py).
 STATUS_COLUMNS: Tuple[str, ...] = (
     "Host Species Status",
     "Body Site Status",

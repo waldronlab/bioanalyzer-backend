@@ -14,8 +14,13 @@ RUN pip install --upgrade pip setuptools wheel
 COPY requirements.txt ./requirements.txt
 COPY pyproject.toml setup.py README.md ./
 
-# Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+# Install Python dependencies. --timeout/--retries: this layer resolves and
+# downloads ~40 packages including multi-hundred-MB torch wheels; on a slow
+# or lossy network pip's default 15s read-timeout can time out mid-download
+# and get misreported as an unrelated "no matching distribution" resolver
+# error rather than a plain network failure - these flags make it retry
+# instead of giving up.
+RUN pip install --no-cache-dir --timeout 120 --retries 10 -r requirements.txt
 
 # Copy application code
 COPY app ./app

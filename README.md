@@ -6,7 +6,7 @@
 [![Docker](https://img.shields.io/badge/Docker-20.0+-blue.svg)](https://docker.com)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-Extracts five core BugSigDB curation fields from scientific papers using LLMs. Pulls metadata and full text from PubMed/PMC, then analyzes papers to determine if they're ready for curation.
+Extracts five core BugSigDB curation fields from scientific papers using LLMs, plus ontology mappings (NCBITaxon/UBERON/EFO) for the three that have one. Pulls metadata and full text from PubMed/PMC, then analyzes papers to determine if they're ready for curation.
 
 Works on Ubuntu with Docker. Python 3.8+ for local installs.
 
@@ -15,13 +15,17 @@ Works on Ubuntu with Docker. Python 3.8+ for local installs.
 ## What It Does
 
 Takes a PMID, fetches the paper from PubMed, and extracts:
-1. Host Species (Human, Mouse, etc.)
-2. Body Site (Gut, Oral, Skin, etc.)
-3. Condition (disease/treatment being studied)
+1. Host Species (Human, Mouse, etc.) — mapped to NCBITaxon
+2. Body Site (Gut, Oral, Skin, etc.) — mapped to UBERON
+3. Condition (disease/treatment being studied) — mapped to EFO
 4. Sequencing Type (16S, metagenomics, etc.)
 5. Sample Size (number of samples/participants)
 
-Each field gets a status: `PRESENT`, `PARTIALLY_PRESENT`, or `ABSENT`, plus a confidence score.
+...plus whether the paper reports differential abundance and whether it's
+already in BugSigDB. Each field's PRESENT/PARTIALLY_PRESENT/ABSENT status,
+confidence, and ontology-mapping tier (auto-applied vs. needs curator review)
+are computed internally and used to build the curator-facing output; see
+`docs/CURATOR_DESK_CSV_FORMAT.md` for the exact export format.
 
 ## Quick Start
 
