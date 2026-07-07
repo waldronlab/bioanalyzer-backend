@@ -64,7 +64,9 @@ def normalize_body_site(raw_text: str) -> NormalizedTerm:
         return NormalizedTerm(label, uberon_id, "PRESENT", 1.0)
     if len(matched) > 1:
         label, uberon_id = matched[0]
-        return NormalizedTerm(label, uberon_id, "PARTIALLY_PRESENT", 0.9)
+        return NormalizedTerm(
+            label, uberon_id, "PARTIALLY_PRESENT", 0.9, candidates=tuple(matched[1:3])
+        )
 
     hit = ols_search(raw_text.strip(), "uberon", "UBERON", mapping_confidence=0.9)
     if hit:

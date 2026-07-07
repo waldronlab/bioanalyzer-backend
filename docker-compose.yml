@@ -28,6 +28,8 @@ services:
       retries: 5
       start_period: 40s
     restart: unless-stopped
+    sysctls:
+      - net.ipv6.conf.all.disable_ipv6=1
     networks:
       - bioanalyzer-net
 

@@ -418,6 +418,36 @@ def test_body_site_multiple_matches_is_partially_present():
     # first match in dict iteration order wins - just confirm it's one of
     # the two genuinely-matched pairs, not a third unrelated one.
     assert t.label in ("feces", "saliva")
+    # the runner-up match is surfaced as a candidate for curator review
+    assert len(t.candidates) >= 1
+    assert t.label not in (c[0] for c in t.candidates)
+
+
+def test_condition_two_distinct_conditions_surfaces_candidate():
+    t = normalize_condition("comorbid obesity and type 2 diabetes cohort")
+    assert t.status == "PARTIALLY_PRESENT"
+    assert t.label in ("obesity", "type 2 diabetes mellitus")
+    assert len(t.candidates) >= 1
+    assert t.label not in (c[0] for c in t.candidates)
+
+
+def test_condition_overlapping_keys_for_same_disease_stay_unambiguous():
+    # "diabetes" is a substring of "type 2 diabetes" - this is one mention
+    # at two specificities, not two distinct conditions, so it must not be
+    # flagged as ambiguous (this was a real regression risk when adding
+    # candidate surfacing).
+    t = normalize_condition("type 2 diabetes cohort")
+    assert t.status == "PRESENT"
+    assert t.label == "type 2 diabetes mellitus"
+    assert t.candidates == ()
+
+
+def test_host_species_multiple_matches_surfaces_candidates():
+    t = normalize_host_species("mice and rats were studied")
+    assert t.status == "PARTIALLY_PRESENT"
+    assert t.label in ("Mus musculus", "Rattus norvegicus")
+    assert len(t.candidates) >= 1
+    assert t.label not in (c[0] for c in t.candidates)
 
 
 def test_body_site_ols_fallback_success(monkeypatch):

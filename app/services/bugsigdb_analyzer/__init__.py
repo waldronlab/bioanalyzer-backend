@@ -23,16 +23,20 @@ normalize_dataset() and the curator desk depend on this shape.
     analysis_timestamp               str   (ISO-8601)
     model_used                       str
 
-fields keys  →  curator table column pair
------------------------------------------
-  "host_species"    →  "Host Species"       /  "Host Species Status"
-  "body_site"       →  "Body Site"          /  "Body Site Status"
-  "condition"       →  "Condition"          /  "Condition Status"
-  "sequencing_type" →  "Sequencing Type"    /  "Sequencing Type Status"
-                       (+ "raw"             →  "Sequencing Type Raw" when it
-                        differs from the normalized value, e.g. "other")
-  "sample_size"     →  "Sample Size"        /  "Sample Size Status"
-  "taxa_level"      →  (hidden in curator table, present in API)
+fields keys  →  curator-desk CSV column (see docs/CURATOR_DESK_CSV_FORMAT.md)
+------------------------------------------------------------------------------
+  "host_species"    →  "Host Species"  (+ "Host Species Ontology ID"/"...Candidates")
+  "body_site"       →  "Body Site"     (+ "Body Site Ontology ID"/"...Candidates")
+  "condition"       →  "Condition"     (+ "Condition Ontology ID"/"...Candidates")
+  "sequencing_type" →  "Sequencing Type"  (no ontology - controlled vocab)
+  "sample_size"     →  "Sample Size"      (no ontology - numeric)
+  "taxa_level"      →  API-only; never in the curator-desk CSV, and no longer
+                        asked of the LLM (curators assign it during curation)
+
+Per-field PRESENT/PARTIALLY_PRESENT/ABSENT status and mapping confidence are
+still computed for all 6 fields (used to derive `mapping_tier` below and to
+build the older, Status-inclusive `--format csv` export), but are no longer
+part of the curator-desk CSV/curator_table_r/curator_table's columns.
 
 Each FieldDict has:
     value               str
@@ -43,6 +47,9 @@ Each FieldDict has:
     reason_if_missing   str
     raw                 str   (pre-normalization text; "" unless set by
                                 the field's normalizer, e.g. sequencing_type)
+    mapping_tier        "auto" | "review" | "none"  (see app.normalization.grounding)
+    mapping_candidates  list of {"label", "ontology_id"}; populated only
+                                when mapping_tier != "auto"
 """
 
 from app.models.unified_qa import UnifiedQA

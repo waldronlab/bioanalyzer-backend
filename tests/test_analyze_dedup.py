@@ -66,7 +66,69 @@ def test_second_run_skips_already_emitted_pmids(tmp_path, monkeypatch):
     rows = _rows(out_path)
     assert [r["PMID"] for r in rows] == ["1", "2", "3"]
     # Exactly one header line, even after the append.
-    assert out_path.read_text().count("PMID,Title") == 1
+    assert out_path.read_text().count("PMID,Year,Title") == 1
+
+
+def test_second_run_skips_already_emitted_pmids_with_plain_csv_format(
+    tmp_path, monkeypatch
+):
+    """fmt="csv" must get the same dedup/append treatment as its
+    "curator_desk_csv" alias - both produce the identical output file, so
+    the manifest logic can't only trigger on the literal "curator_desk_csv"
+    string (that was a real bug: --format csv silently overwrote instead of
+    appending/deduping)."""
+    out_path = tmp_path / "predictions.csv"
+    cli = BioAnalyzerCLI()
+
+    call_log = []
+
+    def fake_get(url, params=None, timeout=None):
+        pmid = url.rsplit("/", 1)[-1]
+        call_log.append(pmid)
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.json.return_value = _fake_analysis(pmid)
+        return resp
+
+    monkeypatch.setattr("scripts.cli.requests.get", fake_get)
+
+    asyncio.run(cli.analyze_papers(["1", "2"], fmt="csv", output_file=str(out_path)))
+    call_log.clear()
+    asyncio.run(cli.analyze_papers(["2", "3"], fmt="csv", output_file=str(out_path)))
+    assert call_log == ["3"]
+    assert [r["PMID"] for r in _rows(out_path)] == ["1", "2", "3"]
+
+
+def test_rate_limited_pmid_is_retried_instead_of_dropped(tmp_path, monkeypatch):
+    """A 429 from the API's own rate limiter must be waited out and
+    retried, not treated as a permanent failure (real bug: a batch that
+    burst past the 60/min cap - e.g. via fast cache hits - would otherwise
+    fail every remaining PMID for the rest of the run)."""
+    out_path = tmp_path / "predictions.csv"
+    cli = BioAnalyzerCLI()
+
+    sleeps = []
+    monkeypatch.setattr("scripts.cli.time.sleep", lambda s: sleeps.append(s))
+
+    call_count = {"n": 0}
+
+    def fake_get(url, params=None, timeout=None):
+        call_count["n"] += 1
+        resp = MagicMock()
+        if call_count["n"] <= 2:
+            resp.status_code = 429
+            resp.json.return_value = {"detail": "Rate limit exceeded."}
+        else:
+            resp.status_code = 200
+            resp.json.return_value = _fake_analysis("1")
+        return resp
+
+    monkeypatch.setattr("scripts.cli.requests.get", fake_get)
+
+    asyncio.run(cli.analyze_papers(["1"], fmt="csv", output_file=str(out_path)))
+    assert call_count["n"] == 3
+    assert len(sleeps) == 2
+    assert [r["PMID"] for r in _rows(out_path)] == ["1"]
 
 
 def test_nothing_new_skips_network_entirely(tmp_path, monkeypatch):

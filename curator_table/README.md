@@ -35,28 +35,32 @@ streamlit run app.py
 
 ## Data format
 
-The app expects a **CSV or Parquet** file with at least:
+The app expects a **CSV or Parquet** file (BioAnalyzer's `curator_desk_csv`
+export - see `docs/CURATOR_DESK_CSV_FORMAT.md`) with at least:
 
 - **PMID** (required)
 - **Title** (recommended)
-- The 6 status columns:  
-  `Host Species Status`, `Body Site Status`, `Condition Status`,  
-  `Sequencing Type Status`, `Taxa Level Status`, `Sample Size Status`  
-  (values: `PRESENT`, `PARTIALLY_PRESENT`, `ABSENT`)
+- The 5 value columns:
+  `Host Species`, `Body Site`, `Condition`, `Sample Size`, `Sequencing Type`
+- The 3 ontology ID columns (optional, but needed for the mapping picker):
+  `Host Species Ontology ID`, `Body Site Ontology ID`, `Condition Ontology ID`
+  (plus their `... Ontology Candidates` counterparts, used to populate the
+  mapping picker's suggestions when a mapping isn't auto-applied)
 
-Optional: `Journal`, `Summary`, `Year`, `Publication Date`, `Processing Time`.
+Optional: `Journal`, `Year`, `Differential Abundance`, `In bsgdb`.
 
 You can use:
 
-- Exports from the BioAnalyzer CLI/API (e.g. `analysis_results.csv`).
-- The validation dataset format (e.g. after merging predictions + metadata into one table with PMID, Title, and the six status columns).
+- Exports from the BioAnalyzer CLI/API (e.g. `BioAnalyzer analyze --file pmids.txt --format csv -o predictions.csv` - `curator_desk_csv` is an accepted alias for the same format).
+- Any other CSV/Parquet with at least PMID and the value columns above.
 
 ## Features
 
-- **Search** by PMID, title, journal, or summary.
-- **Sort** by any column (PMID, Title, or any status).
+- **Search** by PMID, title, journal, or condition.
+- **Sort** by Year, PMID, or Title.
+- **Filter** by year range, differential abundance, BugSigDB status, or "needs an ontology mapping".
 - **PubMed link** per row (opens in a new tab).
-- **Curator feedback**: record verdict (Correct / Incorrect / Uncertain) per PMID; feedback is saved to `curator_feedback.csv` in the current working directory and can be downloaded for later analysis.
+- **Curator feedback**: correct values, confirm/pick ontology mappings (Host Species/Body Site/Condition), and record a Correct/Incorrect/Uncertain verdict per field and per PMID; feedback is saved to `curator_feedback.csv` in the current working directory and can be downloaded for later analysis.
 
 ## Scale and next steps
 

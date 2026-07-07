@@ -150,7 +150,7 @@ BioAnalyzer
 ├── build / start / stop / restart / status   # Docker lifecycle
 ├── run table [--port N]                      # launches the Streamlit curator table
 ├── search [--preset discovery|broad|precision] [-n N] [-o FILE] [--query Q]
-├── analyze <pmid|pmids> [--file F] [--format table|json|csv|curator_desk_csv|xml] [-o FILE]
+├── analyze <pmid|pmids> [--file F] [--format table|json|csv|curator_desk_csv|detailed_csv|xml] [-o FILE]
 ├── analyze-url <url> [--file F] [--format table|json] [-o FILE]
 ├── retrieve <pmid|pmids> [--file F] [--format table|json|csv] [-o FILE] [--save]
 ├── qa [question] [--interactive]

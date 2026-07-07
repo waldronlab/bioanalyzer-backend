@@ -2,6 +2,7 @@ import csv
 import io
 
 from scripts.cli import BioAnalyzerCLI
+from scripts.cli_rendering import render_results
 
 
 def test_curator_desk_csv_header_and_core_fields():
@@ -24,18 +25,24 @@ def test_curator_desk_csv_header_and_core_fields():
                         "status": "PRESENT",
                         "ontology_id": "NCBITaxon:9606",
                         "mapping_confidence": 1.0,
+                        "mapping_tier": "auto",
+                        "mapping_candidates": [],
                     },
                     "body_site": {
                         "value": "feces",
                         "status": "PRESENT",
                         "ontology_id": "UBERON:0001988",
                         "mapping_confidence": 1.0,
+                        "mapping_tier": "auto",
+                        "mapping_candidates": [],
                     },
                     "condition": {
                         "value": "Parkinson disease",
                         "status": "PRESENT",
                         "ontology_id": "EFO:0002508",
                         "mapping_confidence": 1.0,
+                        "mapping_tier": "auto",
+                        "mapping_candidates": [],
                     },
                     "sequencing_type": {"value": "16S", "status": "PRESENT"},
                     "sample_size": {"value": "98", "status": "PRESENT"},
@@ -50,36 +57,41 @@ def test_curator_desk_csv_header_and_core_fields():
     row = rows[0]
 
     assert row["PMID"] == "123"
+    assert row["Year"] == "2021"
     assert row["Title"] == "Test title"
     assert row["Journal"] == "Test journal"
-    assert row["Year"] == "2021"
     assert row["Host Species"] == "Homo sapiens"
-    assert row["Host Species ID"] == "NCBITaxon:9606"
-    assert row["Host Species Status"] == "PRESENT"
-    assert row["Host Species Mapping Confidence"] == "1.00"
+    assert row["Host Species Ontology ID"] == "NCBITaxon:9606"
+    assert row["Host Species Ontology Candidates"] == ""
     assert row["Body Site"] == "feces"
-    assert row["Body Site ID"] == "UBERON:0001988"
-    assert row["Body Site Status"] == "PRESENT"
+    assert row["Body Site Ontology ID"] == "UBERON:0001988"
     assert row["Condition"] == "Parkinson disease"
-    assert row["Condition ID"] == "EFO:0002508"
-    assert row["Condition Status"] == "PRESENT"
-    assert row["Sequencing Type"] == "16S"
-    assert row["Sequencing Type Status"] == "PRESENT"
+    assert row["Condition Ontology ID"] == "EFO:0002508"
     assert row["Sample Size"] == "98"
-    assert row["Sample Size Status"] == "PRESENT"
-    assert row["Summary"] == "Condition: Parkinson disease. Host: Homo sapiens."
-    assert row["Processing Time"] == "1.25"
-    assert row["has_differential_abundance"] == "TRUE"
-    assert row["differential_abundance_confidence"] == "0.92"
-    assert row["in_bugsigdb"] == "TRUE"
-    # Spec §6.2: five prediction fields in curator-desk CSV (taxa_level is API-only)
-    assert "Taxa Level" not in row
-    assert "Taxa Level Status" not in row
-    # "16S" came directly from the normalizer with no distinct raw text here.
-    assert row["Sequencing Type Raw"] == ""
+    assert row["Sequencing Type"] == "16S"
+    assert row["Differential Abundance"] == "Yes"
+    assert row["In bsgdb"] == "Yes"
+
+    # Simplified curator-desk schema: no Status/Mapping-Confidence/Priority/
+    # Summary/Processing Time/Sequencing Type Raw, and Taxa Level stays API-only.
+    for absent_col in (
+        "Host Species Status",
+        "Host Species Mapping Confidence",
+        "Body Site Status",
+        "Condition Status",
+        "Sequencing Type Status",
+        "Sequencing Type Raw",
+        "Sample Size Status",
+        "Priority",
+        "Summary",
+        "Processing Time",
+        "Taxa Level",
+        "Taxa Level Status",
+    ):
+        assert absent_col not in row
 
 
-def test_curator_desk_csv_sequencing_type_raw_shown_only_when_it_differs():
+def test_curator_desk_csv_ontology_candidates_only_shown_when_not_auto():
     cli = BioAnalyzerCLI()
     csv_text = cli.get_curator_desk_csv_content(
         [
@@ -88,10 +100,18 @@ def test_curator_desk_csv_sequencing_type_raw_shown_only_when_it_differs():
                 "title": "T1",
                 "journal": "J1",
                 "fields": {
-                    "sequencing_type": {
-                        "value": "other",
-                        "status": "PRESENT",
-                        "raw": "novel long-read chemistry",
+                    "host_species": {
+                        "value": "Mus musculus",
+                        "status": "PARTIALLY_PRESENT",
+                        "ontology_id": "NCBITaxon:10090",
+                        "mapping_confidence": 0.9,
+                        "mapping_tier": "review",
+                        "mapping_candidates": [
+                            {
+                                "label": "Rattus norvegicus",
+                                "ontology_id": "NCBITaxon:10116",
+                            }
+                        ],
                     },
                 },
             },
@@ -100,10 +120,13 @@ def test_curator_desk_csv_sequencing_type_raw_shown_only_when_it_differs():
                 "title": "T2",
                 "journal": "J2",
                 "fields": {
-                    "sequencing_type": {
-                        "value": "16S",
+                    "host_species": {
+                        "value": "Homo sapiens",
                         "status": "PRESENT",
-                        "raw": "16S",
+                        "ontology_id": "NCBITaxon:9606",
+                        "mapping_confidence": 1.0,
+                        "mapping_tier": "auto",
+                        "mapping_candidates": [],
                     },
                 },
             },
@@ -111,7 +134,56 @@ def test_curator_desk_csv_sequencing_type_raw_shown_only_when_it_differs():
     )
 
     rows = {r["PMID"]: r for r in csv.DictReader(io.StringIO(csv_text.strip()))}
-    assert rows["1"]["Sequencing Type"] == "other"
-    assert rows["1"]["Sequencing Type Raw"] == "novel long-read chemistry"
-    assert rows["2"]["Sequencing Type"] == "16S"
-    assert rows["2"]["Sequencing Type Raw"] == ""
+    assert (
+        rows["1"]["Host Species Ontology Candidates"]
+        == "Rattus norvegicus|NCBITaxon:10116"
+    )
+    assert rows["2"]["Host Species Ontology Candidates"] == ""
+
+
+def test_format_csv_is_an_alias_for_curator_desk_csv():
+    """`--format csv` must be THE curator-facing schema, not a different,
+    older format - this is the exact confusion (predictions.csv not matching
+    curator_table_r's columns) that motivated collapsing the two names."""
+    results = [
+        {
+            "pmid": "42",
+            "title": "T",
+            "journal": "J",
+            "fields": {
+                "host_species": {
+                    "value": "Homo sapiens",
+                    "status": "PRESENT",
+                    "ontology_id": "NCBITaxon:9606",
+                    "mapping_confidence": 1.0,
+                    "mapping_tier": "auto",
+                    "mapping_candidates": [],
+                },
+            },
+        }
+    ]
+    assert render_results(results, "csv") == render_results(results, "curator_desk_csv")
+    csv_cols = next(csv.DictReader(io.StringIO(render_results(results, "csv")))).keys()
+    assert "Host Species Ontology ID" in csv_cols
+    assert "Host Species Status" not in csv_cols
+
+
+def test_format_detailed_csv_is_the_separate_status_inclusive_export():
+    """--format detailed_csv is the older, distinct format kept only for
+    scripts/eval/confusion_matrix_analysis.py - it must NOT match --format csv."""
+    results = [
+        {
+            "pmid": "42",
+            "title": "T",
+            "journal": "J",
+            "fields": {
+                "host_species": {"value": "Homo sapiens", "status": "PRESENT"},
+                "taxa_level": {"value": "genus", "status": "PRESENT"},
+            },
+        }
+    ]
+    detailed = render_results(results, "detailed_csv")
+    row = next(csv.DictReader(io.StringIO(detailed)))
+    assert row["Host Species Status"] == "PRESENT"
+    assert row["Taxa Level"] == "genus"
+    assert detailed != render_results(results, "csv")

@@ -88,6 +88,28 @@ def _extract_clean_disease_name(raw_text: str) -> str:
 _HEALTHY_KEYS = {"healthy", "control", "normal"}
 
 
+def _other_condition_candidates(
+    lowered: str, match_key: str, exclude: Tuple[str, str], limit: int = 2
+) -> Tuple[Tuple[str, str], ...]:
+    """Other CONDITION_LOOKUP matches that are genuinely distinct conditions
+    (not just a shorter/longer phrasing of the winning match, e.g. "diabetes"
+    vs "type 2 diabetes") - surfaced so curators can pick when a paper
+    mentions more than one condition. A key that's a substring of
+    match_key (or vice versa) is the same underlying mention at a different
+    specificity, not a separate candidate."""
+    found: list[Tuple[str, str]] = []
+    for key, pair in CONDITION_LOOKUP.items():
+        if key not in lowered or key in _HEALTHY_KEYS or pair == exclude:
+            continue
+        if key in match_key or match_key in key:
+            continue
+        if pair not in found:
+            found.append(pair)
+        if len(found) >= limit:
+            break
+    return tuple(found)
+
+
 def normalize_condition(raw_text: str) -> NormalizedTerm:
     """Return normalized condition label, EFO ID, status, and mapping confidence."""
     if not raw_text or raw_text.strip() == "":
@@ -95,6 +117,7 @@ def normalize_condition(raw_text: str) -> NormalizedTerm:
 
     lowered = raw_text.lower()
     match: Tuple[str, str] | None = None
+    match_key = ""
     match_len = 0
     healthy_match: Tuple[str, str] | None = None
     for key, pair in CONDITION_LOOKUP.items():
@@ -105,9 +128,15 @@ def normalize_condition(raw_text: str) -> NormalizedTerm:
             continue
         if len(key) > match_len:
             match = pair
+            match_key = key
             match_len = len(key)
     if match:
         label, efo_id = match
+        candidates = _other_condition_candidates(lowered, match_key, match)
+        if candidates:
+            return NormalizedTerm(
+                label, efo_id, "PARTIALLY_PRESENT", 0.9, candidates=candidates
+            )
         return NormalizedTerm(label, efo_id, "PRESENT", 1.0)
     if healthy_match:
         label, efo_id = healthy_match

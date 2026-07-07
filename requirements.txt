@@ -13,6 +13,10 @@ scikit-learn>=1.3.0
 matplotlib>=3.7.0
 seaborn>=0.12.0
 pytz>=2023.3
+# pandas.read_excel() engines: xlrd for legacy .xls, openpyxl for .xlsx
+# (used by BioAnalyzerCLI._read_excel_via_docker for --file <xls/xlsx>)
+xlrd>=2.0.1
+openpyxl>=3.1.0
 
 # --- NLP & LLM Ecosystem ---
 tiktoken>=0.5.0
