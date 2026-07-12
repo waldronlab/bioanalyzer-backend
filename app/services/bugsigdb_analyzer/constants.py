@@ -26,19 +26,16 @@ def _current_timestamp() -> str:
 # (scripts/cli_rendering.py::_render_curator_desk_csv, see
 # docs/CURATOR_DESK_CSV_FORMAT.md) surfaces "host_species"/"body_site"/
 # "condition"/"sequencing_type"/"sample_size" as plain value columns (plus an
-# Ontology ID/Candidates pair for the first three); "taxa_level" is API-only
-# (never in the curator-desk CSV, and no longer requested from the LLM -
-# curators assign it during manual curation).
+# Ontology ID/Candidates pair for the first three).
 FIELD_KEYS: Tuple[str, ...] = (
     "host_species",
     "body_site",
     "condition",
     "sequencing_type",
     "sample_size",
-    "taxa_level",
 )
 
-# STATUS_COLUMNS: the 6 fields' internal PRESENT/PARTIALLY_PRESENT/ABSENT
+# STATUS_COLUMNS: the 5 fields' internal PRESENT/PARTIALLY_PRESENT/ABSENT
 # status keys. No longer surfaced in the curator-desk CSV/curator_table_r/
 # curator_table (which use VALUE_COLUMNS/ONTOLOGY_ID_COLUMNS instead) - still
 # computed internally per field and used by the older, Status-inclusive
@@ -49,7 +46,6 @@ STATUS_COLUMNS: Tuple[str, ...] = (
     "Condition Status",
     "Sequencing Type Status",
     "Sample Size Status",
-    "Taxa Level Status",
 )
 
 ESSENTIAL_FIELDS: Dict[str, str] = {
@@ -57,7 +53,6 @@ ESSENTIAL_FIELDS: Dict[str, str] = {
     "body_site": "What body site or anatomical location was sampled for microbiome analysis?",
     "condition": "What disease, treatment, or condition is being studied?",
     "sequencing_type": "What sequencing method or molecular technique was used?",
-    "taxa_level": "What taxonomic level was analysed (e.g. genus, species, OTU)?",
     "sample_size": "How many samples or participants were included in the study?",
 }
 

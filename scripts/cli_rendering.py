@@ -8,10 +8,10 @@ network/service calls of its own.
 `--format csv` (and its long-form alias `curator_desk_csv`) is THE canonical,
 curator-facing CSV shape - the one that matches curator_table_r/curator_table
 exactly (see docs/CURATOR_DESK_CSV_FORMAT.md). `--format detailed_csv` is a
-separate, older, Status-inclusive shape over all 6 ANALYSIS_FIELDS (including
-Taxa Level) kept only for internal validation tooling
-(scripts/eval/confusion_matrix_analysis.py) - it is deliberately NOT what
-`--format csv` produces, precisely to avoid the two being confused.
+separate, older, Status-inclusive shape over all 5 ANALYSIS_FIELDS kept only
+for internal validation tooling (scripts/eval/confusion_matrix_analysis.py) -
+it is deliberately NOT what `--format csv` produces, precisely to avoid the
+two being confused.
 """
 
 from __future__ import annotations
@@ -27,7 +27,6 @@ ANALYSIS_FIELDS: Dict[str, str] = {
     "body_site": "Body Site",
     "condition": "Condition",
     "sequencing_type": "Sequencing Type",
-    "taxa_level": "Taxa Level",
     "sample_size": "Sample Size",
 }
 
@@ -112,8 +111,8 @@ def _render_table(results: List[Dict[str, Any]]) -> str:
 
 
 def _render_detailed_csv(results: List[Dict[str, Any]]) -> str:
-    """Older, Status-inclusive CSV over all 6 ANALYSIS_FIELDS (incl. Taxa
-    Level) - only for internal validation tooling, see module docstring."""
+    """Older, Status-inclusive CSV over all 5 ANALYSIS_FIELDS - only for
+    internal validation tooling, see module docstring."""
     out = io.StringIO()
     w = csv.writer(out)
     headers = ["PMID", "Title", "Journal"]
@@ -210,7 +209,6 @@ def _render_xml(results: List[Dict[str, Any]]) -> str:
         "body_site": "BodySite",
         "condition": "Condition",
         "sequencing_type": "SequencingType",
-        "taxa_level": "TaxaLevel",
         "sample_size": "SampleSize",
     }
     for r in results:

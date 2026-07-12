@@ -20,7 +20,6 @@ class TestEnhancedFieldValidator:
             "body_site",
             "condition",
             "sequencing_type",
-            "taxa_level",
             "sample_size",
         ]:
             assert field in validator.field_patterns
@@ -73,11 +72,6 @@ class TestEnhancedFieldValidator:
                 "condition",
                 {"description": "IBD"},
                 "Patients with inflammatory bowel disease (IBD) were recruited.",
-            ),
-            (
-                "taxa_level",
-                {"level": "Genus"},
-                "Analysis was performed at the genus level, including Bacteroides and Prevotella.",
             ),
             (
                 "sample_size",
@@ -168,7 +162,6 @@ class TestFieldExtractionEnhancer:
             "body_site",
             "condition",
             "sequencing_type",
-            "taxa_level",
             "sample_size",
         ]:
             assert key in result_empty
@@ -200,7 +193,6 @@ class TestFieldExtractionEnhancer:
                     "body_site",
                     "condition",
                     "sequencing_type",
-                    "taxa_level",
                 ]
             ),
         ]

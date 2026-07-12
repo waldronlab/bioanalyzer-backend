@@ -143,13 +143,12 @@ class PaperQAAgent:
             # Query the agent about the paper
             query = """You are an expert scientific curator specializing in microbial signature analysis.
             Analyze this paper and provide a comprehensive assessment of its curation readiness based on
-            the methods and experimental design. Focus on identifying the 6 essential BugSigDB fields:
+            the methods and experimental design. Focus on identifying the 5 essential BugSigDB fields:
             1. Host Species
             2. Body Site
             3. Condition
             4. Sequencing Type
-            5. Taxa Level
-            6. Sample Size
+            5. Sample Size
 
             Provide a detailed analysis of what information is present or missing for each field."""
 
@@ -225,13 +224,12 @@ class PaperQAAgent:
             # Enhanced query for BugSigDB field extraction
             query = """Analyze this scientific paper and extract information for BugSigDB curation.
 
-            Extract the following 6 essential fields:
+            Extract the following 5 essential fields:
             1. Host Species - What host organism is being studied?
             2. Body Site - What body site or anatomical location was sampled?
             3. Condition - What disease, treatment, or condition is being studied?
             4. Sequencing Type - What sequencing method was used?
-            5. Taxa Level - What taxonomic level was analyzed?
-            6. Sample Size - How many samples or participants were included?
+            5. Sample Size - How many samples or participants were included?
 
             For each field, provide:
             - Value: The extracted information or null if not found
@@ -250,7 +248,6 @@ class PaperQAAgent:
                 "body_site": {...},
                 "condition": {...},
                 "sequencing_type": {...},
-                "taxa_level": {...},
                 "sample_size": {...}
             }"""
 

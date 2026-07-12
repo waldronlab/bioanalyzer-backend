@@ -248,10 +248,6 @@ $ BioAnalyzer fields
    Description: What molecular method was used (e.g., 16S, metagenomics)
    Required: Yes
 
-🌳 Taxa Level (taxa_level):
-   Description: What taxonomic level was analyzed (e.g., phylum, genus, species)
-   Required: Yes
-
 👥 Sample Size (sample_size):
    Description: Number of samples or participants analyzed
    Required: Yes
@@ -307,10 +303,10 @@ BioAnalyzer analyze 12345678 --format json
 
 A fixed-schema CSV for handing off predictions to the `curator_table`/
 `curator_table_r` review tools - 5 value fields (Host Species, Body Site,
-Condition, Sample Size, Sequencing Type; Taxa Level is intentionally
-excluded), plus an Ontology ID for the first three, plus Differential
-Abundance and In bsgdb. See [CURATOR_DESK_CSV_FORMAT.md](CURATOR_DESK_CSV_FORMAT.md)
-for the full column list and contract. Always deduplicated by PMID.
+Condition, Sample Size, Sequencing Type), plus an Ontology ID for the first
+three, plus Differential Abundance and In bsgdb. See
+[CURATOR_DESK_CSV_FORMAT.md](CURATOR_DESK_CSV_FORMAT.md) for the full column
+list and contract. Always deduplicated by PMID.
 
 ```bash
 BioAnalyzer analyze 12345678 --format csv
@@ -322,7 +318,7 @@ BioAnalyzer analyze --file pmids.txt --format csv -o predictions.csv
 
 **Detailed CSV Format (validation tooling only):**
 
-A separate, older CSV covering all 6 fields (including Taxa Level) with a
+A separate, older CSV covering all 5 fields with a
 full `PRESENT`/`PARTIALLY_PRESENT`/`ABSENT` status per field. This is *not*
 what `curator_table`/`curator_table_r` expect - it exists only for internal
 validation scripts (e.g. `scripts/eval/confusion_matrix_analysis.py`).

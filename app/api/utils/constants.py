@@ -21,11 +21,6 @@ ESSENTIAL_FIELDS_INFO = {
         "description": "What molecular method was used (e.g., 16S, metagenomics)",
         "required": True,
     },
-    "taxa_level": {
-        "name": "Taxa Level",
-        "description": "What taxonomic level was analyzed (e.g., phylum, genus, species)",
-        "required": True,
-    },
     "sample_size": {
         "name": "Sample Size",
         "description": "Number of samples or participants analyzed",

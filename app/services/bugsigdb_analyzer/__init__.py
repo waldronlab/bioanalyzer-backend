@@ -30,11 +30,9 @@ fields keys  →  curator-desk CSV column (see docs/CURATOR_DESK_CSV_FORMAT.md)
   "condition"       →  "Condition"     (+ "Condition Ontology ID"/"...Candidates")
   "sequencing_type" →  "Sequencing Type"  (no ontology - controlled vocab)
   "sample_size"     →  "Sample Size"      (no ontology - numeric)
-  "taxa_level"      →  API-only; never in the curator-desk CSV, and no longer
-                        asked of the LLM (curators assign it during curation)
 
 Per-field PRESENT/PARTIALLY_PRESENT/ABSENT status and mapping confidence are
-still computed for all 6 fields (used to derive `mapping_tier` below and to
+still computed for all 5 fields (used to derive `mapping_tier` below and to
 build the older, Status-inclusive `--format csv` export), but are no longer
 part of the curator-desk CSV/curator_table_r/curator_table's columns.
 

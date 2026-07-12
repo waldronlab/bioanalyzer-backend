@@ -168,13 +168,12 @@ class TestBugSigDBAnalysisEndpoints:
         assert "essential_fields" in data
         assert "status_values" in data
 
-        # Check all 6 essential fields are present
+        # Check all 5 essential fields are present
         essential_fields = data["essential_fields"]
         assert "host_species" in essential_fields
         assert "body_site" in essential_fields
         assert "condition" in essential_fields
         assert "sequencing_type" in essential_fields
-        assert "taxa_level" in essential_fields
         assert "sample_size" in essential_fields
 
         # Check field structure

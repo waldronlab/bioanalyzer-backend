@@ -14,7 +14,6 @@ from app.normalization.host_species import normalize_host_species
 from app.normalization.ols import format_ontology_id, ols_search
 from app.normalization.sample_size import normalize_sample_size, _simple_word_to_num
 from app.normalization.sequencing_type import normalize_sequencing_type
-from app.normalization.taxa_level import normalize_taxa_level
 
 
 @pytest.fixture(autouse=True)
@@ -131,24 +130,27 @@ def test_body_site_normalization_variants():
 def test_condition_normalization_variants():
     t = normalize_condition("Parkinson's disease patients")
     assert t.label == "Parkinson disease"
-    assert t.ontology_id == "EFO:0002508"
+    assert t.ontology_id == "MONDO:0005180"
     assert t.status == "PRESENT"
 
     t = normalize_condition("type 2 diabetes cohort")
     assert t.label == "type 2 diabetes mellitus"
-    assert t.ontology_id == "EFO:0001360"
+    assert t.ontology_id == "MONDO:0005148"
 
     t = normalize_condition("obese adults")
-    assert t.label == "obesity"
-    assert t.ontology_id == "EFO:0001073"
+    assert t.label == "obesity disorder"
+    assert t.ontology_id == "MONDO:0011122"
 
     t = normalize_condition("healthy controls")
     assert t.label == "healthy"
     assert t.status == "PRESENT"
+    # "healthy" isn't a disease - no fabricated ontology ID (see
+    # condition.py's CONDITION_LOOKUP docstring).
+    assert t.ontology_id == ""
 
     t = normalize_condition("COVID-19 cases")
     assert t.label == "COVID-19"
-    assert t.ontology_id == "EFO:0003601"
+    assert t.ontology_id == "MONDO:0100096"
 
     t = normalize_condition("")
     assert t.status == "ABSENT"
@@ -164,7 +166,7 @@ def test_condition_disease_wins_over_comparator_arm_wording():
     assert t.label == "inflammatory bowel disease"
 
     t = normalize_condition("HIV patients compared to controls")
-    assert t.label == "HIV infection"
+    assert t.label == "HIV infectious disease"
 
     t = normalize_condition("ASD children vs typically developing controls")
     assert t.label == "autism spectrum disorder"
@@ -213,26 +215,6 @@ def test_sequencing_type_normalization_variants():
     t = normalize_sequencing_type("16S rRNA gene sequencing")
     assert t.label == "16S"
     assert t.raw == "16S rRNA gene sequencing"
-
-
-def test_taxa_level_normalization_variants():
-    t = normalize_taxa_level("genus level analysis")
-    assert t.label == "genus"
-    assert t.status == "PRESENT"
-    assert t.ontology_id == ""
-
-    t = normalize_taxa_level("operational taxonomic units")
-    assert t.label == "OTU"
-    assert t.status == "PRESENT"
-
-    t = normalize_taxa_level("amplicon sequence variants")
-    assert t.label == "ASV"
-
-    t = normalize_taxa_level("species and genus")
-    assert t.status == "PARTIALLY_PRESENT"
-
-    t = normalize_taxa_level("")
-    assert t.status == "ABSENT"
 
 
 def test_sample_size_normalization_variants():
@@ -426,7 +408,7 @@ def test_body_site_multiple_matches_is_partially_present():
 def test_condition_two_distinct_conditions_surfaces_candidate():
     t = normalize_condition("comorbid obesity and type 2 diabetes cohort")
     assert t.status == "PARTIALLY_PRESENT"
-    assert t.label in ("obesity", "type 2 diabetes mellitus")
+    assert t.label in ("obesity disorder", "type 2 diabetes mellitus")
     assert len(t.candidates) >= 1
     assert t.label not in (c[0] for c in t.candidates)
 

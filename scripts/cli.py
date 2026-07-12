@@ -725,7 +725,7 @@ class BioAnalyzerCLI:
                     f"   • {exp.get('title', 'Untitled')}",
                     f"     Species: {m.get('host_species', 'N/A')}  Site: {m.get('body_site', 'N/A')}",
                     f"     Condition: {m.get('condition', 'N/A')}  Seq: {m.get('sequencing_type', 'N/A')}",
-                    f"     Taxa: {m.get('taxa_level', 'N/A')}  N: {m.get('sample_size', 'N/A')}",
+                    f"     N: {m.get('sample_size', 'N/A')}",
                     f"     Signatures: {len(exp['signatures']) if exp.get('signatures') else 'None'}",
                     "",
                 ]
@@ -894,7 +894,6 @@ class BioAnalyzerCLI:
             "body_site": "Sample location (e.g. Gut, Oral, Skin)",
             "condition": "Disease, treatment, or exposure studied",
             "sequencing_type": "Molecular method (e.g. 16S, metagenomics)",
-            "taxa_level": "Taxonomic level (e.g. phylum, genus, species)",
             "sample_size": "Number of samples / participants",
         }
         for key, label in ANALYSIS_FIELDS.items():

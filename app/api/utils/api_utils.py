@@ -55,13 +55,6 @@ def create_default_field_structure(field_name: str) -> Dict[str, Any]:
             "reason_if_missing": "No sequencing type information found in the paper",
             "suggestions": "Look for mentions of 16S, metagenomics, or other sequencing methods",
         },
-        "taxa_level": {
-            "status": "ABSENT",
-            "value": None,
-            "confidence": 0.0,
-            "reason_if_missing": "No taxa level information found in the paper",
-            "suggestions": "Look for taxonomic ranks such as phylum, genus, or species",
-        },
         "sample_size": {
             "status": "ABSENT",
             "value": None,
@@ -106,7 +99,6 @@ def create_comprehensive_fallback_analysis() -> Dict[str, Any]:
         "body_site": create_default_field_structure("body_site"),
         "condition": create_default_field_structure("condition"),
         "sequencing_type": create_default_field_structure("sequencing_type"),
-        "taxa_level": create_default_field_structure("taxa_level"),
         "sample_size": create_default_field_structure("sample_size"),
     }
 

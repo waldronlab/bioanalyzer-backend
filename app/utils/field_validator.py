@@ -123,38 +123,6 @@ class EnhancedFieldValidator:
                     r"pacbio",
                 ],
             },
-            "taxa_level": {
-                "phylum": [
-                    r"phylum",
-                    r"phyla",
-                    r"proteobacteria",
-                    r"actinobacteria",
-                    r"bacteroidetes",
-                    r"firmicutes",
-                ],
-                "genus": [
-                    r"genus",
-                    r"genera",
-                    r"bacteroides",
-                    r"prevotella",
-                    r"lactobacillus",
-                    r"bifidobacterium",
-                ],
-                "species": [
-                    r"species",
-                    r"e\. coli",
-                    r"b\. fragilis",
-                    r"l\. acidophilus",
-                    r"b\. longum",
-                ],
-                "family": [
-                    r"family",
-                    r"families",
-                    r"enterobacteriaceae",
-                    r"lactobacillaceae",
-                    r"bifidobacteriaceae",
-                ],
-            },
             "sample_size": {
                 "numeric": [
                     r"n\s*=\s*\d+",
@@ -310,7 +278,6 @@ class FieldExtractionEnhancer:
             "body_site",
             "condition",
             "sequencing_type",
-            "taxa_level",
             "sample_size",
         ]:
             if field_name in extracted_data:
@@ -355,11 +322,7 @@ class FieldExtractionEnhancer:
                                 else (
                                     "method"
                                     if field_name == "sequencing_type"
-                                    else (
-                                        "level"
-                                        if field_name == "taxa_level"
-                                        else "size"
-                                    )
+                                    else "size"
                                 )
                             )
                         )
@@ -403,11 +366,7 @@ class FieldExtractionEnhancer:
                     else (
                         "description"
                         if field_name == "condition"
-                        else (
-                            "method"
-                            if field_name == "sequencing_type"
-                            else "level" if field_name == "taxa_level" else "size"
-                        )
+                        else ("method" if field_name == "sequencing_type" else "size")
                     )
                 )
             ): "Unknown",

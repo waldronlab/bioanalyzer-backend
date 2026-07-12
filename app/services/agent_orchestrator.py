@@ -124,14 +124,13 @@ def _current_timestamp() -> str:
 
 
 def _avg_confidence(fields: ExperimentFields) -> float:
-    """Average confidence across all six BugSigDB fields."""
+    """Average confidence across all five BugSigDB fields."""
     values = [
         fields.host_species.confidence,
         fields.body_site.confidence,
         fields.condition.confidence,
         fields.sequencing_type.confidence,
         fields.sample_size.confidence,
-        fields.taxa_level.confidence,
     ]
     return sum(values) / len(values)
 
@@ -151,7 +150,6 @@ def _check_missing_fields(experiments: List[ExtractedExperiment]) -> List[str]:
         "body_site",
         "condition",
         "sequencing_type",
-        "taxa_level",
         "sample_size",
     ]
     missing: set = set()
@@ -420,8 +418,8 @@ class AgentOrchestrator:
         query = (
             "Identify all distinct experiments or studies described in this paper. "
             "For each experiment extract: host organism, body site sampled, "
-            "disease or condition studied, sequencing method, taxonomic level "
-            "analysed, and total sample size. List each experiment separately."
+            "disease or condition studied, sequencing method, and total sample "
+            "size. List each experiment separately."
         )
         try:
             response = await agent_query(query=query, settings=self.settings, docs=docs)
@@ -485,11 +483,9 @@ class AgentOrchestrator:
             from app.normalization.host_species import normalize_host_species
             from app.normalization.sample_size import normalize_sample_size
             from app.normalization.sequencing_type import normalize_sequencing_type
-            from app.normalization.taxa_level import normalize_taxa_level
         except ImportError:
             normalize_host_species = normalize_body_site = normalize_condition = None
             normalize_sequencing_type = normalize_sample_size = None
-            normalize_taxa_level = None
 
         experiments: List[ExtractedExperiment] = []
         current_raw: Dict[str, Any] = {}
@@ -514,9 +510,6 @@ class AgentOrchestrator:
                 ),
                 sample_size=_field_result_from_raw(
                     current_raw.get("sample_size"), normalize_sample_size
-                ),
-                taxa_level=_field_result_from_raw(
-                    current_raw.get("taxa_level"), normalize_taxa_level
                 ),
             )
             exp = ExtractedExperiment(
@@ -562,8 +555,6 @@ class AgentOrchestrator:
                     "sequencing_method": "sequencing_type",
                     "method": "sequencing_type",
                     "molecular_method": "sequencing_type",
-                    "taxonomic_level": "taxa_level",
-                    "taxon_level": "taxa_level",
                     "participants": "sample_size",
                     "n": "sample_size",
                     "total_samples": "sample_size",
@@ -575,7 +566,6 @@ class AgentOrchestrator:
                     "body_site",
                     "condition",
                     "sequencing_type",
-                    "taxa_level",
                     "sample_size",
                 }:
                     current_raw[canonical] = val

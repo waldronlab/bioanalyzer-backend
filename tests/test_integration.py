@@ -191,14 +191,13 @@ class TestAPIIntegration:
         assert fields_response.status_code == 200
         fields_data = fields_response.json()
 
-        # Verify all 6 essential fields are defined
+        # Verify all 5 essential fields are defined
         essential_fields = fields_data["essential_fields"]
         expected_fields = [
             "host_species",
             "body_site",
             "condition",
             "sequencing_type",
-            "taxa_level",
             "sample_size",
         ]
 

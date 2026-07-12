@@ -33,8 +33,9 @@ def best_lookup_match(lowered: str, lookup: Dict[str, str]) -> tuple[str, int] |
     its mapped value and the matched key's length (used to break ties
     between overlapping keys, e.g. "16s" vs "16s rrna").
 
-    Shared by sequencing_type.py and taxa_level.py, which each have their
-    own controlled-vocabulary lookup dict but need identical matching logic.
+    Shared by sequencing_type.py and the other field normalizers, which each
+    have their own controlled-vocabulary lookup dict but need identical
+    matching logic.
     """
     matched = None
     matched_len = 0

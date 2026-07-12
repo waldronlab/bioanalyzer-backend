@@ -321,14 +321,7 @@ Please provide a detailed analysis in the following structured format:
                - Be precise: "16S rRNA" not "sequencing", "Metagenomics" not "genomics"
                - If "16S" or "sequencing" found, mark PRESENT with confidence 0.9
 
-            5. TAXA LEVEL EXTRACTION:
-               - Look for taxonomic classifications: "Phylum Proteobacteria", "Genus Bacteroides"
-               - Check for specific names: "E. coli", "B. fragilis", "Lactobacillus spp."
-               - Identify analysis levels: "Phylum level", "Genus level", "Species level"
-               - Be specific: "Bacteroides fragilis" not "Bacteroides", "Proteobacteria phylum" not "bacteria"
-               - If taxonomic names or levels found, mark PRESENT with confidence 0.9
-
-            6. SAMPLE SIZE EXTRACTION:
+            5. SAMPLE SIZE EXTRACTION:
                - Look for numbers: "n=50 participants", "100 samples", "Three time points"
                - Check study design: "Multiple floors sampled", "Longitudinal study with 6 visits"
                - Identify sample counts: "48 fecal samples", "24 oral swabs"
@@ -342,8 +335,8 @@ Please provide a detailed analysis in the following structured format:
 
             JSON RESPONSE REQUIREMENTS:
             - Return ONLY valid JSON without any explanatory text
-            - Ensure all field names match exactly: "host_species", "body_site", "condition", "sequencing_type", "taxa_level", "sample_size"
-            - Each field must have: "primary"/"site"/"description"/"method"/"level"/"size", "confidence", "status", "reason_if_missing", "suggestions_for_curation"
+            - Ensure all field names match exactly: "host_species", "body_site", "condition", "sequencing_type", "sample_size"
+            - Each field must have: "primary"/"site"/"description"/"method"/"size", "confidence", "status", "reason_if_missing", "suggestions_for_curation"
             - Use proper JSON syntax with double quotes for strings
             - Include all required sub-fields for each main field
 
@@ -507,13 +500,6 @@ Please provide a detailed analysis in the following structured format:
                 "reason_if_missing": "Field not found in analysis",
                 "suggestions_for_curation": "Review paper for sequencing method information",
             },
-            "taxa_level": {
-                "level": "Unknown",
-                "confidence": 0.0,
-                "status": "ABSENT",
-                "reason_if_missing": "Field not found in analysis",
-                "suggestions_for_curation": "Review paper for taxonomic level information",
-            },
             "sample_size": {
                 "size": "Unknown",
                 "confidence": 0.0,
@@ -578,13 +564,6 @@ Please provide a detailed analysis in the following structured format:
                 "reason_if_missing": "Analysis failed - re-run required",
                 "suggestions_for_curation": "Re-run analysis with corrected prompt",
             },
-            "taxa_level": {
-                "level": "Unknown",
-                "confidence": 0.0,
-                "status": "ABSENT",
-                "reason_if_missing": "Analysis failed - re-run required",
-                "suggestions_for_curation": "Re-run analysis with corrected prompt",
-            },
             "sample_size": {
                 "size": "Unknown",
                 "confidence": 0.0,
@@ -597,7 +576,6 @@ Please provide a detailed analysis in the following structured format:
                 "body_site",
                 "condition",
                 "sequencing_type",
-                "taxa_level",
                 "sample_size",
             ],
             "curation_preparation_summary": "Analysis failed - re-run required",
@@ -648,7 +626,6 @@ Please provide a detailed analysis in the following structured format:
             "body_site": "site",
             "condition": "description",
             "sequencing_type": "method",
-            "taxa_level": "level",
             "sample_size": "size",
         }
         return content_keys.get(field_name, "value")

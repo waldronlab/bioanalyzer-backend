@@ -37,8 +37,6 @@
 | **Differential Abundance** | BioAnalyzer | `Yes` / `No` |
 | **In bsgdb** | BioAnalyzer | `Yes` / `No` - already present in BugSigDB |
 
-Taxa Level is tracked internally by BioAnalyzer's API but is never a curator-table column - curators assign it directly during BugSigDB curation.
-
 ---
 
 ## 3. Curation Feedback Loop

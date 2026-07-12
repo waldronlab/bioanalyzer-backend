@@ -1,8 +1,6 @@
 # Developer Guide
 
-Practical, task-oriented notes for extending BioAnalyzer-Backend. For *what
-exists today*, see [`CLAUDE.md`](../CLAUDE.md) (architecture/module
-reference) and [`FOLDER_STRUCTURE.md`](FOLDER_STRUCTURE.md) (directory map).
+Practical, task-oriented notes for extending BioAnalyzer-Backend. 
 This guide is about *how to add to it* without breaking conventions that
 aren't obvious from reading any single file.
 
@@ -20,8 +18,8 @@ already has it. Either path runs the same tests.
 
 ## Extending the field-extraction pipeline
 
-The six BugSigDB curation fields (Host Species, Body Site, Condition,
-Sequencing Type, Sample Size, Taxa Level) flow through a fixed shape end to
+The five BugSigDB curation fields (Host Species, Body Site, Condition,
+Sequencing Type, Sample Size) flow through a fixed shape end to
 end: `app/services/bugsigdb_analyzer/` extracts raw text per field via an
 LLM call, then `app/normalization/*.py` maps that raw text to a controlled
 vocabulary term, returning a `NormalizedTerm` (`app/normalization/types.py`).
@@ -104,8 +102,7 @@ except Exception as e:
 
 Routers have their own exception handling only when they bypass
 `app/api/app.py`'s global handler (currently just
-`study_analysis.py`, documented in `CLAUDE.md`) - everywhere else, the
-global handler already calls `mask_exception_message`, but any *local*
+`study_analysis.py`, the global handler already calls `mask_exception_message`, but any *local*
 try/except inside a service function still needs its own call before the
 masked-or-not text gets logged or stored (e.g. in `job_store`).
 

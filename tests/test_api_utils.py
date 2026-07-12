@@ -108,15 +108,6 @@ class TestCreateDefaultFieldStructure:
             or "sequencing" in result["suggestions"].lower()
         )
 
-    def test_create_default_taxa_level(self):
-        """Test creating default structure for taxa_level."""
-        result = create_default_field_structure("taxa_level")
-        assert result["status"] == "ABSENT"
-        assert (
-            "phylum" in result["suggestions"].lower()
-            or "genus" in result["suggestions"].lower()
-        )
-
     def test_create_default_sample_size(self):
         """Test creating default structure for sample_size."""
         result = create_default_field_structure("sample_size")
@@ -190,7 +181,6 @@ class TestCreateComprehensiveFallbackAnalysis:
         assert "body_site" in result
         assert "condition" in result
         assert "sequencing_type" in result
-        assert "taxa_level" in result
         assert "sample_size" in result
 
     def test_create_fallback_analysis_all_absent(self):

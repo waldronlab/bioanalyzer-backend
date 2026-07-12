@@ -408,7 +408,16 @@ class TestGetTextsForAnalysisAsync:
         monkeypatch.setattr(
             retriever,
             "get_paper_metadata_async",
-            lambda pmid: asyncio.sleep(0, result={"title": "T", "abstract": "A"}),
+            lambda pmid: asyncio.sleep(
+                0,
+                result={
+                    "title": "T",
+                    "abstract": "A",
+                    "journal": "J",
+                    "authors": ["A B"],
+                    "publication_date": "2021",
+                },
+            ),
         )
         monkeypatch.setattr(
             retriever,
@@ -416,17 +425,40 @@ class TestGetTextsForAnalysisAsync:
             lambda pmid: asyncio.sleep(0, result="full text"),
         )
         result = asyncio.run(retriever.get_texts_for_analysis_async("12345678"))
-        assert result == {"title": "T", "abstract": "A", "full_text": "full text"}
+        assert result == {
+            "title": "T",
+            "abstract": "A",
+            "full_text": "full text",
+            "journal": "J",
+            "authors": ["A B"],
+            "publication_date": "2021",
+        }
 
     def test_skips_fulltext_when_use_fulltext_false(self, retriever, monkeypatch):
         monkeypatch.setattr("app.services.data_retrieval.USE_FULLTEXT", False)
         monkeypatch.setattr(
             retriever,
             "get_paper_metadata_async",
-            lambda pmid: asyncio.sleep(0, result={"title": "T", "abstract": "A"}),
+            lambda pmid: asyncio.sleep(
+                0,
+                result={
+                    "title": "T",
+                    "abstract": "A",
+                    "journal": "J",
+                    "authors": ["A B"],
+                    "publication_date": "2021",
+                },
+            ),
         )
         result = asyncio.run(retriever.get_texts_for_analysis_async("12345678"))
-        assert result == {"title": "T", "abstract": "A", "full_text": ""}
+        assert result == {
+            "title": "T",
+            "abstract": "A",
+            "full_text": "",
+            "journal": "J",
+            "authors": ["A B"],
+            "publication_date": "2021",
+        }
 
     def test_metadata_timeout_returns_empty_strings(self, retriever, monkeypatch):
         # asyncio.wait_for() re-raises whatever the wrapped awaitable raises,
@@ -445,7 +477,14 @@ class TestGetTextsForAnalysisAsync:
             lambda pmid: asyncio.sleep(0, result="full text"),
         )
         result = asyncio.run(retriever.get_texts_for_analysis_async("12345678"))
-        assert result == {"title": "", "abstract": "", "full_text": "full text"}
+        assert result == {
+            "title": "",
+            "abstract": "",
+            "full_text": "full text",
+            "journal": "",
+            "authors": [],
+            "publication_date": "",
+        }
 
     def test_metadata_network_error_returns_empty_dict_fields(
         self, retriever, monkeypatch
@@ -462,7 +501,14 @@ class TestGetTextsForAnalysisAsync:
             lambda pmid: asyncio.sleep(0, result=""),
         )
         result = asyncio.run(retriever.get_texts_for_analysis_async("12345678"))
-        assert result == {"title": "", "abstract": "", "full_text": ""}
+        assert result == {
+            "title": "",
+            "abstract": "",
+            "full_text": "",
+            "journal": "",
+            "authors": [],
+            "publication_date": "",
+        }
 
     def test_fulltext_network_error_falls_back_to_empty_string(
         self, retriever, monkeypatch
@@ -475,11 +521,27 @@ class TestGetTextsForAnalysisAsync:
         monkeypatch.setattr(
             retriever,
             "get_paper_metadata_async",
-            lambda pmid: asyncio.sleep(0, result={"title": "T", "abstract": "A"}),
+            lambda pmid: asyncio.sleep(
+                0,
+                result={
+                    "title": "T",
+                    "abstract": "A",
+                    "journal": "J",
+                    "authors": ["A B"],
+                    "publication_date": "2021",
+                },
+            ),
         )
         monkeypatch.setattr(retriever, "get_pmc_fulltext_async", boom)
         result = asyncio.run(retriever.get_texts_for_analysis_async("12345678"))
-        assert result == {"title": "T", "abstract": "A", "full_text": ""}
+        assert result == {
+            "title": "T",
+            "abstract": "A",
+            "full_text": "",
+            "journal": "J",
+            "authors": ["A B"],
+            "publication_date": "2021",
+        }
 
 
 def test_pubmed_retriever_error_is_an_exception():

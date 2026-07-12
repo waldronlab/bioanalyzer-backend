@@ -522,4 +522,7 @@ class PubMedRetriever:
             "title": metadata.get("title", ""),
             "abstract": metadata.get("abstract", ""),
             "full_text": full_text or "",
+            "journal": metadata.get("journal", ""),
+            "authors": metadata.get("authors", []),
+            "publication_date": metadata.get("publication_date", ""),
         }

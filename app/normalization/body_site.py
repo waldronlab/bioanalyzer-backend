@@ -8,6 +8,13 @@ from app.normalization.ols import ols_search
 from app.normalization.types import NormalizedTerm
 
 # keyword -> (canonical label, UBERON ID)
+#
+# Exhaustively checked against the live EBI OLS API on 2026-07-12 as part of
+# a wider ontology-mapping audit (see docs/PROJECT_AUDIT.md / ONTOLOGY_AUDIT.md).
+# Two entries were wrong and corrected: "rectum" pointed at a non-existent ID
+# (UBERON:0000096, now UBERON:0001052), and "vagina" pointed at ovary
+# (UBERON:0000992, now UBERON:0000996, the actual vagina term). Every other
+# entry in this dict resolves to the label claimed here.
 BODY_SITE_LOOKUP: Dict[str, Tuple[str, str]] = {
     "feces": ("feces", "UBERON:0001988"),
     "fecal": ("feces", "UBERON:0001988"),
@@ -17,8 +24,8 @@ BODY_SITE_LOOKUP: Dict[str, Tuple[str, str]] = {
     "intestinal": ("feces", "UBERON:0001988"),
     "colon": ("colon", "UBERON:0001155"),
     "colonic": ("colon", "UBERON:0001155"),
-    "rectal": ("rectum", "UBERON:0000096"),
-    "rectum": ("rectum", "UBERON:0000096"),
+    "rectal": ("rectum", "UBERON:0001052"),
+    "rectum": ("rectum", "UBERON:0001052"),
     "saliva": ("saliva", "UBERON:0001836"),
     "salivary": ("saliva", "UBERON:0001836"),
     "oral": ("saliva", "UBERON:0001836"),
@@ -26,8 +33,8 @@ BODY_SITE_LOOKUP: Dict[str, Tuple[str, str]] = {
     "dental": ("saliva", "UBERON:0001836"),
     "tongue": ("tongue", "UBERON:0001723"),
     "buccal": ("cheek", "UBERON:0001567"),
-    "vagina": ("vagina", "UBERON:0000992"),
-    "vaginal": ("vagina", "UBERON:0000992"),
+    "vagina": ("vagina", "UBERON:0000996"),
+    "vaginal": ("vagina", "UBERON:0000996"),
     "cervical": ("uterine cervix", "UBERON:0000002"),
     "uterine": ("uterus", "UBERON:0000995"),
     "skin": ("skin", "UBERON:0002097"),
