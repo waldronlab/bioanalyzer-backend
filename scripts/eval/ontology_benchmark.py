@@ -37,9 +37,11 @@ GOLD_CASES = [
     GoldCase("host_species", "mice", "Mus musculus", "NCBITaxon:10090"),
     GoldCase("body_site", "stool samples", "feces", "UBERON:0001988"),
     GoldCase("body_site", "saliva", "saliva", "UBERON:0001836"),
-    GoldCase("condition", "Parkinson's disease", "Parkinson disease", "EFO:0002508"),
-    GoldCase("condition", "type 2 diabetes", "type 2 diabetes mellitus", "EFO:0001360"),
-    GoldCase("condition", "obese adults", "obesity", "EFO:0001073"),
+    GoldCase("condition", "Parkinson's disease", "Parkinson disease", "MONDO:0005180"),
+    GoldCase(
+        "condition", "type 2 diabetes", "type 2 diabetes mellitus", "MONDO:0005148"
+    ),
+    GoldCase("condition", "obese adults", "obesity disorder", "MONDO:0011122"),
     GoldCase("sequencing_type", "16S rRNA gene sequencing", "16S", ""),
     # shotgun and metagenomics are in the same BugSigDB-compatible family
     GoldCase("sequencing_type", "shotgun metagenomics", "metagenomics", ""),

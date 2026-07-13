@@ -46,7 +46,6 @@ def test_curator_desk_csv_header_and_core_fields():
                     },
                     "sequencing_type": {"value": "16S", "status": "PRESENT"},
                     "sample_size": {"value": "98", "status": "PRESENT"},
-                    "taxa_level": {"value": "genus", "status": "PRESENT"},
                 },
             }
         ]
@@ -73,7 +72,7 @@ def test_curator_desk_csv_header_and_core_fields():
     assert row["In bsgdb"] == "Yes"
 
     # Simplified curator-desk schema: no Status/Mapping-Confidence/Priority/
-    # Summary/Processing Time/Sequencing Type Raw, and Taxa Level stays API-only.
+    # Summary/Processing Time/Sequencing Type Raw.
     for absent_col in (
         "Host Species Status",
         "Host Species Mapping Confidence",
@@ -85,8 +84,6 @@ def test_curator_desk_csv_header_and_core_fields():
         "Priority",
         "Summary",
         "Processing Time",
-        "Taxa Level",
-        "Taxa Level Status",
     ):
         assert absent_col not in row
 
@@ -178,12 +175,12 @@ def test_format_detailed_csv_is_the_separate_status_inclusive_export():
             "journal": "J",
             "fields": {
                 "host_species": {"value": "Homo sapiens", "status": "PRESENT"},
-                "taxa_level": {"value": "genus", "status": "PRESENT"},
+                "sequencing_type": {"value": "16S", "status": "PRESENT"},
             },
         }
     ]
     detailed = render_results(results, "detailed_csv")
     row = next(csv.DictReader(io.StringIO(detailed)))
     assert row["Host Species Status"] == "PRESENT"
-    assert row["Taxa Level"] == "genus"
+    assert row["Sequencing Type"] == "16S"
     assert detailed != render_results(results, "csv")

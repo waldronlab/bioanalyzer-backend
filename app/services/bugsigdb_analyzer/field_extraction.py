@@ -16,7 +16,6 @@ from app.normalization.condition import normalize_condition
 from app.normalization.host_species import normalize_host_species
 from app.normalization.sample_size import normalize_sample_size
 from app.normalization.sequencing_type import normalize_sequencing_type
-from app.normalization.taxa_level import normalize_taxa_level
 from app.utils.config import ANALYSIS_TIMEOUT
 
 from .constants import EXTRACTION_PROMPT
@@ -217,27 +216,6 @@ def _heuristic_payload_from_text(text: str) -> Dict[str, Any]:
     elif "sequencing" in lower:
         sequencing_type_raw = "sequencing"
 
-    taxa_level_raw = None
-    for term in [
-        "operational taxonomic unit",
-        "amplicon sequence variant",
-        "otu",
-        "asv",
-        "species level",
-        "genus level",
-        "phylum level",
-        "family level",
-        "species",
-        "genus",
-        "phylum",
-        "family",
-        "class",
-        "order",
-    ]:
-        if term in lower:
-            taxa_level_raw = term
-            break
-
     sample_size_raw: Optional[int] = None
     n_match = re.search(r"\bn\s*=\s*(\d{1,5})\b", lower)
     if n_match:
@@ -264,7 +242,6 @@ def _heuristic_payload_from_text(text: str) -> Dict[str, Any]:
         "body_site_raw": body_site_raw,
         "condition_raw": condition_raw,
         "sequencing_type_raw": sequencing_type_raw,
-        "taxa_level_raw": taxa_level_raw,
         "sample_size_raw": sample_size_raw,
         # Confidence must never be 0.0 while the boolean is True - both are
         # derived from the same match so they can't disagree (previously the
@@ -397,7 +374,6 @@ def _field_results_from_unified_payload(
     body_term = normalize_body_site(payload.get("body_site_raw"))
     cond_term = normalize_condition(payload.get("condition_raw"))
     seq_term = normalize_sequencing_type(payload.get("sequencing_type_raw"))
-    taxa_term = normalize_taxa_level(payload.get("taxa_level_raw"))
     samp_term = normalize_sample_size(payload.get("sample_size_raw"))
 
     field_results = {
@@ -406,7 +382,6 @@ def _field_results_from_unified_payload(
         "condition": _build_field_result_from_term(cond_term),
         "sequencing_type": _build_field_result_from_term(seq_term),
         "sample_size": _build_field_result_from_term(samp_term),
-        "taxa_level": _build_field_result_from_term(taxa_term),
     }
 
     # Heuristic payloads get a confidence cap — they are less reliable
@@ -416,7 +391,6 @@ def _field_results_from_unified_payload(
             "body_site",
             "condition",
             "sequencing_type",
-            "taxa_level",
             "sample_size",
         ):
             field = field_results.get(key, {})

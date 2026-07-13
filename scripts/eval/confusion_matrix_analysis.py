@@ -214,7 +214,6 @@ def main():
         "Body Site Status",
         "Condition Status",
         "Sequencing Type Status",
-        "Taxa Level Status",
         "Sample Size Status",
     ]
 

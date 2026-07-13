@@ -76,8 +76,7 @@ BioAnalyzer help      # Get help
 2. **Body Site** - Sample collection location
 3. **Condition** - Disease/treatment studied
 4. **Sequencing Type** - Molecular method used
-5. **Taxa Level** - Taxonomic level analyzed
-6. **Sample Size** - Number of samples
+5. **Sample Size** - Number of samples
 
 ## 📈 Status Values
 

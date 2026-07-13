@@ -272,10 +272,6 @@ class TestHeuristicPayloadFromText:
         payload = _heuristic_payload_from_text("Shotgun metagenomic sequencing.")
         assert payload["sequencing_type_raw"] == "shotgun metagenomics"
 
-    def test_detects_taxa_level(self):
-        payload = _heuristic_payload_from_text("Analysis was done at genus level.")
-        assert payload["taxa_level_raw"] == "genus level"
-
     def test_extracts_sample_size_from_n_equals(self):
         payload = _heuristic_payload_from_text("A total of n=42 were enrolled.")
         assert payload["sample_size_raw"] == 42
@@ -367,13 +363,12 @@ class TestPostprocessFieldResults:
 
 
 class TestFieldResultsFromUnifiedPayload:
-    def test_maps_all_six_fields(self):
+    def test_maps_all_five_fields(self):
         payload = {
             "host_species_raw": "human",
             "body_site_raw": "fecal samples",
             "condition_raw": "diabetes",
             "sequencing_type_raw": "16S rRNA gene sequencing",
-            "taxa_level_raw": "genus",
             "sample_size_raw": 42,
         }
         results = _field_results_from_unified_payload(payload)
@@ -383,7 +378,6 @@ class TestFieldResultsFromUnifiedPayload:
             "condition",
             "sequencing_type",
             "sample_size",
-            "taxa_level",
         }
         assert results["host_species"]["status"] == "PRESENT"
 

@@ -12,6 +12,10 @@ from app.normalization.ontology_cache import get_cached_term, store_cached_term
 from app.normalization.types import NormalizedTerm
 
 # keyword -> (scientific name, NCBITaxon ID)
+#
+# All 8 distinct NCBITaxon IDs below were exhaustively checked against the
+# live EBI OLS API on 2026-07-12 (see docs/PROJECT_AUDIT.md /
+# ONTOLOGY_AUDIT.md) - every one resolves to the species claimed here.
 SPECIES_LOOKUP: Dict[str, Tuple[str, str]] = {
     "human": ("Homo sapiens", "NCBITaxon:9606"),
     "humans": ("Homo sapiens", "NCBITaxon:9606"),

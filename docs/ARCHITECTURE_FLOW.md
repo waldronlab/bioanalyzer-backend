@@ -173,13 +173,11 @@ sequenceDiagram
     LLM-->>UnifiedQA: Result
     UnifiedQA->>LLM: Extract Sequencing Type
     LLM-->>UnifiedQA: Result
-    UnifiedQA->>LLM: Extract Taxa Level
-    LLM-->>UnifiedQA: Result
     UnifiedQA->>LLM: Extract Sample Size
     LLM-->>UnifiedQA: Result
     
     UnifiedQA-->>API: Complete analysis
-    API-->>CLI/Web: Results with 6 fields
+    API-->>CLI/Web: Results with 5 fields
     CLI/Web-->>User: Display results
 ```
 

@@ -98,16 +98,15 @@ def _present_field(value="x", confidence=0.8):
     return FieldResult(value=value, status="PRESENT", confidence=confidence)
 
 
-def test_avg_confidence_averages_all_six_fields():
+def test_avg_confidence_averages_all_five_fields():
     fields = ExperimentFields(
         host_species=_present_field(confidence=1.0),
         body_site=_present_field(confidence=0.5),
         condition=_present_field(confidence=0.5),
         sequencing_type=_present_field(confidence=0.5),
         sample_size=_present_field(confidence=0.5),
-        taxa_level=_present_field(confidence=0.5),
     )
-    assert _avg_confidence(fields) == pytest.approx((1.0 + 0.5 * 5) / 6)
+    assert _avg_confidence(fields) == pytest.approx((1.0 + 0.5 * 4) / 5)
 
 
 def test_check_missing_fields_no_experiments():
@@ -121,7 +120,6 @@ def test_check_missing_fields_all_present():
         condition=_present_field(),
         sequencing_type=_present_field(),
         sample_size=_present_field(),
-        taxa_level=_present_field(),
     )
     exp = ExtractedExperiment(experiment_id="e1", title="Exp 1", fields=fields)
     assert _check_missing_fields([exp]) == []
@@ -134,7 +132,6 @@ def test_check_missing_fields_reports_absent_fields():
         condition=_present_field(),
         sequencing_type=FieldResult.absent(),
         sample_size=_present_field(),
-        taxa_level=_present_field(),
     )
     exp = ExtractedExperiment(experiment_id="e1", title="Exp 1", fields=fields)
     assert _check_missing_fields([exp]) == ["body_site", "sequencing_type"]
@@ -148,7 +145,6 @@ def test_check_missing_fields_present_in_any_experiment_is_not_missing():
         condition=_present_field(),
         sequencing_type=_present_field(),
         sample_size=_present_field(),
-        taxa_level=_present_field(),
     )
     fields_all_present = ExperimentFields(
         host_species=_present_field(),
@@ -156,7 +152,6 @@ def test_check_missing_fields_present_in_any_experiment_is_not_missing():
         condition=_present_field(),
         sequencing_type=_present_field(),
         sample_size=_present_field(),
-        taxa_level=_present_field(),
     )
     exp1 = ExtractedExperiment(
         experiment_id="e1", title="Exp 1", fields=fields_missing_host
@@ -179,7 +174,6 @@ def test_parse_experiments_single_block(orchestrator):
         "Sample site: gut\n"
         "Disease: inflammatory bowel disease\n"
         "Sequencing method: 16S rRNA gene sequencing\n"
-        "Taxonomic level: genus\n"
         "N: 42\n"
     )
     experiments = orchestrator._parse_experiments_from_response(
@@ -192,7 +186,6 @@ def test_parse_experiments_single_block(orchestrator):
     assert exp.fields.body_site.value == "feces"
     assert exp.fields.condition.value == "inflammatory bowel disease"
     assert exp.fields.sequencing_type.value == "16S"
-    assert exp.fields.taxa_level.value == "genus"
     assert exp.fields.sample_size.value == "42"
 
 
@@ -350,7 +343,6 @@ async def test_analyze_study_happy_path(monkeypatch, orchestrator, sample_chunks
                 "Sample site: gut\n"
                 "Disease: IBD\n"
                 "Sequencing method: 16S rRNA gene sequencing\n"
-                "Taxonomic level: genus\n"
                 "N: 30\n"
             ),
             contexts=[],

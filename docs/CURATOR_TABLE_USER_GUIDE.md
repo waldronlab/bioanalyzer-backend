@@ -23,8 +23,6 @@ This guide explains what you see and **how to review and record feedback**. You 
   4. Sample Size
   5. Sequencing Type
 
-  (Taxa Level is a sixth field BioAnalyzer's API tracks internally, but it is not shown in the curator table — curators assign it directly during BugSigDB curation, not from this tool.)
-
 For the **Streamlit feedback app**, you will also choose:
 - A short **curator ID/initials** (e.g. `RO`, `levi`, etc.).
 

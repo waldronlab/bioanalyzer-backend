@@ -1,9 +1,6 @@
 # Folder Structure
 
-A map of the repository for fast orientation. For *why* the layers are
-organized this way, see the "Architecture" section of
-[`CLAUDE.md`](../CLAUDE.md) — this document is the visual companion to that
-prose description, not a replacement for it.
+A map of the repository for fast orientation. 
 
 ```
 BioAnalyzer-Backend/
@@ -52,7 +49,7 @@ BioAnalyzer-Backend/
 │   │   ├── body_site.py           # -> UBERON
 │   │   ├── condition.py           # -> EFO
 │   │   ├── ols.py                 # Shared EBI OLS4 API client (used by body_site/condition)
-│   │   ├── sequencing_type.py, taxa_level.py   # -> BugSigDB's own controlled vocab
+│   │   ├── sequencing_type.py      # -> BugSigDB's own controlled vocab
 │   │   ├── sample_size.py         # Numeric/word-to-number parsing
 │   │   └── types.py               # NormalizedTerm + shared lookup-matching helpers
 │   │
@@ -89,26 +86,3 @@ BioAnalyzer-Backend/
 ├── cli.py                         # Backward-compat shim importing scripts.cli.main
 └── CLAUDE.md, README.md, LICENSE  # Top-level project docs
 ```
-
-## Runtime-generated, not part of source structure
-
-These exist after running the app/tests locally but are gitignored - don't
-look for them in a fresh clone, and don't document code that only exists
-because one of them was generated:
-
-- `cache/` - SQLite analysis cache (`cache_manager.py`)
-- `logs/` - application logs
-- `results/` - curator feedback CSV/Parquet output
-- `build/`, `dist/`, `*.egg-info/` - Python packaging build artifacts
-- `__pycache__/` - compiled bytecode
-
-## Two separate git repositories, one working directory
-
-`curator_table_r/` has its own `.git`, its own remote
-(`waldronlab/curator-desk`), and its own branch - it is nested under this
-repository's working directory purely for convenience while developing both
-projects together. Commits, branches, and `git status` in the outer repo
-never include it; treat it as if it were checked out somewhere else
-entirely. See [CLAUDE.md](../CLAUDE.md) for which parts of each repo's
-output format the other depends on (the curator-desk CSV contract is the
-main one).
