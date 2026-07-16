@@ -21,6 +21,56 @@ from app.utils.config import ANALYSIS_TIMEOUT
 from .constants import EXTRACTION_PROMPT
 
 # ---------------------------------------------------------------------------
+# Shared disease-phrase regex (used by both the heuristic fallback and
+# _postprocess_field_results, so the two don't drift apart in coverage).
+#
+# Tries "patients with X"-style phrasing first, then "X patients"-style
+# (disease name before the noun, e.g. "colorectal cancer patients") - a
+# benchmark against BugSigDB's real curated corpus (see
+# docs/BUGSIGDB_ACCURACY_BENCHMARK.md) found the single-pattern version
+# missed most disease-before-noun phrasing, silently falling through to a
+# short generic keyword list ("cancer", "diabetes", ...) that discarded the
+# actual subtype the paper studied.
+# ---------------------------------------------------------------------------
+
+_DISEASE_SUFFIX = r"(?:syndrome|disease|disorder|infection|cancer|carcinoma|diabetes|colitis|arthritis)"
+# A single word (letters/digits/internal hyphens only - no spaces).
+_WORD = r"[a-z0-9][a-z0-9\-]*"
+# Common non-disease-modifier words explicitly excluded from the "filler"
+# slot below. A word-count bound alone (e.g. up to 4 filler words) isn't
+# enough: re.search takes the leftmost starting position that satisfies the
+# whole pattern, so "gut microbiota in colorectal cancer patients" would
+# still match starting at "gut" (4 filler words, within any cap {0,4}+),
+# capturing the unrelated preceding clause instead of just "colorectal
+# cancer". Rejecting stopwords/prepositions/study-jargon from filler slots
+# forces the match to start immediately before the real modifier word(s).
+_STOPWORDS = (
+    r"in|of|was|is|were|are|the|a|an|with|from|and|or|to|for|at|on|by|"
+    r"this|that|these|those|study|studies|during|among|our|we|showed|had|"
+    r"recruited|collected|enrolled|included|examined|analyzed|analysed|"
+    r"compared|studied|obtained|identified|selected|screened"
+)
+_FILLER = rf"(?!(?:{_STOPWORDS})\b){_WORD}"
+_DISEASE_PHRASE_PATTERNS = (
+    re.compile(
+        rf"\b(?:patients?|individuals?|subjects?)\s+(?:with|diagnosed with|suffering from)\s+"
+        rf"((?:{_FILLER}\s+){{0,3}}{_DISEASE_SUFFIX})\b"
+    ),
+    re.compile(rf"\b((?:{_FILLER}\s+){{0,3}}{_DISEASE_SUFFIX})\s+patients?\b"),
+)
+
+
+def _find_disease_phrase(lower_text: str) -> Optional[str]:
+    """Find the most specific disease/condition phrase in already-lowercased
+    text, trying 'patients with X' style first, then 'X patients' style."""
+    for pattern in _DISEASE_PHRASE_PATTERNS:
+        m = pattern.search(lower_text)
+        if m:
+            return m.group(1).strip()
+    return None
+
+
+# ---------------------------------------------------------------------------
 # FieldResult builders
 # ---------------------------------------------------------------------------
 
@@ -181,16 +231,12 @@ def _heuristic_payload_from_text(text: str) -> Dict[str, Any]:
     elif re.search(r"\b(skin|dermal|cutaneous)\b", lower):
         body_site_raw = "skin"
 
-    condition_raw = None
-    disease_phrase = re.search(
-        r"\bpatients?\s+with\s+([a-z][a-z0-9\-\s]{2,80}?(?:syndrome|disease|disorder|infection|cancer|diabetes))\b",
-        lower,
-    )
-    if disease_phrase:
-        condition_raw = disease_phrase.group(1).strip()
-    elif re.search(r"\b(healthy controls?|healthy sedentary)\b", lower):
-        condition_raw = "healthy"
-    else:
+    condition_raw = _find_disease_phrase(lower)
+    if not condition_raw:
+        # Try a real (if generic) disease keyword before falling back to
+        # "healthy" - a text mentioning both "healthy controls" and
+        # "parkinson" is a disease-vs-healthy-comparator study, and the
+        # disease name is what should be extracted, not the comparator.
         for term in [
             "kostmann syndrome",
             "obesity",
@@ -205,6 +251,10 @@ def _heuristic_payload_from_text(text: str) -> Dict[str, Any]:
             if term in lower:
                 condition_raw = term
                 break
+        if not condition_raw and re.search(
+            r"\b(healthy controls?|healthy sedentary)\b", lower
+        ):
+            condition_raw = "healthy"
 
     sequencing_type_raw = None
     if "16s" in lower:
@@ -304,15 +354,20 @@ def _postprocess_field_results(
         )
         out["host_species"] = host
 
-    # --- condition: if text names a disease, normalise it ---
+    # --- condition: if text names a (more specific) disease, normalise it ---
     condition = dict(out.get("condition") or {})
-    disease_phrase = re.search(
-        r"\bpatients?\s+with\s+([a-z][a-z0-9\-\s]{2,80}?(?:syndrome|disease|disorder|infection|cancer|diabetes))\b",
-        text,
-    )
-    if disease_phrase:
-        disease = disease_phrase.group(1).strip()
-        if condition.get("status") in {"ABSENT", "PRESENT"}:
+    disease = _find_disease_phrase(text)
+    if disease:
+        current_value = str(condition.get("value") or "")
+        # Fill a gap (ABSENT) outright; only overwrite an existing PRESENT
+        # value when the newly found phrase is more specific (longer) than
+        # what's already there - otherwise an unrelated "patients with X"
+        # mention elsewhere in a long paper (e.g. a comorbidity aside) could
+        # clobber a perfectly good LLM extraction with something worse.
+        should_apply = condition.get("status") == "ABSENT" or len(disease) > len(
+            current_value
+        )
+        if should_apply:
             cond_term = normalize_condition(disease)
             if cond_term.status != "ABSENT":
                 condition.update(

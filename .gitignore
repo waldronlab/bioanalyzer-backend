@@ -102,3 +102,10 @@ cache/
 results/
 # BioAnalyzer
 results.txt
+
+# Local scratch data (PMID lists, BugSigDB dumps, generated reports) - not
+# source code, shouldn't be committed. Kept locally for re-running
+# scripts/eval/bugsigdb_ground_truth_benchmark.py.
+/full_dump.csv
+/pmids.xls
+*.zip

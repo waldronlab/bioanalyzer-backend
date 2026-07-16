@@ -14,6 +14,7 @@ from app.services.bugsigdb_analyzer import (
     _build_field_result_from_term,
     _is_low_quality_cached_result,
     _parse_json_object,
+    _find_disease_phrase,
     _heuristic_payload_from_text,
     _build_curation_summary,
     _postprocess_field_results,
@@ -228,6 +229,47 @@ class TestParseJsonObject:
         assert _parse_json_object("not json at all") == {}
 
 
+class TestFindDiseasePhrase:
+    """Regression tests for the disease-vs-generic-category and
+    disease-vs-healthy-comparator bugs found via
+    docs/BUGSIGDB_ACCURACY_BENCHMARK.md: BioAnalyzer was extracting generic
+    parent categories ("cancer" instead of "colorectal cancer") and, worse,
+    "healthy" instead of the actual disease name whenever a paper compared a
+    disease group against healthy controls."""
+
+    def test_specific_disease_wins_over_generic_category_patients_with_style(self):
+        text = (
+            "fecal samples were collected from patients with irritable bowel syndrome"
+        )
+        assert _find_disease_phrase(text) == "irritable bowel syndrome"
+
+    def test_specific_disease_wins_over_generic_category_disease_first_style(self):
+        text = "we studied gut microbiota in colorectal cancer patients"
+        assert _find_disease_phrase(text) == "colorectal cancer"
+
+    def test_does_not_swallow_unrelated_preceding_clause(self):
+        """Regression test: a naive unbounded regex would capture the whole
+        clause preceding "patients" (e.g. "gut microbiota in colorectal
+        cancer") instead of just the disease name."""
+        text = "we studied gut microbiota in colorectal cancer patients compared with healthy controls"
+        assert _find_disease_phrase(text) == "colorectal cancer"
+
+    def test_excludes_methodology_verbs_from_captured_phrase(self):
+        text = "we recruited rheumatoid arthritis patients from three hospitals"
+        assert _find_disease_phrase(text) == "rheumatoid arthritis"
+
+    def test_multi_word_modifier_disease_names(self):
+        text = "samples were collected from non-alcoholic fatty liver disease patients"
+        assert _find_disease_phrase(text) == "non-alcoholic fatty liver disease"
+
+    def test_numeric_modifier_disease_names(self):
+        text = "this study examined type 2 diabetes patients versus healthy controls"
+        assert _find_disease_phrase(text) == "type 2 diabetes"
+
+    def test_returns_none_when_no_disease_phrase_present(self):
+        assert _find_disease_phrase("healthy volunteers were recruited") is None
+
+
 class TestHeuristicPayloadFromText:
     def test_empty_text_returns_empty_dict(self):
         assert _heuristic_payload_from_text("") == {}
@@ -263,6 +305,26 @@ class TestHeuristicPayloadFromText:
     def test_detects_named_condition_keyword(self):
         payload = _heuristic_payload_from_text("Subjects had type 2 diabetes.")
         assert payload["condition_raw"] == "diabetes"
+
+    def test_disease_name_wins_over_healthy_comparator_wording(self):
+        """Regression test: when a paper compares a named disease group
+        against healthy controls, the disease name must be extracted, not
+        "healthy" - "healthy" only describes the comparator arm. Found via
+        docs/BUGSIGDB_ACCURACY_BENCHMARK.md: BioAnalyzer was predicting
+        "healthy" for papers BugSigDB curators had coded as Parkinson's
+        disease, IBS, etc., because the disease-name regex previously only
+        tried "patients with X" phrasing and gave up to "healthy" before
+        trying the short keyword list."""
+        payload = _heuristic_payload_from_text(
+            "Parkinson disease patients were compared to healthy controls."
+        )
+        assert payload["condition_raw"] == "parkinson disease"
+
+    def test_short_keyword_wins_over_healthy_when_regex_phrase_not_found(self):
+        payload = _heuristic_payload_from_text(
+            "Alzheimer patients and healthy controls were enrolled."
+        )
+        assert payload["condition_raw"] == "alzheimer"
 
     def test_detects_16s_sequencing(self):
         payload = _heuristic_payload_from_text("16S rRNA gene sequencing was used.")
@@ -360,6 +422,52 @@ class TestPostprocessFieldResults:
     def test_handles_missing_field_keys_gracefully(self):
         result = _postprocess_field_results({}, "patients with disease")
         assert isinstance(result, dict)
+
+    def test_fills_absent_condition_from_disease_phrase(self):
+        field_results = {
+            "condition": {"value": "", "status": "ABSENT", "confidence": 0.0}
+        }
+        result = _postprocess_field_results(
+            field_results, "patients with rheumatoid arthritis were enrolled"
+        )
+        assert result["condition"]["value"] == "rheumatoid arthritis"
+        assert result["condition"]["status"] != "ABSENT"
+
+    def test_does_not_clobber_a_present_condition_with_a_shorter_unrelated_phrase(
+        self,
+    ):
+        """Regression test: the postprocess step used to unconditionally
+        overwrite a PRESENT condition whenever ANY "patients with X" phrase
+        appeared anywhere in the text - a comorbidity mentioned once in
+        passing (e.g. an exclusion-criteria aside) could clobber a perfectly
+        good, more specific LLM extraction. It should now only override when
+        the newly found phrase is more specific (longer) than what's already
+        there."""
+        field_results = {
+            "condition": {
+                "value": "colorectal cancer",
+                "status": "PRESENT",
+                "confidence": 0.9,
+                "ontology_id": "MONDO:0005575",
+            }
+        }
+        # "diabetes" (found via the unrelated aside) is shorter than the
+        # existing "colorectal cancer" - must not overwrite.
+        result = _postprocess_field_results(
+            field_results,
+            "colorectal cancer diagnosis was confirmed via colonoscopy. "
+            "Notably, one patient with diabetes was excluded from the cohort.",
+        )
+        assert result["condition"]["value"] == "colorectal cancer"
+
+    def test_upgrades_present_condition_to_a_more_specific_phrase(self):
+        field_results = {
+            "condition": {"value": "cancer", "status": "PRESENT", "confidence": 0.5}
+        }
+        result = _postprocess_field_results(
+            field_results, "patients with colorectal cancer were recruited"
+        )
+        assert result["condition"]["value"] == "colorectal cancer"
 
 
 class TestFieldResultsFromUnifiedPayload:

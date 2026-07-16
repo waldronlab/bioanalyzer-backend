@@ -96,10 +96,17 @@ Rules:
   If no species is named anywhere in the text, return null — do NOT default to "Homo sapiens" just because the study concerns a human disease or clinical condition.
 - body_site_raw      : Give the anatomical sample site(s) as written. Prefer METHODS or ABSTRACT if sections are present, otherwise extract from any available text. If multiple sites, join with " and ".
   If no sample site is stated, return null — do NOT guess a typical site (e.g. "gut") just because the paper is about microbiome research.
-- condition_raw      : Give the disease/condition name only. Prefer ABSTRACT or INTRODUCTION if sections are present, otherwise extract from any available text.
-  Do NOT include phrases like "patients with" or "diagnosed with".
-  If the study compares diseased vs. healthy controls, give the disease name only.
-  If the study is on healthy subjects with no disease/condition studied, return null — do NOT invent a condition.
+- condition_raw      : Give the MOST SPECIFIC disease/condition name stated in the paper — never a broader parent category.
+  Example: the paper studies "colorectal cancer" → return "colorectal cancer", NOT just "cancer".
+  Example: the paper studies "type 2 diabetes" → return "type 2 diabetes", NOT just "diabetes".
+  Example: the paper studies "Crohn's disease" → return "Crohn's disease", NOT just "inflammatory bowel disease" or "IBD".
+  Prefer ABSTRACT or INTRODUCTION if sections are present, otherwise extract from any available text.
+  Do NOT include phrases like "patients with" or "diagnosed with" — give the condition name only.
+  If the study compares a named disease/condition group against healthy controls, you MUST return the
+  disease/condition name (e.g. "Parkinson's disease") — never "healthy". "Healthy" only describes the
+  comparator group, not what the study is about; returning it instead of the disease name is a critical
+  extraction error even though the word "healthy" literally appears in the text.
+  If the study is on healthy subjects only, with no disease/condition group at all, return null — do NOT invent a condition.
 - sequencing_type_raw: Give the sequencing or molecular method name only. Prefer METHODS if sections are present, otherwise extract from any available text. Give the method name exactly as written
   (e.g. "16S rRNA gene sequencing", "shotgun metagenomics", "whole-genome sequencing"). If no sequencing/molecular method is stated, return null.
 - sample_size_raw    : Give ONLY an integer. Prefer METHODS if sections are present, otherwise extract from any available text. Convert word-numbers
