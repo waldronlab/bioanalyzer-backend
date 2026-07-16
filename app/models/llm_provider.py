@@ -68,7 +68,19 @@ class LLMProviderManager:
 
         # Automatically prefix Gemini and Ollama models if the prefix is missing
         if self.provider == LLMProvider.GEMINI and not self.model.startswith("gemini/"):
-            self.model = f"gemini/{self.model}"
+            # DEFAULT_MODEL (app.utils.config) is shared with GeminiQA, which
+            # uses Google's native genai SDK and expects "models/gemini-x.y"
+            # form. LiteLLM's Gemini integration expects "gemini/gemini-x.y"
+            # instead - naively prepending "gemini/" to an already
+            # "models/"-prefixed value produces "gemini/models/gemini-x.y",
+            # which LiteLLM can't resolve (litellm.NotFoundError on every
+            # call, silently degrading every LLM-backed extraction to the
+            # much weaker regex heuristic fallback). Strip a leading
+            # "models/" before adding LiteLLM's own prefix.
+            bare_model = self.model
+            if bare_model.startswith("models/"):
+                bare_model = bare_model[len("models/") :]
+            self.model = f"gemini/{bare_model}"
         elif self.provider == LLMProvider.OLLAMA and not self.model.startswith(
             "ollama/"
         ):
