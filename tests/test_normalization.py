@@ -9,11 +9,16 @@ from app.normalization import host_species as host_species_module
 from app.normalization import ols as ols_module
 from app.normalization import sample_size as sample_size_module
 from app.normalization.body_site import normalize_body_site
-from app.normalization.condition import normalize_condition, _extract_clean_disease_name
+from app.normalization.condition import (
+    normalize_condition,
+    _extract_clean_disease_name,
+    _progressive_queries,
+)
 from app.normalization.host_species import normalize_host_species
 from app.normalization.ols import format_ontology_id, ols_search
 from app.normalization.sample_size import normalize_sample_size, _simple_word_to_num
 from app.normalization.sequencing_type import normalize_sequencing_type
+from app.normalization.types import normalize_spelling
 
 
 @pytest.fixture(autouse=True)
@@ -352,14 +357,16 @@ def test_host_species_ncbi_fallback_handles_narrowed_exceptions(monkeypatch, fak
 
 def test_ols_search_success(monkeypatch):
     def fake_get(url, params=None, timeout=None):
-        assert url == ols_module.OLS_SEARCH_URL
-        return _DummyResponse(
-            {
-                "response": {
-                    "docs": [{"label": "felis catus", "obo_id": "NCBITaxon_9685"}]
+        if url == ols_module.OLS_SEARCH_URL:
+            return _DummyResponse(
+                {
+                    "response": {
+                        "docs": [{"label": "felis catus", "obo_id": "NCBITaxon_9685"}]
+                    }
                 }
-            }
-        )
+            )
+        assert url == ols_module.OLS_TERMS_URL
+        return _DummyResponse({"_embedded": {"terms": [{"is_obsolete": False}]}})
 
     monkeypatch.setattr(requests, "get", fake_get)
     result = ols_search("domestic cat", "ncbitaxon", "NCBITaxon")
@@ -386,6 +393,157 @@ def test_ols_search_handles_malformed_json(monkeypatch):
         requests, "get", lambda *a, **k: _DummyResponse(raise_json_error=True)
     )
     assert ols_search("some term", "efo", "EFO") is None
+
+
+# ---------------------------------------------------------------------------
+# ols.py: round-trip obsolete-check (adopted from metacurator's no-
+# hallucination discipline - see docs/METACURATOR_METAHARMONIZER_ANALYSIS.md)
+# ---------------------------------------------------------------------------
+
+
+def test_ols_search_rejects_obsolete_term(monkeypatch):
+    """A search hit alone isn't proof a term is current - if the round-trip
+    lookup confirms it's obsolete, ols_search must reject it rather than
+    return/cache a dead ID."""
+
+    def fake_get(url, params=None, timeout=None):
+        if url == ols_module.OLS_SEARCH_URL:
+            return _DummyResponse(
+                {"response": {"docs": [{"label": "old term", "obo_id": "EFO_0001111"}]}}
+            )
+        assert url == ols_module.OLS_TERMS_URL
+        return _DummyResponse({"_embedded": {"terms": [{"is_obsolete": True}]}})
+
+    monkeypatch.setattr(requests, "get", fake_get)
+    assert ols_search("some term", "efo", "EFO") is None
+
+
+def test_ols_search_fails_open_when_round_trip_lookup_errors(monkeypatch):
+    """A transient failure on the round-trip call (network error) must not
+    reject an otherwise-good search hit - only a confirmed obsolete flag
+    should reject."""
+
+    def fake_get(url, params=None, timeout=None):
+        if url == ols_module.OLS_SEARCH_URL:
+            return _DummyResponse(
+                {
+                    "response": {
+                        "docs": [{"label": "some term", "obo_id": "EFO_0002222"}]
+                    }
+                }
+            )
+        raise requests.exceptions.Timeout("round-trip timed out")
+
+    monkeypatch.setattr(requests, "get", fake_get)
+    result = ols_search("some term", "efo", "EFO")
+    assert result == ("some term", "EFO:0002222", 0.9)
+
+
+def test_ols_search_accepts_when_round_trip_finds_no_embedded_terms(monkeypatch):
+    """An inconclusive round-trip (no terms in the response) fails open,
+    same as a network error - only a positive obsolete confirmation rejects."""
+
+    def fake_get(url, params=None, timeout=None):
+        if url == ols_module.OLS_SEARCH_URL:
+            return _DummyResponse(
+                {
+                    "response": {
+                        "docs": [{"label": "some term", "obo_id": "EFO_0003333"}]
+                    }
+                }
+            )
+        return _DummyResponse({"_embedded": {"terms": []}})
+
+    monkeypatch.setattr(requests, "get", fake_get)
+    result = ols_search("some term", "efo", "EFO")
+    assert result == ("some term", "EFO:0003333", 0.9)
+
+
+# ---------------------------------------------------------------------------
+# types.py: normalize_spelling (British -> American, ported from
+# MetaHarmonizer after our benchmark found the "faecal" vs "feces" gap)
+# ---------------------------------------------------------------------------
+
+
+def test_normalize_spelling_body_site_terms():
+    # Every real call site applies this to already-lowercased text; the
+    # replacement itself is always lowercase (case-preservation isn't a
+    # requirement this codebase's usage pattern needs).
+    assert normalize_spelling("faecal samples") == "fecal samples"
+    assert normalize_spelling("faeces collected") == "feces collected"
+
+
+def test_normalize_spelling_condition_terms():
+    assert normalize_spelling("diarrhoea and anaemia") == "diarrhea and anemia"
+    assert normalize_spelling("paediatric leukaemia") == "pediatric leukemia"
+
+
+def test_normalize_spelling_passthrough_for_american_text():
+    assert normalize_spelling("fecal samples, no changes needed") == (
+        "fecal samples, no changes needed"
+    )
+
+
+def test_body_site_matches_british_spelling_via_static_lookup():
+    t = normalize_body_site("faecal samples were collected")
+    assert t.label == "feces"
+    assert t.ontology_id == "UBERON:0001988"
+    assert t.status == "PRESENT"
+
+
+# ---------------------------------------------------------------------------
+# condition.py: _progressive_queries (modifier-phrase gap found via a live
+# cross-check against metacurator's real MONDO grounding)
+# ---------------------------------------------------------------------------
+
+
+def test_progressive_queries_strips_leading_modifier():
+    queries = list(
+        _progressive_queries("diarrhea-predominant irritable bowel syndrome")
+    )
+    assert queries[0] == "diarrhea-predominant irritable bowel syndrome"
+    assert "irritable bowel syndrome" in queries
+
+
+def test_progressive_queries_caps_extra_attempts():
+    queries = list(_progressive_queries("a b c d e f", max_extra=2))
+    assert len(queries) == 3  # original + 2 extra, not one per word
+
+
+def test_progressive_queries_stops_at_two_words():
+    queries = list(_progressive_queries("a b", max_extra=5))
+    assert queries == ["a b"]
+
+
+def test_condition_live_fallback_finds_modifier_stripped_match(monkeypatch):
+    """Regression test for the exact gap found via a live cross-check
+    against metacurator: a clinical modifier prefix can make the full
+    extracted phrase miss a live OLS/MONDO search that the bare condition
+    name would have matched."""
+
+    def fake_get(url, params=None, timeout=None):
+        if url == ols_module.OLS_SEARCH_URL:
+            if params and params.get("q") == "irritable bowel syndrome":
+                return _DummyResponse(
+                    {
+                        "response": {
+                            "docs": [
+                                {
+                                    "label": "irritable bowel syndrome",
+                                    "obo_id": "MONDO_0005052",
+                                }
+                            ]
+                        }
+                    }
+                )
+            return _DummyResponse({"response": {"docs": []}})
+        return _DummyResponse({"_embedded": {"terms": [{"is_obsolete": False}]}})
+
+    monkeypatch.setattr(requests, "get", fake_get)
+    t = normalize_condition("diarrhea-predominant irritable bowel syndrome")
+    assert t.label == "irritable bowel syndrome"
+    assert t.ontology_id == "MONDO:0005052"
+    assert t.status == "PRESENT"
 
 
 # ---------------------------------------------------------------------------
@@ -434,10 +592,16 @@ def test_host_species_multiple_matches_surfaces_candidates():
 
 def test_body_site_ols_fallback_success(monkeypatch):
     def fake_get(url, params=None, timeout=None):
-        assert url == ols_module.OLS_SEARCH_URL
-        return _DummyResponse(
-            {"response": {"docs": [{"label": "duodenum", "obo_id": "UBERON_0002114"}]}}
-        )
+        if url == ols_module.OLS_SEARCH_URL:
+            return _DummyResponse(
+                {
+                    "response": {
+                        "docs": [{"label": "duodenum", "obo_id": "UBERON_0002114"}]
+                    }
+                }
+            )
+        assert url == ols_module.OLS_TERMS_URL
+        return _DummyResponse({"_embedded": {"terms": [{"is_obsolete": False}]}})
 
     monkeypatch.setattr(requests, "get", fake_get)
     t = normalize_body_site("duodenal biopsy")
@@ -481,14 +645,18 @@ def test_extract_clean_disease_name_passes_through_when_no_phrase_matches():
 
 def test_condition_ols_fallback_success(monkeypatch):
     def fake_get(url, params=None, timeout=None):
-        assert url == ols_module.OLS_SEARCH_URL
-        return _DummyResponse(
-            {
-                "response": {
-                    "docs": [{"label": "rare metabolic disorder", "obo_id": "EFO_9999"}]
+        if url == ols_module.OLS_SEARCH_URL:
+            return _DummyResponse(
+                {
+                    "response": {
+                        "docs": [
+                            {"label": "rare metabolic disorder", "obo_id": "EFO_9999"}
+                        ]
+                    }
                 }
-            }
-        )
+            )
+        assert url == ols_module.OLS_TERMS_URL
+        return _DummyResponse({"_embedded": {"terms": [{"is_obsolete": False}]}})
 
     monkeypatch.setattr(requests, "get", fake_get)
     t = normalize_condition("patients with a rare metabolic disorder")

@@ -3,6 +3,7 @@ normalization."""
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from typing import Dict, Tuple
 
@@ -51,3 +52,44 @@ def best_lookup_match(lowered: str, lookup: Dict[str, str]) -> tuple[str, int] |
 def found_vocab_types(lowered: str, lookup: Dict[str, str]) -> set[str]:
     """Return the set of distinct vocab values whose lookup key appears in `lowered`."""
     return {value for key, value in lookup.items() if key in lowered}
+
+
+# British -> American spelling variants that show up in scientific papers and
+# would otherwise miss both our static lookup dicts and live OLS/MONDO
+# queries (e.g. a paper saying "faecal" scores as a mismatch against our
+# "feces" entries even though it's the same site) - ported from
+# MetaHarmonizer's _BRITISH_TO_AMERICAN list after a benchmark against
+# BugSigDB's real curated corpus found this exact gap (see
+# docs/METACURATOR_METAHARMONIZER_ANALYSIS.md). Applied before matching, not
+# as a lookup-dict key, so it benefits every normalizer (and the live search
+# fallback) without duplicating entries.
+_BRITISH_TO_AMERICAN = (
+    (re.compile(r"faeces", re.IGNORECASE), "feces"),
+    (re.compile(r"faecal", re.IGNORECASE), "fecal"),
+    (re.compile(r"oesophag", re.IGNORECASE), "esophag"),
+    (re.compile(r"leukaemia", re.IGNORECASE), "leukemia"),
+    (re.compile(r"tumour", re.IGNORECASE), "tumor"),
+    (re.compile(r"haemato", re.IGNORECASE), "hemato"),
+    (re.compile(r"haemoglobin", re.IGNORECASE), "hemoglobin"),
+    (re.compile(r"haemorrhag", re.IGNORECASE), "hemorrhag"),
+    (re.compile(r"anaemia", re.IGNORECASE), "anemia"),
+    (re.compile(r"oedema", re.IGNORECASE), "edema"),
+    (re.compile(r"paediatric", re.IGNORECASE), "pediatric"),
+    (re.compile(r"foetal", re.IGNORECASE), "fetal"),
+    (re.compile(r"foetus", re.IGNORECASE), "fetus"),
+    (re.compile(r"gynaecolog", re.IGNORECASE), "gynecolog"),
+    (re.compile(r"diarrhoea", re.IGNORECASE), "diarrhea"),
+    (re.compile(r"colour", re.IGNORECASE), "color"),
+)
+
+
+def normalize_spelling(text: str) -> str:
+    """Rewrite British spelling variants to American, case-insensitively.
+
+    Applied before dict/keyword matching and before building a live OLS/MONDO
+    search query, so a British-spelled term in the source paper matches the
+    same lookup entries and search results an American-spelled one would.
+    """
+    for pattern, replacement in _BRITISH_TO_AMERICAN:
+        text = pattern.sub(replacement, text)
+    return text

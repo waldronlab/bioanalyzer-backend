@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Dict, Tuple
 
 from app.normalization.ols import ols_search
-from app.normalization.types import NormalizedTerm
+from app.normalization.types import NormalizedTerm, normalize_spelling
 
 # keyword -> (canonical label, ontology ID)
 #
@@ -128,12 +128,35 @@ def _other_condition_candidates(
     return tuple(found)
 
 
+def _progressive_queries(query: str, max_extra: int = 2):
+    """Yield ``query``, then progressively shorter suffixes with the leading
+    word dropped each time.
+
+    Found via a live cross-check against metacurator's real MONDO grounding
+    (see docs/METACURATOR_METAHARMONIZER_ANALYSIS.md): a clinical modifier
+    prefix like "diarrhea-predominant" or "early-onset" often precedes the
+    core condition name in extracted text, and OLS/MONDO search can miss the
+    full modifier-heavy phrase even though the bare condition name resolves
+    cleanly (e.g. "diarrhea-predominant irritable bowel syndrome" found
+    nothing, but "irritable bowel syndrome" resolved to MONDO:0005052).
+    Capped at a couple of extra attempts so a long, unrelated sentence can't
+    turn into an unbounded number of live lookups.
+    """
+    yield query
+    words = query.split()
+    for _ in range(max_extra):
+        if len(words) <= 2:
+            break
+        words = words[1:]
+        yield " ".join(words)
+
+
 def normalize_condition(raw_text: str) -> NormalizedTerm:
     """Return normalized condition label, EFO ID, status, and mapping confidence."""
     if not raw_text or raw_text.strip() == "":
         return NormalizedTerm.absent()
 
-    lowered = raw_text.lower()
+    lowered = normalize_spelling(raw_text.lower())
     match: Tuple[str, str] | None = None
     match_key = ""
     match_len = 0
@@ -167,14 +190,15 @@ def normalize_condition(raw_text: str) -> NormalizedTerm:
     # Both providers go through ols_search()'s persistent cache (see
     # app.normalization.ontology_cache), so a term only needs a live lookup
     # once - subsequent calls for the same term are served from that cache.
-    clean_term = _extract_clean_disease_name(raw_text)
+    clean_term = _extract_clean_disease_name(normalize_spelling(raw_text))
     query = clean_term or raw_text.strip()
-    hit = ols_search(query, "efo", "EFO", mapping_confidence=0.9)
-    if not hit:
-        hit = ols_search(query, "mondo", "MONDO", mapping_confidence=0.9)
-    if hit:
-        label, efo_id, conf = hit
-        return NormalizedTerm(label, efo_id, "PRESENT", conf)
+    for candidate in _progressive_queries(query):
+        hit = ols_search(candidate, "efo", "EFO", mapping_confidence=0.9)
+        if not hit:
+            hit = ols_search(candidate, "mondo", "MONDO", mapping_confidence=0.9)
+        if hit:
+            label, efo_id, conf = hit
+            return NormalizedTerm(label, efo_id, "PRESENT", conf)
 
     stripped = raw_text.strip()
     return NormalizedTerm(stripped, "", "PARTIALLY_PRESENT", 0.5)

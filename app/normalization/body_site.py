@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Dict, Tuple
 
 from app.normalization.ols import ols_search
-from app.normalization.types import NormalizedTerm
+from app.normalization.types import NormalizedTerm, normalize_spelling
 
 # keyword -> (canonical label, UBERON ID)
 #
@@ -60,7 +60,7 @@ def normalize_body_site(raw_text: str) -> NormalizedTerm:
     if not raw_text or raw_text.strip() == "":
         return NormalizedTerm.absent()
 
-    lowered = raw_text.lower()
+    lowered = normalize_spelling(raw_text.lower())
     matched: list[Tuple[str, str]] = []
     for key, pair in BODY_SITE_LOOKUP.items():
         if key in lowered and pair not in matched:
@@ -75,7 +75,9 @@ def normalize_body_site(raw_text: str) -> NormalizedTerm:
             label, uberon_id, "PARTIALLY_PRESENT", 0.9, candidates=tuple(matched[1:3])
         )
 
-    hit = ols_search(raw_text.strip(), "uberon", "UBERON", mapping_confidence=0.9)
+    hit = ols_search(
+        normalize_spelling(raw_text.strip()), "uberon", "UBERON", mapping_confidence=0.9
+    )
     if hit:
         label, uberon_id, conf = hit
         return NormalizedTerm(label, uberon_id, "PRESENT", conf)
