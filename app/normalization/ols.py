@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 from typing import Optional, Tuple
+from urllib.parse import quote
 
 import requests
 
 from app.normalization.ontology_cache import get_cached_term, store_cached_term
 
 OLS_SEARCH_URL = "https://www.ebi.ac.uk/ols4/api/search"
+OLS_TERMS_URL = "https://www.ebi.ac.uk/ols4/api/terms"
+OLS_ANCESTORS_URL_TMPL = "https://www.ebi.ac.uk/ols4/api/ontologies/{ontology}/terms/{iri}/hierarchicalAncestors"
 
 
 def format_ontology_id(obo_id: str, default_prefix: str) -> str:
@@ -71,3 +75,131 @@ def ols_search(
         return label, obo_id, mapping_confidence
     except (requests.exceptions.RequestException, ValueError):
         return None
+
+
+def _obo_iri(ontology_id: str) -> Optional[str]:
+    """CURIE ('EFO:0000400') -> OBO Foundry PURL IRI, or None if malformed.
+
+    All four ontologies this module deals with (EFO, MONDO, UBERON,
+    NCBITaxon) publish OBO-compliant PURLs of this form, and OLS resolves
+    terms by IRI regardless of which ontology originally minted the ID -
+    this is the one IRI scheme that works for every prefix we handle.
+    """
+    if ":" not in ontology_id:
+        return None
+    prefix, local = ontology_id.split(":", 1)
+    prefix, local = prefix.strip(), local.strip()
+    if not prefix or not local:
+        return None
+    return f"http://purl.obolibrary.org/obo/{prefix}_{local}"
+
+
+@dataclass(frozen=True)
+class TermVerification:
+    """Result of re-fetching an ontology_id directly from OLS by IRI (the
+    "round-trip" step of the four-step grounding discipline - see
+    app.normalization.grounding). ``exists=False`` means the ID doesn't
+    resolve to anything at all, which is the strongest possible signal that
+    a static-dict entry was fabricated or the ontology has since deleted it
+    outright (as opposed to deprecating it, which ``is_obsolete`` covers)."""
+
+    exists: bool
+    label: str = ""
+    is_obsolete: bool = False
+    replaced_by: str = ""
+
+
+def _extract_replaced_by(term: dict, default_prefix: str) -> str:
+    """Best-effort extraction of an obsolete term's replacement ID.
+
+    OLS has used a couple of different shapes for this across versions/
+    ontologies (a top-level ``term_replaced_by`` string, or a
+    ``replacedBy``/``replaced_by`` annotation list) - try the known ones and
+    give up quietly rather than raise, consistent with the rest of this
+    module's network-failure handling.
+    """
+    raw = term.get("term_replaced_by")
+    if isinstance(raw, str) and raw.strip():
+        return format_ontology_id(raw, default_prefix)
+    annotation = term.get("annotation")
+    if isinstance(annotation, dict):
+        for key in ("replacedBy", "replaced_by", "term replaced by"):
+            val = annotation.get(key)
+            if isinstance(val, list) and val:
+                val = val[0]
+            if isinstance(val, str) and val.strip():
+                return format_ontology_id(val, default_prefix)
+    return ""
+
+
+def fetch_term(
+    ontology_id: str, default_prefix: str = ""
+) -> Optional[TermVerification]:
+    """Re-fetch *ontology_id* directly from OLS to confirm it still exists
+    and check its obsolete status - the round-trip + obsolete-detection
+    steps of the four-step grounding discipline.
+
+    Returns None (not a ``TermVerification``) when the check itself
+    couldn't be performed (network error, unexpected response shape) - the
+    caller should treat that as "unable to verify", distinct from "verified
+    and it doesn't exist" (``TermVerification(exists=False)``).
+    """
+    if not default_prefix and ":" in ontology_id:
+        default_prefix = ontology_id.split(":", 1)[0]
+    iri = _obo_iri(ontology_id)
+    if not iri:
+        return None
+    try:
+        response = requests.get(OLS_TERMS_URL, params={"iri": iri}, timeout=5)
+        response.raise_for_status()
+        terms = response.json().get("_embedded", {}).get("terms", [])
+    except (requests.exceptions.RequestException, ValueError, KeyError, AttributeError):
+        return None
+    if not terms:
+        return TermVerification(exists=False)
+    term = terms[0]
+    if not isinstance(term, dict):
+        return None
+    label = str(term.get("label") or "").strip()
+    is_obsolete = bool(term.get("is_obsolete", False))
+    replaced_by = _extract_replaced_by(term, default_prefix) if is_obsolete else ""
+    return TermVerification(
+        exists=True, label=label, is_obsolete=is_obsolete, replaced_by=replaced_by
+    )
+
+
+def is_in_branch(ontology_id: str, ontology: str, root_id: str) -> Optional[bool]:
+    """Branch-check step: is *ontology_id* reachable from *root_id* via
+    is_a/part_of ancestry within *ontology* (e.g. is this EFO term actually
+    under the "disease" root, not some unrelated branch)?
+
+    Returns True/False when the check completed, or None when it couldn't be
+    performed (network error, unexpected response shape) - callers should
+    treat None as "unverified", not "failed", the same convention as
+    fetch_term().
+    """
+    if ontology_id == root_id:
+        return True
+    iri = _obo_iri(ontology_id)
+    if not iri:
+        return None
+    default_prefix = ontology_id.split(":", 1)[0] if ":" in ontology_id else ""
+    # OLS's path-segment IRI form requires double URL-encoding.
+    encoded_iri = quote(quote(iri, safe=""), safe="")
+    url = OLS_ANCESTORS_URL_TMPL.format(ontology=ontology, iri=encoded_iri)
+    try:
+        response = requests.get(url, timeout=5)
+        if response.status_code == 404:
+            return False
+        response.raise_for_status()
+        terms = response.json().get("_embedded", {}).get("terms", [])
+    except (requests.exceptions.RequestException, ValueError, KeyError, AttributeError):
+        return None
+    ancestor_ids = set()
+    for term in terms:
+        if not isinstance(term, dict):
+            continue
+        obo_id = format_ontology_id(term.get("obo_id", ""), default_prefix)
+        if obo_id:
+            ancestor_ids.add(obo_id)
+    return root_id in ancestor_ids

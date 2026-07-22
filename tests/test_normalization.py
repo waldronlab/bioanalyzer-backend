@@ -389,6 +389,143 @@ def test_ols_search_handles_malformed_json(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
+# ols.py: fetch_term() / is_in_branch() - the round-trip, obsolete-detection,
+# and branch-check steps of the four-step grounding discipline consumed by
+# app.normalization.grounding. See that module's docstring for how these
+# combine to gate the "auto" mapping tier.
+# ---------------------------------------------------------------------------
+
+
+def test_obo_iri_builds_purl_from_curie():
+    assert (
+        ols_module._obo_iri("EFO:0000400")
+        == "http://purl.obolibrary.org/obo/EFO_0000400"
+    )
+    assert ols_module._obo_iri("NCBITaxon:9606") == (
+        "http://purl.obolibrary.org/obo/NCBITaxon_9606"
+    )
+
+
+def test_obo_iri_returns_none_for_malformed_id():
+    assert ols_module._obo_iri("not-a-curie") is None
+    assert ols_module._obo_iri("") is None
+
+
+def test_fetch_term_round_trip_success(monkeypatch):
+    def fake_get(url, params=None, timeout=None):
+        assert url == ols_module.OLS_TERMS_URL
+        assert params == {"iri": "http://purl.obolibrary.org/obo/MONDO_0005180"}
+        return _DummyResponse(
+            {
+                "_embedded": {
+                    "terms": [
+                        {
+                            "label": "Parkinson disease",
+                            "obo_id": "MONDO:0005180",
+                            "is_obsolete": False,
+                        }
+                    ]
+                }
+            }
+        )
+
+    monkeypatch.setattr(requests, "get", fake_get)
+    result = ols_module.fetch_term("MONDO:0005180")
+    assert result.exists is True
+    assert result.label == "Parkinson disease"
+    assert result.is_obsolete is False
+    assert result.replaced_by == ""
+
+
+def test_fetch_term_reports_missing_term(monkeypatch):
+    """The strongest possible signal of a fabricated/deleted static
+    entry - the IRI resolves to nothing at all."""
+    monkeypatch.setattr(
+        requests, "get", lambda *a, **k: _DummyResponse({"_embedded": {"terms": []}})
+    )
+    result = ols_module.fetch_term("EFO:0003601")
+    assert result.exists is False
+
+
+def test_fetch_term_reports_obsolete_with_replacement(monkeypatch):
+    monkeypatch.setattr(
+        requests,
+        "get",
+        lambda *a, **k: _DummyResponse(
+            {
+                "_embedded": {
+                    "terms": [
+                        {
+                            "label": "obsolete_Parkinson's disease",
+                            "obo_id": "EFO:0002508",
+                            "is_obsolete": True,
+                            "term_replaced_by": "MONDO_0005180",
+                        }
+                    ]
+                }
+            }
+        ),
+    )
+    result = ols_module.fetch_term("EFO:0002508")
+    assert result.exists is True
+    assert result.is_obsolete is True
+    assert result.replaced_by == "MONDO:0005180"
+
+
+def test_fetch_term_handles_request_exception(monkeypatch):
+    def fake_get(*a, **k):
+        raise requests.exceptions.Timeout("timed out")
+
+    monkeypatch.setattr(requests, "get", fake_get)
+    assert ols_module.fetch_term("MONDO:0005180") is None
+
+
+def test_fetch_term_returns_none_for_malformed_id():
+    assert ols_module.fetch_term("not-a-curie") is None
+
+
+def test_is_in_branch_true_when_root_in_ancestors(monkeypatch):
+    def fake_get(url, timeout=None):
+        return _DummyResponse(
+            {"_embedded": {"terms": [{"label": "disease", "obo_id": "MONDO:0000001"}]}}
+        )
+
+    monkeypatch.setattr(requests, "get", fake_get)
+    assert ols_module.is_in_branch("MONDO:0005180", "mondo", "MONDO:0000001") is True
+
+
+def test_is_in_branch_false_when_root_missing(monkeypatch):
+    monkeypatch.setattr(
+        requests,
+        "get",
+        lambda *a, **k: _DummyResponse(
+            {"_embedded": {"terms": [{"label": "somite", "obo_id": "UBERON:0002329"}]}}
+        ),
+    )
+    assert ols_module.is_in_branch("EFO:0003601", "efo", "EFO:0000408") is False
+
+
+def test_is_in_branch_true_when_term_is_the_root():
+    # Short-circuits before any network call.
+    assert ols_module.is_in_branch("MONDO:0000001", "mondo", "MONDO:0000001") is True
+
+
+def test_is_in_branch_returns_none_on_request_exception(monkeypatch):
+    def fake_get(*a, **k):
+        raise requests.exceptions.Timeout("timed out")
+
+    monkeypatch.setattr(requests, "get", fake_get)
+    assert ols_module.is_in_branch("MONDO:0005180", "mondo", "MONDO:0000001") is None
+
+
+def test_is_in_branch_returns_false_on_404(monkeypatch):
+    monkeypatch.setattr(
+        requests, "get", lambda *a, **k: _DummyResponse(status_code=404)
+    )
+    assert ols_module.is_in_branch("MONDO:0005180", "mondo", "MONDO:0000001") is False
+
+
+# ---------------------------------------------------------------------------
 # body_site.py: multiple-keyword match + OLS fallback (previously untested)
 # ---------------------------------------------------------------------------
 

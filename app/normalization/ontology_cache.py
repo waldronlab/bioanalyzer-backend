@@ -9,9 +9,17 @@ raising, so a sqlite hiccup never breaks an ontology lookup.
 
 from __future__ import annotations
 
-from typing import Optional, Tuple
+import os
+from typing import Any, Dict, Optional, Tuple
 
 _cache_manager = None
+
+# How long a grounding_check_cache row (round-trip/obsolete/branch result for
+# one ontology_id) is trusted before app.normalization.grounding re-checks it
+# against live OLS. Unlike get_cached_term/store_cached_term above, this cache
+# is expected to go stale on purpose - an ontology term can be deprecated
+# after the fact, which is exactly the drift this exists to catch.
+GROUNDING_CACHE_VALIDITY_HOURS = int(os.getenv("GROUNDING_CACHE_VALIDITY_HOURS", "720"))
 
 
 def _get_cache_manager():
@@ -42,6 +50,44 @@ def store_cached_term(
     try:
         _get_cache_manager().store_ontology_term(
             provider, term.strip().lower(), label, ontology_id, confidence
+        )
+    except Exception:
+        pass
+
+
+def get_cached_grounding(ontology_id: str) -> Optional[Dict[str, Any]]:
+    """Return a cached grounding check for *ontology_id*, or None if absent/expired."""
+    if not ontology_id:
+        return None
+    try:
+        return _get_cache_manager().get_grounding_check(
+            ontology_id, GROUNDING_CACHE_VALIDITY_HOURS
+        )
+    except Exception:
+        return None
+
+
+def store_cached_grounding(
+    ontology_id: str,
+    term_exists: bool,
+    label: str,
+    is_obsolete: bool,
+    replaced_by: str,
+    branch_ok: Optional[bool],
+    root_id: str,
+) -> None:
+    """Persist a resolved grounding check for *ontology_id*. Best-effort; never raises."""
+    if not ontology_id:
+        return
+    try:
+        _get_cache_manager().store_grounding_check(
+            ontology_id,
+            term_exists,
+            label,
+            is_obsolete,
+            replaced_by,
+            branch_ok,
+            root_id,
         )
     except Exception:
         pass
