@@ -17,13 +17,6 @@ def _fake_ols_response(label: str, obo_id: str):
     return resp
 
 
-def _fake_ols_terms_response(is_obsolete: bool = False):
-    resp = MagicMock()
-    resp.raise_for_status = MagicMock()
-    resp.json.return_value = {"_embedded": {"terms": [{"is_obsolete": is_obsolete}]}}
-    return resp
-
-
 class TestOlsSearchCaching:
     def test_cache_hit_skips_network_call(self, monkeypatch):
         monkeypatch.setattr(
@@ -47,13 +40,12 @@ class TestOlsSearchCaching:
         monkeypatch.setattr(ols, "store_cached_term", store_mock)
 
         with patch("app.normalization.ols.requests.get") as mock_get:
-            mock_get.side_effect = [
-                _fake_ols_response("Parkinson disease", "EFO_0002508"),
-                _fake_ols_terms_response(is_obsolete=False),
-            ]
+            mock_get.return_value = _fake_ols_response(
+                "Parkinson disease", "EFO_0002508"
+            )
             result = ols.ols_search("parkinsons", "efo", "EFO", mapping_confidence=0.9)
 
-        assert mock_get.call_count == 2
+        mock_get.assert_called_once()
         store_mock.assert_called_once_with(
             "efo", "parkinsons", "Parkinson disease", "EFO:0002508", 0.9
         )
