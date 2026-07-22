@@ -102,9 +102,12 @@ class FieldResult(BaseModel):
     mapping_tier: str = Field(
         default="none",
         description="Ontology-mapping confidence tier: 'auto' (static "
-        "lookup match, applied without review), 'review' (live OLS/NCBI "
-        "fallback or ambiguous match, curator should confirm), or 'none' "
-        "(no ontology_id). See app.normalization.grounding.tier_for().",
+        "lookup match that also passed a live round-trip/obsolete/branch "
+        "grounding re-check against OLS, applied without review), 'review' "
+        "(live OLS/NCBI fallback, ambiguous match, or a static match that "
+        "failed its grounding re-check - e.g. the ontology has since "
+        "deprecated or deleted that ID), or 'none' (no ontology_id). See "
+        "app.normalization.grounding.tier_for().",
     )
     mapping_candidates: List[Dict[str, str]] = Field(
         default_factory=list,

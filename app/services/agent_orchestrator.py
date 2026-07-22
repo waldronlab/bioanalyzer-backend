@@ -423,7 +423,13 @@ class AgentOrchestrator:
         )
         try:
             response = await agent_query(query=query, settings=self.settings, docs=docs)
-            experiments = self._parse_experiments_from_response(
+            # Parsing calls the same normalizers as simple_analysis.py/
+            # rag_analysis.py, which can make blocking network calls (NCBI/OLS
+            # fallback lookups, and now also grounding.py's round-trip/branch/
+            # obsolete checks on a cold cache) - run off the event loop for the
+            # same reason those two call sites already do.
+            experiments = await asyncio.to_thread(
+                self._parse_experiments_from_response,
                 answer=response.session.answer,
                 contexts=response.session.contexts,
                 pmid=pmid,

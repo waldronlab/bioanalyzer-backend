@@ -94,6 +94,26 @@ class CacheManager:
             """
             )
 
+            # Round-trip/obsolete/branch grounding checks for ontology_id's that
+            # tier_for() would otherwise mark "auto" (see app.normalization.grounding).
+            # Unlike ontology_term_cache, this DOES expire - a term's obsolete/branch
+            # status can legitimately change as the upstream ontology evolves, which
+            # is exactly the drift this cache exists to keep catching.
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS grounding_check_cache (
+                    ontology_id TEXT PRIMARY KEY,
+                    term_exists INTEGER,
+                    label TEXT,
+                    is_obsolete INTEGER,
+                    replaced_by TEXT,
+                    branch_ok INTEGER,
+                    root_id TEXT,
+                    timestamp TEXT
+                )
+            """
+            )
+
             cursor.execute(
                 "CREATE INDEX IF NOT EXISTS idx_analysis_timestamp ON analysis_cache(timestamp)"
             )
@@ -420,6 +440,102 @@ class CacheManager:
         except Exception as e:
             logger.warning(
                 f"Failed to store ontology cache for {provider}/{term}: {str(e)}"
+            )
+            return False
+        finally:
+            if conn:
+                self._return_connection(conn)
+
+    def get_grounding_check(
+        self, ontology_id: str, max_age_hours: int
+    ) -> Optional[Dict[str, Any]]:
+        """Return a cached grounding check for *ontology_id*, or None if absent/expired.
+
+        See app.normalization.grounding for what a grounding check verifies
+        (term round-trip existence, obsolete status, branch membership).
+        """
+        conn = None
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT term_exists, label, is_obsolete, replaced_by, branch_ok,
+                       root_id, timestamp
+                FROM grounding_check_cache
+                WHERE ontology_id = ?
+            """,
+                (ontology_id,),
+            )
+            result = cursor.fetchone()
+            if not result:
+                return None
+            (
+                term_exists,
+                label,
+                is_obsolete,
+                replaced_by,
+                branch_ok,
+                root_id,
+                timestamp,
+            ) = result
+            if not self.is_cache_valid(timestamp, max_age_hours):
+                return None
+            return {
+                "term_exists": bool(term_exists),
+                "label": label or "",
+                "is_obsolete": bool(is_obsolete),
+                "replaced_by": replaced_by or "",
+                "branch_ok": None if branch_ok is None else bool(branch_ok),
+                "root_id": root_id or "",
+            }
+        except Exception as e:
+            logger.warning(
+                f"Failed to read grounding cache for {ontology_id}: {str(e)}"
+            )
+            return None
+        finally:
+            if conn:
+                self._return_connection(conn)
+
+    def store_grounding_check(
+        self,
+        ontology_id: str,
+        term_exists: bool,
+        label: str,
+        is_obsolete: bool,
+        replaced_by: str,
+        branch_ok: Optional[bool],
+        root_id: str,
+    ) -> bool:
+        """Persist a resolved grounding check for *ontology_id*."""
+        conn = None
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                INSERT OR REPLACE INTO grounding_check_cache
+                (ontology_id, term_exists, label, is_obsolete, replaced_by,
+                 branch_ok, root_id, timestamp)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+                (
+                    ontology_id,
+                    int(term_exists),
+                    label,
+                    int(is_obsolete),
+                    replaced_by,
+                    None if branch_ok is None else int(branch_ok),
+                    root_id,
+                    datetime.now().isoformat(),
+                ),
+            )
+            conn.commit()
+            return True
+        except Exception as e:
+            logger.warning(
+                f"Failed to store grounding cache for {ontology_id}: {str(e)}"
             )
             return False
         finally:

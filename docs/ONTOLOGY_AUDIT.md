@@ -149,3 +149,71 @@ passed. Full suite (`./run_tests.sh`) — 626 passed (see
 `docs/PROJECT_AUDIT.md` for the full-suite run covering the `condition.py`
 fix; the `body_site.py` vagina/rectum fixes in this document were verified
 against the same suite with no additional failures).
+
+## Follow-up: continuous grounding, not just a one-time fix (2026-07-21)
+
+Everything above was a **manual, one-time** re-verification of the static
+lookup dicts. That fixes the specific IDs found wrong on 2026-07-12, but it
+doesn't stop the same failure mode recurring silently: if EFO deprecates a
+currently-correct static ID next year, `grounding.py::tier_for()` had no way
+to notice and would keep returning `"auto"` for it indefinitely.
+
+`app/normalization/grounding.py` now runs metacurator's four-step grounding
+discipline (see [metacurator SPEC 070](https://github.com/seandavi/metacurator/blob/506715cc/docs/spec/070-ontology-grounding.md))
+against any match that would otherwise earn `"auto"`, downgrading it to
+`"review"` if any step fails:
+
+1. **Lookup** — unchanged; still the existing static-dict substring match in
+   `condition.py`/`body_site.py`/`host_species.py`.
+2. **Round-trip** — `app.normalization.ols.fetch_term()` re-fetches the
+   `ontology_id` directly from OLS by IRI and confirms it still resolves to
+   something. A miss here is the strongest signal of a fabricated or
+   since-deleted ID.
+3. **Branch check** — `app.normalization.ols.is_in_branch()` confirms the
+   term is still reachable from its ontology's declared root
+   (`grounding.py`'s `ROOTS`: EFO→`EFO:0000408` "disease",
+   MONDO→`MONDO:0000001` "disease or disorder",
+   UBERON→`UBERON:0001062` "anatomical entity",
+   NCBITaxon→`NCBITaxon:2759` "Eukaryota"). Catches a static ID that now
+   resolves to an unrelated concept even though the ID itself still exists —
+   exactly the "COVID-19 pointing at an obsolete anatomy term" failure mode
+   from the original incident, but caught automatically instead of by a
+   human spot-check.
+4. **Obsolete check** — `fetch_term()` also surfaces OLS's own `is_obsolete`
+   flag and `term_replaced_by`, so a deprecated-but-still-resolving term
+   doesn't slip through as `"auto"` either.
+
+**Scope, deliberately narrow:** this only ever downgrades `auto → review`,
+never the reverse, and never touches live-OLS-lookup results (those were
+already `"review"` per the existing source-based tiering and stay there —
+loosening that to a match-quality-based tiering, the way metacurator itself
+does it, would reopen the hole this whole system exists to close).
+
+**Cost:** the static dicts contain on the order of 50 unique `ontology_id`s
+total across all three modules. Results are cached
+(`grounding_check_cache`, SQLite, TTL-based via `GROUNDING_CACHE_VALIDITY_HOURS`
+— unlike `ontology_term_cache`, this cache is *meant* to expire, since
+obsolescence is exactly the drift it exists to catch) — so this is one OLS
+round-trip per unique ID per TTL window, not per request.
+
+**Failure mode if OLS is unreachable:** treated as "unable to verify," and
+the match keeps whatever tier it already had (fail open) rather than forcing
+every result to `"review"` during an OLS outage.
+
+**Not implemented — a local ontology store:** metacurator also supports a
+DuckDB/semantic-sql-derived local ontology backend as a faster, offline
+alternative to live OLS. Given this codebase's static dicts only need to
+verify ~50 IDs (not run arbitrary free-text search against a full ontology),
+the cost/benefit didn't justify a new heavy dependency and a multi-GB
+ontology-dump ETL/refresh pipeline for this pass — flagged as a future
+option if OLS latency/availability becomes an actual problem, not built
+ahead of that need (same reasoning as "Scope decision" above).
+
+**Caveat:** the exact OLS4 JSON field names used here (`is_obsolete`,
+`term_replaced_by`, `_embedded.terms`) are based on OLS's documented/
+historically-stable REST API rather than a live call made during this
+change (this session's network access to `ebi.ac.uk` was blocked). Every
+parse path degrades to "unable to verify" rather than raising on an
+unexpected shape, but this should get a real smoke-test against live OLS
+before anyone relies on the round-trip/branch/obsolete checks actually
+firing correctly in production.
