@@ -82,7 +82,9 @@ def main() -> int:
 
     target = 0.90
     if precision < target:
-        print(f"Below target precision {target:.0%} — expand GOLD_CASES and lookup tables.")
+        print(
+            f"Below target precision {target:.0%} — expand GOLD_CASES and lookup tables."
+        )
         return 1
     print(f"Meets target precision {target:.0%}.")
     return 0

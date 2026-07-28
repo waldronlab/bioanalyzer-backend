@@ -33,7 +33,7 @@ def load_data(predictions: Path, feedback: Path):
     """Load prediction and feedback CSV files."""
     pred_df = pd.read_csv(predictions)
     fb_df = pd.read_csv(feedback)
-    
+
     # Validate required columns
     required_cols = ["PMID"]
     for col in required_cols:
@@ -41,19 +41,21 @@ def load_data(predictions: Path, feedback: Path):
             raise ValueError(f"Missing required column '{col}' in predictions file")
         if col not in fb_df.columns:
             raise ValueError(f"Missing required column '{col}' in feedback file")
-    
+
     return pred_df, fb_df
 
 
 def merge_on_pmid(pred_df, fb_df):
     """Merge prediction and feedback dataframes on PMID."""
-    merged = pred_df.merge(fb_df, on="PMID", suffixes=("_predicted", "_actual"), how="inner")
-    
+    merged = pred_df.merge(
+        fb_df, on="PMID", suffixes=("_predicted", "_actual"), how="inner"
+    )
+
     if merged.empty:
         pred_pmids = set(pred_df["PMID"].unique())
         fb_pmids = set(fb_df["PMID"].unique())
         overlap = pred_pmids.intersection(fb_pmids)
-        
+
         raise ValueError(
             f"No overlapping PMIDs found after merge.\n"
             f"Predictions file has {len(pred_pmids)} unique PMIDs.\n"
@@ -61,7 +63,7 @@ def merge_on_pmid(pred_df, fb_df):
             f"Overlapping PMIDs: {len(overlap)}\n"
             f"Please ensure both files contain matching PMIDs for comparison."
         )
-    
+
     print(f"Successfully merged {len(merged)} rows with overlapping PMIDs.")
     return merged
 
@@ -69,31 +71,31 @@ def merge_on_pmid(pred_df, fb_df):
 def analyze_variable(df, variable):
     """
     Analyze a single variable by comparing predicted vs actual status.
-    
+
     Args:
         df: Merged dataframe with predicted and actual columns
         variable: Variable name (e.g., "Host Species Status")
-    
+
     Returns:
         Dictionary with analysis results including confusion matrix
     """
     pred_col = f"{variable}_predicted"
     actual_col = f"{variable}_actual"
-    
+
     if pred_col not in df.columns:
         raise ValueError(f"Column '{pred_col}' not found in merged dataframe")
     if actual_col not in df.columns:
         raise ValueError(f"Column '{actual_col}' not found in merged dataframe")
-    
+
     # Get non-null values from both columns
     yt = df[actual_col].dropna()
     yp = df[pred_col].dropna()
-    
+
     # Find common indices (rows where both predicted and actual are not null)
     mask = yt.index.intersection(yp.index)
     yt = yt.loc[mask]
     yp = yp.loc[mask]
-    
+
     if len(yt) == 0:
         print(f"Warning: No valid data points for {variable}")
         return {
@@ -102,22 +104,26 @@ def analyze_variable(df, variable):
             "accuracy": None,
             "confusion_matrix": [[0, 0, 0], [0, 0, 0], [0, 0, 0]],
         }
-    
+
     # Validate that all values are in CLASSES
     invalid_actual = set(yt.unique()) - set(CLASSES)
     invalid_pred = set(yp.unique()) - set(CLASSES)
-    
+
     if invalid_actual:
-        print(f"Warning: Found invalid values in actual data for {variable}: {invalid_actual}")
+        print(
+            f"Warning: Found invalid values in actual data for {variable}: {invalid_actual}"
+        )
     if invalid_pred:
-        print(f"Warning: Found invalid values in predicted data for {variable}: {invalid_pred}")
-    
+        print(
+            f"Warning: Found invalid values in predicted data for {variable}: {invalid_pred}"
+        )
+
     # Create confusion matrix with PARTIALLY_PRESENT as separate class
     cm = confusion_matrix(yt, yp, labels=CLASSES)
-    
+
     # Calculate accuracy
     accuracy = float((yt == yp).mean())
-    
+
     return {
         "variable": variable,
         "n": len(yt),
@@ -129,7 +135,7 @@ def analyze_variable(df, variable):
 def plot_cm(cm, variable, out):
     """
     Plot normalized confusion matrix as heatmap.
-    
+
     Args:
         cm: Confusion matrix (numpy array)
         variable: Variable name for title
@@ -140,7 +146,7 @@ def plot_cm(cm, variable, out):
     # Avoid division by zero
     cm_sum[cm_sum == 0] = 1
     cmn = cm / cm_sum
-    
+
     # Create heatmap
     fig, ax = plt.subplots(figsize=(10, 8))
     sns.heatmap(
@@ -151,7 +157,7 @@ def plot_cm(cm, variable, out):
         yticklabels=CLASSES,
         cmap="Blues",
         cbar_kws={"label": "Percentage"},
-        ax=ax
+        ax=ax,
     )
     ax.set_title(f"Confusion Matrix: {variable}", fontsize=14, fontweight="bold")
     ax.set_xlabel("Predicted", fontsize=12)
@@ -159,7 +165,7 @@ def plot_cm(cm, variable, out):
     plt.tight_layout()
     plt.savefig(out, dpi=300, bbox_inches="tight")
     plt.close()
-    
+
     # Also save raw counts version
     out_counts = out.parent / f"{out.stem}_counts{out.suffix}"
     fig, ax = plt.subplots(figsize=(10, 8))
@@ -171,9 +177,11 @@ def plot_cm(cm, variable, out):
         yticklabels=CLASSES,
         cmap="Blues",
         cbar_kws={"label": "Count"},
-        ax=ax
+        ax=ax,
     )
-    ax.set_title(f"Confusion Matrix (Counts): {variable}", fontsize=14, fontweight="bold")
+    ax.set_title(
+        f"Confusion Matrix (Counts): {variable}", fontsize=14, fontweight="bold"
+    )
     ax.set_xlabel("Predicted", fontsize=12)
     ax.set_ylabel("Actual", fontsize=12)
     plt.tight_layout()
@@ -184,7 +192,7 @@ def plot_cm(cm, variable, out):
 def main():
     """Main function to run confusion matrix analysis."""
     import sys
-    
+
     # Allow command-line arguments for file paths
     if len(sys.argv) >= 3:
         predictions_path = Path(sys.argv[1])
@@ -192,16 +200,16 @@ def main():
     else:
         predictions_path = Path("analysis_results.csv")
         feedback_path = Path("feedback.csv")
-    
+
     # Validate input files exist
     if not predictions_path.exists():
         raise FileNotFoundError(f"Predictions file not found: {predictions_path}")
     if not feedback_path.exists():
         raise FileNotFoundError(f"Feedback file not found: {feedback_path}")
-    
+
     print(f"Loading predictions from: {predictions_path}")
     print(f"Loading feedback from: {feedback_path}")
-    
+
     preds, fb = load_data(predictions_path, feedback_path)
     merged = merge_on_pmid(preds, fb)
 
@@ -224,8 +232,12 @@ def main():
             r = analyze_variable(merged, v)
             results.append(r)
             print(f"  - Sample size: {r['n']}")
-            print(f"  - Accuracy: {r['accuracy']:.3f}" if r['accuracy'] is not None else "  - Accuracy: N/A")
-            
+            print(
+                f"  - Accuracy: {r['accuracy']:.3f}"
+                if r["accuracy"] is not None
+                else "  - Accuracy: N/A"
+            )
+
             # Plot confusion matrix
             cm_array = np.array(r["confusion_matrix"])
             plot_cm(cm_array, v, outdir / f"{v.replace(' ', '_')}.png")
@@ -239,7 +251,7 @@ def main():
     summary_path = outdir / "summary_metrics.csv"
     summary_df.to_csv(summary_path, index=False)
     print(f"\nSaved summary metrics to: {summary_path}")
-    
+
     # Save detailed JSON results
     detailed_path = outdir / "detailed_results.json"
     with open(detailed_path, "w") as f:
@@ -254,4 +266,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

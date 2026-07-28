@@ -229,9 +229,7 @@ class LogDashboard:
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="BioAnalyzer Log Dashboard (Archived)"
-    )
+    parser = argparse.ArgumentParser(description="BioAnalyzer Log Dashboard (Archived)")
     parser.add_argument(
         "--refresh",
         "-r",
@@ -251,4 +249,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

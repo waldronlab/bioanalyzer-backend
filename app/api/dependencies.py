@@ -30,4 +30,3 @@ def get_unified_qa_optional(request: Request) -> Optional[UnifiedQA]:
 def get_pubmed_retriever(request: Request) -> Optional[PubMedRetriever]:
     """Return the PubMedRetriever singleton created at startup, or None."""
     return getattr(request.app.state, "pubmed_retriever", None)
-    

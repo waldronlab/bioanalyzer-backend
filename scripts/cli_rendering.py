@@ -51,7 +51,9 @@ def _field_ontology_candidates(fields: dict, key: str) -> str:
         return ""
     candidates = field_data.get("mapping_candidates") or []
     return "; ".join(
-        f"{c.get('label', '')}|{c.get('ontology_id', '')}" for c in candidates if c.get("ontology_id")
+        f"{c.get('label', '')}|{c.get('ontology_id', '')}"
+        for c in candidates
+        if c.get("ontology_id")
     )
 
 

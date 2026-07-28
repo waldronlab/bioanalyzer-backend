@@ -22,7 +22,12 @@ logger = logging.getLogger(__name__)
 
 def _unhealthy(*, error: str, **extra: Any) -> Dict[str, Any]:
     """Standardized unhealthy response payload."""
-    return {"status": "unhealthy", "error": error, "timestamp": get_current_timestamp(), **extra}
+    return {
+        "status": "unhealthy",
+        "error": error,
+        "timestamp": get_current_timestamp(),
+        **extra,
+    }
 
 
 class SystemService:
@@ -61,15 +66,21 @@ class SystemService:
             response_time_seconds=response_time,
         )
 
-    def check_ncbi_health(self, retriever: Optional[PubMedRetriever], pmid: str) -> Dict[str, Any]:
+    def check_ncbi_health(
+        self, retriever: Optional[PubMedRetriever], pmid: str
+    ) -> Dict[str, Any]:
         if retriever is None:
-            return _unhealthy(error="PubMedRetriever service not initialized", pmid=pmid)
+            return _unhealthy(
+                error="PubMedRetriever service not initialized", pmid=pmid
+            )
 
         try:
             metadata = retriever.fetch_paper_metadata(pmid)
         except Exception as exc:
             log_masked_exception(exc, "NCBI health check error")
-            return _unhealthy(error="An internal error occurred. Please try again later.", pmid=pmid)
+            return _unhealthy(
+                error="An internal error occurred. Please try again later.", pmid=pmid
+            )
 
         ok = bool(metadata.get("title") or metadata.get("abstract"))
         return {

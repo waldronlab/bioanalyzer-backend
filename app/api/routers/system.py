@@ -8,7 +8,11 @@ import psutil
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import RedirectResponse
 
-from app.api.dependencies import get_pubmed_retriever, get_unified_qa, get_unified_qa_optional
+from app.api.dependencies import (
+    get_pubmed_retriever,
+    get_unified_qa,
+    get_unified_qa_optional,
+)
 from app.api.models.api_models import ConfigResponse, HealthResponse, MetricsResponse
 from app.api.utils.api_utils import get_current_timestamp
 from app.core.exceptions import log_masked_exception
@@ -43,6 +47,7 @@ def _serialize_model(obj: Any) -> Any:
 # Root Endpoint
 # ---------------------------------------------------------------------
 
+
 @router.get("/")
 async def root() -> Any:
     """API root. Redirects to Swagger documentation."""
@@ -53,19 +58,25 @@ async def root() -> Any:
 # Health Endpoint
 # ---------------------------------------------------------------------
 
+
 @router.get("/health")
 async def health_check() -> HealthResponse:
     """Verify that the API is running."""
     try:
-        return HealthResponse(status="healthy", timestamp=get_current_timestamp(), version="1.0.0")
+        return HealthResponse(
+            status="healthy", timestamp=get_current_timestamp(), version="1.0.0"
+        )
     except Exception as exc:
         log_masked_exception(exc, "Error in health check")
-        return HealthResponse(status="unhealthy", timestamp=get_current_timestamp(), version="1.0.0")
+        return HealthResponse(
+            status="unhealthy", timestamp=get_current_timestamp(), version="1.0.0"
+        )
 
 
 # ---------------------------------------------------------------------
 # Configuration Endpoint
 # ---------------------------------------------------------------------
+
 
 @router.get("/config")
 async def get_config() -> ConfigResponse:
@@ -84,6 +95,7 @@ async def get_config() -> ConfigResponse:
 # Gemini Health Endpoint
 # ---------------------------------------------------------------------
 
+
 @router.get("/health/gemini")
 async def gemini_health_check(
     qa_instance: Optional[UnifiedQA] = Depends(get_unified_qa_optional),
@@ -96,6 +108,7 @@ async def gemini_health_check(
 # ---------------------------------------------------------------------
 # NCBI Health Endpoint
 # ---------------------------------------------------------------------
+
 
 @router.get("/health/ncbi")
 async def ncbi_health_check(
@@ -111,8 +124,11 @@ async def ncbi_health_check(
 # Metrics Endpoint
 # ---------------------------------------------------------------------
 
+
 @router.get("/metrics")
-async def get_metrics(service: SystemService = Depends(get_system_service)) -> MetricsResponse:
+async def get_metrics(
+    service: SystemService = Depends(get_system_service),
+) -> MetricsResponse:
     """Return runtime performance metrics."""
     return service.get_metrics()
 
@@ -120,6 +136,7 @@ async def get_metrics(service: SystemService = Depends(get_system_service)) -> M
 # ---------------------------------------------------------------------
 # System Status Endpoint
 # ---------------------------------------------------------------------
+
 
 @router.get("/status")
 async def get_system_status(
@@ -133,7 +150,9 @@ async def get_system_status(
     gemini = await service.check_gemini_health(qa_instance)
 
     uptime_seconds = time.time() - psutil.boot_time()
-    overall_status = health.status if hasattr(health, "status") else health.get("status", "unknown")
+    overall_status = (
+        health.status if hasattr(health, "status") else health.get("status", "unknown")
+    )
 
     return {
         "overall_status": overall_status,
@@ -149,6 +168,7 @@ async def get_system_status(
 # ---------------------------------------------------------------------
 # Version Endpoint
 # ---------------------------------------------------------------------
+
 
 @router.get("/version")
 async def get_version() -> Dict[str, Any]:
@@ -171,6 +191,7 @@ async def get_version() -> Dict[str, Any]:
 # Ping Endpoint
 # ---------------------------------------------------------------------
 
+
 @router.get("/ping")
 async def ping() -> Dict[str, Any]:
     """Lightweight connectivity endpoint."""
@@ -180,6 +201,7 @@ async def ping() -> Dict[str, Any]:
 # ---------------------------------------------------------------------
 # Question & Answer Endpoint
 # ---------------------------------------------------------------------
+
 
 @router.post("/qa")
 async def ask_question(
@@ -208,5 +230,8 @@ async def ask_question(
             detail="No answer generated. Please check GEMINI_API_KEY and try again.",
         )
 
-    return {"answer": answer, "confidence": confidence, "timestamp": get_current_timestamp()}
-    
+    return {
+        "answer": answer,
+        "confidence": confidence,
+        "timestamp": get_current_timestamp(),
+    }

@@ -18,7 +18,9 @@ def _safe_init(factory: Callable[[], T], service_name: str) -> Optional[T]:
     try:
         return factory()
     except Exception as exc:
-        logger.warning("Failed to initialize %s: %s", service_name, mask_exception_message(exc))
+        logger.warning(
+            "Failed to initialize %s: %s", service_name, mask_exception_message(exc)
+        )
         return None
 
 

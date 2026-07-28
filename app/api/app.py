@@ -82,9 +82,7 @@ if ENABLE_RATE_LIMITING:
         requests_per_minute=RATE_LIMIT_PER_MINUTE,
         enabled=ENABLE_RATE_LIMITING,
     )
-    logger.info(
-        f"Rate limiting enabled: {RATE_LIMIT_PER_MINUTE} requests/minute"
-    )
+    logger.info(f"Rate limiting enabled: {RATE_LIMIT_PER_MINUTE} requests/minute")
 
 
 app.include_router(bugsigdb_analysis.router)
