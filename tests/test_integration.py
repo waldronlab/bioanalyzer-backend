@@ -23,10 +23,17 @@ except ImportError:
 
 @pytest.fixture
 def client():
-    """Create a test client for the FastAPI app."""
+    """Create a test client for the FastAPI app.
+
+    raise_server_exceptions=False so an unhandled exception in an
+    endpoint comes back as a normal 500 response (what these tests
+    assert on), instead of re-raising into the test process — Starlette
+    always re-raises past a bare-Exception handler for debugging,
+    regardless of whether one is registered.
+    """
     if not FASTAPI_AVAILABLE:
         pytest.skip("FastAPI not available")
-    return TestClient(app)
+    return TestClient(app, raise_server_exceptions=False)
 
 
 @pytest.mark.skipif(not FASTAPI_AVAILABLE, reason="FastAPI not available")
