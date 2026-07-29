@@ -54,7 +54,11 @@ def _save_analyzed_pmids(state_path: Path, pmids: set[str]) -> None:
 
 
 def _search_pmids(preset: str, query: str | None, max_results: int) -> list[str]:
-    term = query.strip() if query else SEARCH_PRESETS.get(preset, RECOMMENDED_DISCOVERY_QUERY)
+    term = (
+        query.strip()
+        if query
+        else SEARCH_PRESETS.get(preset, RECOMMENDED_DISCOVERY_QUERY)
+    )
     retriever = PubMedRetriever()
     return retriever.search(term, max_results=max_results)
 
@@ -62,7 +66,13 @@ def _search_pmids(preset: str, query: str | None, max_results: int) -> list[str]
 def _high_confidence_ready(result: dict, min_mapping_conf: float) -> bool:
     """Papers ready for near-direct BugSigDB import (long-term zero-effort curation)."""
     fields = result.get("fields") or {}
-    required = ("host_species", "body_site", "condition", "sequencing_type", "sample_size")
+    required = (
+        "host_species",
+        "body_site",
+        "condition",
+        "sequencing_type",
+        "sample_size",
+    )
     for key in required:
         field = fields.get(key) or {}
         if field.get("status") != "PRESENT":
@@ -92,11 +102,17 @@ def _analyze_pmids(pmids: list[str], api_base: str, timeout: int) -> list[dict]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Curator Desk daily BioAnalyzer pipeline")
-    parser.add_argument("--preset", choices=["discovery", "broad", "precision"], default="discovery")
+    parser = argparse.ArgumentParser(
+        description="Curator Desk daily BioAnalyzer pipeline"
+    )
+    parser.add_argument(
+        "--preset", choices=["discovery", "broad", "precision"], default="discovery"
+    )
     parser.add_argument("--query", help="Override PubMed query")
     parser.add_argument("--max-results", type=int, default=50)
-    parser.add_argument("--pmids-file", help="Analyze PMIDs from file instead of searching")
+    parser.add_argument(
+        "--pmids-file", help="Analyze PMIDs from file instead of searching"
+    )
     parser.add_argument("-o", "--output", default="results/curator_predictions.csv")
     parser.add_argument("--state-file", default="results/analyzed_pmids.json")
     parser.add_argument("--skip-analyzed", action="store_true", default=True)
@@ -116,7 +132,9 @@ def main() -> int:
 
     import os
 
-    api_base = args.api_url or os.getenv("BIOANALYZER_API_URL", "http://localhost:8000/api/v1")
+    api_base = args.api_url or os.getenv(
+        "BIOANALYZER_API_URL", "http://localhost:8000/api/v1"
+    )
 
     if args.pmids_file:
         pmids = [
@@ -145,9 +163,7 @@ def main() -> int:
     if args.high_confidence_only:
         before = len(results)
         results = [
-            r
-            for r in results
-            if _high_confidence_ready(r, args.min_mapping_confidence)
+            r for r in results if _high_confidence_ready(r, args.min_mapping_confidence)
         ]
         print(
             f"High-confidence filter: {len(results)}/{before} rows "

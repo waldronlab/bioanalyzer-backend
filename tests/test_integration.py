@@ -11,20 +11,29 @@ from unittest.mock import patch, MagicMock, AsyncMock
 try:
     from fastapi.testclient import TestClient
     from app.api.app import app
+    from app.api.dependencies import get_unified_qa
 
     FASTAPI_AVAILABLE = True
 except ImportError:
     FASTAPI_AVAILABLE = False
     TestClient = None
     app = None
+    get_unified_qa = None
 
 
 @pytest.fixture
 def client():
-    """Create a test client for the FastAPI app."""
+    """Create a test client for the FastAPI app.
+
+    raise_server_exceptions=False so an unhandled exception in an
+    endpoint comes back as a normal 500 response (what these tests
+    assert on), instead of re-raising into the test process — Starlette
+    always re-raises past a bare-Exception handler for debugging,
+    regardless of whether one is registered.
+    """
     if not FASTAPI_AVAILABLE:
         pytest.skip("FastAPI not available")
-    return TestClient(app)
+    return TestClient(app, raise_server_exceptions=False)
 
 
 @pytest.mark.skipif(not FASTAPI_AVAILABLE, reason="FastAPI not available")
@@ -308,15 +317,19 @@ class TestUtilityIntegration:
 class TestErrorHandlingIntegration:
     """Integration tests for error handling across components."""
 
-    def test_api_error_handling_workflow(self, client):
+    def test_api_error_handling_workflow(self, client, override_deps):
         """Test that API errors are handled gracefully."""
         # Test with invalid endpoint
         response = client.get("/api/v1/nonexistent")
         assert response.status_code == 404
 
-        # Test with invalid request
-        response = client.post("/api/v1/qa", json={})
-        assert response.status_code == 400
+        # Test with invalid request. /qa's get_unified_qa dependency
+        # 503s when no QA instance is available, which would mask the
+        # 400 this test is actually checking for — override it so the
+        # request reaches the endpoint's own "question required" check.
+        with override_deps({get_unified_qa: lambda: AsyncMock()}):
+            response = client.post("/api/v1/qa", json={})
+            assert response.status_code == 400
 
     def test_cache_error_handling(self):
         """Test that cache errors are handled gracefully."""

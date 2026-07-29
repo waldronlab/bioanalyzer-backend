@@ -40,7 +40,9 @@ def _accuracy_by_field(rows: list[dict]) -> dict[str, dict[str, int]]:
             if not key.startswith("col_feedback__"):
                 continue
             field = key.replace("col_feedback__", "")
-            stats.setdefault(field, {"Correct": 0, "Incorrect": 0, "Unclear": 0, "Not reviewed": 0})
+            stats.setdefault(
+                field, {"Correct": 0, "Incorrect": 0, "Unclear": 0, "Not reviewed": 0}
+            )
             label = (val or "Not reviewed").strip()
             stats[field][label] = stats[field].get(label, 0) + 1
     return stats
@@ -48,9 +50,13 @@ def _accuracy_by_field(rows: list[dict]) -> dict[str, dict[str, int]]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Aggregate curator feedback CSVs")
-    parser.add_argument("--input", required=True, help="Directory or file with feedback CSVs")
+    parser.add_argument(
+        "--input", required=True, help="Directory or file with feedback CSVs"
+    )
     parser.add_argument("-o", "--output", default="results/aggregated_feedback.csv")
-    parser.add_argument("--report", action="store_true", help="Print per-field accuracy summary")
+    parser.add_argument(
+        "--report", action="store_true", help="Print per-field accuracy summary"
+    )
     args = parser.parse_args()
 
     input_path = Path(args.input)

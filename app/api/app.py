@@ -1,15 +1,11 @@
 """FastAPI application for BioAnalyzer Package API."""
 
 import logging
-import os
-import traceback
-from typing import Dict, Any
-from fastapi import FastAPI, Request
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
-from fastapi.exceptions import RequestValidationError
-from app.api.models.api_models import HealthResponse
+from typing import Dict
 
+from fastapi import FastAPI
+
+from app.api.models.api_models import HealthResponse
 from app.api.routers import (
     bugsigdb_analysis,
     bugsigdb_analysis_v2,
@@ -18,6 +14,10 @@ from app.api.routers import (
 )
 from app.api.middleware.rate_limit import RateLimitMiddleware
 from app.api.middleware.request_id import RequestIDMiddleware
+
+from app.core.lifespan import lifespan
+from app.core.exceptions import register_exception_handlers
+
 from app.utils.config import (
     CORS_ORIGINS,
     ENABLE_RATE_LIMITING,
@@ -27,12 +27,17 @@ from app.utils.config import (
     setup_logging,
 )
 
+from fastapi.middleware.cors import CORSMiddleware
+
 setup_logging()
+
 logger = logging.getLogger(__name__)
+
 app = FastAPI(
     title="BioAnalyzer Package API",
     description="API for analyzing scientific papers and extracting BugSigDB curation fields.",
     version="1.0.0",
+    lifespan=lifespan,
     contact={
         "name": "BioAnalyzer Team",
         "url": "https://github.com/your-repo/bioanalyzer-package",
@@ -53,19 +58,19 @@ app = FastAPI(
     ],
 )
 
+# Register centralized exception handling
+register_exception_handlers(app)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ORIGINS if ENVIRONMENT == "production" else ["*"],
-    # No cookie/session-based auth exists anywhere in this app, so there's
-    # nothing that needs credentialed cross-origin requests. Deliberately
-    # NOT setting allow_credentials=True: combined with a wildcard origin
-    # it would make most CORS middlewares (including Starlette's) reflect
-    # the request's Origin header instead of a literal "*", which would
-    # let any origin make credentialed requests - a real risk with no
-    # corresponding benefit here.
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
-    expose_headers=["X-Request-ID", "X-RateLimit-Limit", "X-RateLimit-Remaining"],
+    expose_headers=[
+        "X-Request-ID",
+        "X-RateLimit-Limit",
+        "X-RateLimit-Remaining",
+    ],
 )
 
 if ENABLE_REQUEST_ID:
@@ -78,6 +83,7 @@ if ENABLE_RATE_LIMITING:
         enabled=ENABLE_RATE_LIMITING,
     )
     logger.info(f"Rate limiting enabled: {RATE_LIMIT_PER_MINUTE} requests/minute")
+
 
 app.include_router(bugsigdb_analysis.router)
 app.include_router(bugsigdb_analysis_v2.router)
@@ -104,53 +110,6 @@ async def health_check() -> HealthResponse:
     from app.api.routers.system import health_check as system_health_check
 
     return await system_health_check()
-
-
-@app.exception_handler(RequestValidationError)
-async def validation_exception_handler(
-    request: Request, exc: RequestValidationError
-) -> JSONResponse:
-    """Handle request validation errors."""
-    logger.warning(f"Validation error: {exc.errors()}")
-    return JSONResponse(
-        status_code=422,
-        content={
-            "error": "Validation Error",
-            "detail": exc.errors(),
-            "request_id": getattr(request.state, "request_id", None),
-        },
-    )
-
-
-@app.exception_handler(Exception)
-async def global_exception_handler(request: Request, exc: Exception) -> JSONResponse:
-    """Handle unexpected exceptions with credential masking."""
-    from app.utils.credential_masking import mask_exception_message, mask_string
-
-    safe_exc_msg = mask_exception_message(exc)
-    safe_traceback = mask_string(traceback.format_exc())
-    request_id = getattr(request.state, "request_id", None)
-
-    logger.error(
-        f"Unhandled exception: {safe_exc_msg}\n"
-        f"Traceback: {safe_traceback}\n"
-        f"Request ID: {request_id}"
-    )
-
-    # Hide internal details in production
-    if ENVIRONMENT == "production":
-        detail = "An internal error occurred. Please try again later."
-    else:
-        detail = safe_exc_msg
-
-    return JSONResponse(
-        status_code=500,
-        content={
-            "error": "Internal Server Error",
-            "detail": detail,
-            "request_id": request_id,
-        },
-    )
 
 
 if __name__ == "__main__":

@@ -69,7 +69,12 @@ OPTIONS = {
 
 _safe = lambda col: col.replace(" ", "_")
 FEEDBACK_BASE_COLS = [
-    "PMID", "curator_id", "overall_verdict", "comment", "timestamp", "bioanalyzer_version",
+    "PMID",
+    "curator_id",
+    "overall_verdict",
+    "comment",
+    "timestamp",
+    "bioanalyzer_version",
 ]
 PRED_PREFIX, TRUE_PREFIX, COL_FB_PREFIX = "pred__", "true__", "col_feedback__"
 
@@ -149,7 +154,11 @@ def _load_data(source, is_path: bool) -> pd.DataFrame:
     else:
         name = source.name.lower()
         buf = io.BytesIO(source.getvalue())
-        ext = ".csv" if name.endswith(".csv") else (".parquet" if name.endswith((".parquet", ".pq")) else "")
+        ext = (
+            ".csv"
+            if name.endswith(".csv")
+            else (".parquet" if name.endswith((".parquet", ".pq")) else "")
+        )
     if ext == ".csv":
         return pd.read_csv(buf)
     if ext in (".parquet", ".pq"):
@@ -174,15 +183,19 @@ def normalize_dataset(df: pd.DataFrame) -> pd.DataFrame:
         return pd.DataFrame()
     if "Year" not in df.columns and "Publication Date" in df.columns:
         try:
-            df = df.assign(Year=pd.to_datetime(df["Publication Date"], errors="coerce").dt.year)
+            df = df.assign(
+                Year=pd.to_datetime(df["Publication Date"], errors="coerce").dt.year
+            )
         except Exception:
             pass
     for col in BOOLEAN_COLUMNS:
         if col in df.columns:
             df[col] = df[col].map(
-                lambda v: str(v).strip().upper() in {"TRUE", "T", "1", "YES"}
-                if pd.notna(v)
-                else False
+                lambda v: (
+                    str(v).strip().upper() in {"TRUE", "T", "1", "YES"}
+                    if pd.notna(v)
+                    else False
+                )
             )
         else:
             df[col] = False
@@ -200,7 +213,10 @@ def normalize_dataset(df: pd.DataFrame) -> pd.DataFrame:
 # -----------------------------
 def load_feedback() -> pd.DataFrame:
     """Load feedback from parquet then csv; empty DataFrame with schema if missing."""
-    for path, reader in [(FEEDBACK_PARQUET, pd.read_parquet), (FEEDBACK_CSV, pd.read_csv)]:
+    for path, reader in [
+        (FEEDBACK_PARQUET, pd.read_parquet),
+        (FEEDBACK_CSV, pd.read_csv),
+    ]:
         if path.exists():
             try:
                 return reader(path)
@@ -228,9 +244,8 @@ def upsert_feedback(existing: pd.DataFrame, row: dict) -> pd.DataFrame:
         if col not in existing.columns:
             existing[col] = ""
     if not existing.empty:
-        mask = (
-            (existing["PMID"].astype(str) == str(row["PMID"]))
-            & (existing["curator_id"].astype(str) == str(row["curator_id"]))
+        mask = (existing["PMID"].astype(str) == str(row["PMID"])) & (
+            existing["curator_id"].astype(str) == str(row["curator_id"])
         )
         if mask.any():
             for k, v in row.items():
@@ -244,10 +259,14 @@ def upsert_feedback(existing: pd.DataFrame, row: dict) -> pd.DataFrame:
 # -----------------------------
 def render_filters(df: pd.DataFrame) -> pd.DataFrame:
     st.sidebar.header("Filters")
-    search = st.sidebar.text_input(
-        "Search (PMID, title, journal, condition)",
-        placeholder="e.g. obesity, 2019, Lactobacillus",
-    ).strip().lower()
+    search = (
+        st.sidebar.text_input(
+            "Search (PMID, title, journal, condition)",
+            placeholder="e.g. obesity, 2019, Lactobacillus",
+        )
+        .strip()
+        .lower()
+    )
     year_range = None
     if "Year" in df.columns:
         years = df["Year"].dropna()
@@ -269,7 +288,9 @@ def render_filters(df: pd.DataFrame) -> pd.DataFrame:
         mask = out["PMID"].astype(str).str.contains(search, na=False)
         for col in ["Title", "Journal", "Condition"]:
             if col in out.columns:
-                mask = mask | out[col].astype(str).str.lower().str.contains(search, na=False)
+                mask = mask | out[col].astype(str).str.lower().str.contains(
+                    search, na=False
+                )
         out = out.loc[mask]
     if year_range and "Year" in out.columns:
         out = out[(out["Year"] >= year_range[0]) & (out["Year"] <= year_range[1])]
@@ -292,7 +313,9 @@ def render_table(df: pd.DataFrame) -> Optional[int]:
         st.warning("No rows match your filters.")
         return None
     st.subheader("Candidate curatable articles")
-    st.caption("Tip: an empty Ontology ID cell means that field needs a curator-confirmed mapping.")
+    st.caption(
+        "Tip: an empty Ontology ID cell means that field needs a curator-confirmed mapping."
+    )
     sort_options = ["PMID"]
     if "Year" in df.columns:
         sort_options.insert(0, "Year")
@@ -317,7 +340,9 @@ def render_table(df: pd.DataFrame) -> Optional[int]:
         df_show,
         use_container_width=True,
         height=650,
-        column_config={"PubMed Link": st.column_config.LinkColumn("PubMed", display_text="Open")},
+        column_config={
+            "PubMed Link": st.column_config.LinkColumn("PubMed", display_text="Open")
+        },
     )
     st.metric("Rows after filtering", len(df))
     st.metric("Rows displayed", len(df_show))
@@ -369,7 +394,9 @@ def render_column_level_validation(selected_row: pd.Series) -> dict[str, str]:
                     onto_safe = _safe(onto_col)
                     predicted_id = str(selected_row.get(onto_col, "")).strip()
                     st.write(
-                        f"Ontology ID: `{predicted_id}`" if predicted_id else "Ontology ID: _(none - needs mapping)_"
+                        f"Ontology ID: `{predicted_id}`"
+                        if predicted_id
+                        else "Ontology ID: _(none - needs mapping)_"
                     )
                     candidates = _parse_candidates(
                         str(selected_row.get(_ontology_candidates_col_for(col), ""))
@@ -406,9 +433,13 @@ def render_column_level_validation(selected_row: pd.Series) -> dict[str, str]:
     return out
 
 
-def render_feedback_section(selected_pmid: Optional[int], dataset_df: pd.DataFrame) -> None:
+def render_feedback_section(
+    selected_pmid: Optional[int], dataset_df: pd.DataFrame
+) -> None:
     st.subheader("Curator feedback")
-    st.caption("Feedback is stored locally in results/. Entries are upserted by PMID + curator_id.")
+    st.caption(
+        "Feedback is stored locally in results/. Entries are upserted by PMID + curator_id."
+    )
     feedback_df = load_feedback()
     selected_row = None
     if selected_pmid is not None:
@@ -416,7 +447,11 @@ def render_feedback_section(selected_pmid: Optional[int], dataset_df: pd.DataFra
             selected_row = dataset_df.loc[dataset_df["PMID"] == selected_pmid].iloc[0]
         except Exception:
             selected_row = None
-    title_prefill = str(selected_row.get("Title", "")) if selected_row is not None and "Title" in selected_row.index else ""
+    title_prefill = (
+        str(selected_row.get("Title", ""))
+        if selected_row is not None and "Title" in selected_row.index
+        else ""
+    )
 
     with st.form("feedback_form", clear_on_submit=False):
         curator_id = st.text_input(
@@ -446,7 +481,11 @@ def render_feedback_section(selected_pmid: Optional[int], dataset_df: pd.DataFra
             value=CONFIG["bioanalyzer_version_default"],
             placeholder="e.g. 1.0.0, commit SHA, docker tag",
         ).strip()
-        field_validation = render_column_level_validation(selected_row) if selected_row is not None else {}
+        field_validation = (
+            render_column_level_validation(selected_row)
+            if selected_row is not None
+            else {}
+        )
         if selected_row is None:
             st.info("Select a PMID above to enable field-level validation.")
         submitted = st.form_submit_button("Save feedback")
@@ -462,7 +501,11 @@ def render_feedback_section(selected_pmid: Optional[int], dataset_df: pd.DataFra
             if pid is None:
                 st.error("PMID must be numeric.")
                 return
-            if selected_pmid is not None and pid != selected_pmid and pid not in dataset_df["PMID"].values:
+            if (
+                selected_pmid is not None
+                and pid != selected_pmid
+                and pid not in dataset_df["PMID"].values
+            ):
                 st.warning("PMID not in current dataset; feedback will still be saved.")
             row = {
                 "PMID": int(pid),
@@ -476,15 +519,19 @@ def render_feedback_section(selected_pmid: Optional[int], dataset_df: pd.DataFra
                 s = _safe(col)
                 row[f"{PRED_PREFIX}{s}"] = (
                     str(selected_row.get(col, "")).strip()
-                    if selected_row is not None and col in selected_row.index else ""
+                    if selected_row is not None and col in selected_row.index
+                    else ""
                 )
                 row[f"{TRUE_PREFIX}{s}"] = field_validation.get(f"{TRUE_PREFIX}{s}", "")
-                row[f"{COL_FB_PREFIX}{s}"] = field_validation.get(f"{COL_FB_PREFIX}{s}", "Not reviewed")
+                row[f"{COL_FB_PREFIX}{s}"] = field_validation.get(
+                    f"{COL_FB_PREFIX}{s}", "Not reviewed"
+                )
             for onto_col in ONTOLOGY_ID_COLUMNS:
                 s = _safe(onto_col)
                 row[f"{PRED_PREFIX}{s}"] = (
                     str(selected_row.get(onto_col, "")).strip()
-                    if selected_row is not None and onto_col in selected_row.index else ""
+                    if selected_row is not None and onto_col in selected_row.index
+                    else ""
                 )
                 row[f"{TRUE_PREFIX}{s}"] = field_validation.get(f"{TRUE_PREFIX}{s}", "")
             feedback_df = upsert_feedback(feedback_df, row)
@@ -497,17 +544,25 @@ def render_feedback_section(selected_pmid: Optional[int], dataset_df: pd.DataFra
     if feedback_df.empty:
         st.info("No feedback recorded yet.")
         return
-    compact_cols = [c for c in FEEDBACK_BASE_COLS if c in feedback_df.columns] + [
-        k
-        for c in VALUE_COLUMNS
-        for k in (f"{PRED_PREFIX}{_safe(c)}", f"{TRUE_PREFIX}{_safe(c)}", f"{COL_FB_PREFIX}{_safe(c)}")
-        if k in feedback_df.columns
-    ] + [
-        k
-        for c in ONTOLOGY_ID_COLUMNS
-        for k in (f"{PRED_PREFIX}{_safe(c)}", f"{TRUE_PREFIX}{_safe(c)}")
-        if k in feedback_df.columns
-    ]
+    compact_cols = (
+        [c for c in FEEDBACK_BASE_COLS if c in feedback_df.columns]
+        + [
+            k
+            for c in VALUE_COLUMNS
+            for k in (
+                f"{PRED_PREFIX}{_safe(c)}",
+                f"{TRUE_PREFIX}{_safe(c)}",
+                f"{COL_FB_PREFIX}{_safe(c)}",
+            )
+            if k in feedback_df.columns
+        ]
+        + [
+            k
+            for c in ONTOLOGY_ID_COLUMNS
+            for k in (f"{PRED_PREFIX}{_safe(c)}", f"{TRUE_PREFIX}{_safe(c)}")
+            if k in feedback_df.columns
+        ]
+    )
     st.dataframe(
         feedback_df.sort_values("timestamp", ascending=False)[compact_cols],
         use_container_width=True,
@@ -540,7 +595,9 @@ This dashboard provides a **sortable, searchable, filterable** table of BioAnaly
     )
     raw_df = pd.DataFrame()
     if data_source == "Upload CSV/Parquet":
-        uploaded = st.sidebar.file_uploader("Upload dataset", type=["csv", "parquet", "pq"])
+        uploaded = st.sidebar.file_uploader(
+            "Upload dataset", type=["csv", "parquet", "pq"]
+        )
         if uploaded:
             try:
                 raw_df = _load_data(uploaded, is_path=False)
@@ -549,7 +606,9 @@ This dashboard provides a **sortable, searchable, filterable** table of BioAnaly
                 logger.exception("Upload load failed")
                 return
     else:
-        path = st.sidebar.text_input("Path to CSV/Parquet", placeholder="e.g. analysis_results.csv").strip()
+        path = st.sidebar.text_input(
+            "Path to CSV/Parquet", placeholder="e.g. analysis_results.csv"
+        ).strip()
         if path:
             try:
                 raw_df = _load_data(path, is_path=True)
