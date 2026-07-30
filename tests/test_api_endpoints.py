@@ -243,7 +243,7 @@ class TestBugSigDBAnalysisEndpoints:
             assert "required" in field_info
             assert field_info["required"] is True
 
-    @patch("app.api.routers.bugsigdb_analysis.analyze_paper_simple")
+    @patch("app.api.routers.bugsigdb_analysis_v2.analyze_paper_simple")
     def test_analyze_paper_success(self, mock_analyze, client):
         """Test paper analysis endpoint with successful response."""
         mock_result = {
@@ -265,7 +265,7 @@ class TestBugSigDBAnalysisEndpoints:
         assert data["pmid"] == "12345678"
         assert "fields" in data
 
-    @patch("app.api.routers.bugsigdb_analysis.analyze_paper_simple")
+    @patch("app.api.routers.bugsigdb_analysis_v2.analyze_paper_simple")
     def test_analyze_paper_not_found(self, mock_analyze, client):
         """Test paper analysis endpoint when paper not found."""
         mock_analyze.return_value = None
@@ -274,7 +274,7 @@ class TestBugSigDBAnalysisEndpoints:
         assert response.status_code == 404
         assert "failed" in response.json()["detail"].lower()
 
-    @patch("app.api.routers.bugsigdb_analysis.analyze_paper_simple")
+    @patch("app.api.routers.bugsigdb_analysis_v2.analyze_paper_simple")
     def test_analyze_paper_error(self, mock_analyze, client):
         """Test paper analysis endpoint with error."""
         mock_analyze.side_effect = Exception("Test error")
