@@ -8,9 +8,8 @@ from fastapi import FastAPI
 from app.api.models.api_models import HealthResponse
 from app.api.routers import (
     bugsigdb_analysis,
-    bugsigdb_analysis_v2,
-    system,
     study_analysis,
+    system,
 )
 from app.api.middleware.rate_limit import RateLimitMiddleware
 from app.api.middleware.request_id import RequestIDMiddleware
@@ -85,10 +84,10 @@ if ENABLE_RATE_LIMITING:
     logger.info(f"Rate limiting enabled: {RATE_LIMIT_PER_MINUTE} requests/minute")
 
 
-app.include_router(bugsigdb_analysis.router)
-app.include_router(bugsigdb_analysis_v2.router)
 app.include_router(study_analysis.router)
 app.include_router(system.router)
+app.include_router(bugsigdb_analysis.v1_router)
+app.include_router(bugsigdb_analysis.router)
 
 
 @app.get("/")

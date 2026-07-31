@@ -1,10 +1,3 @@
-"""
-Tests for app/api/routers/bugsigdb_analysis_v2.py - the entire v2 RAG API
-surface previously had zero test coverage (confirmed via coverage report:
-26%, every endpoint body untested), unlike its v1 equivalent
-(tests/test_api_endpoints.py::TestBugSigDBAnalysisEndpoints).
-"""
-
 import pytest
 from unittest.mock import patch, AsyncMock
 
@@ -240,4 +233,92 @@ class TestFieldsEndpointsV2:
 
     def test_get_field_details_unknown_field(self, client):
         response = client.get("/api/v2/fields/not_a_real_field")
+        assert response.status_code in (404, 400)
+
+
+@pytest.mark.skipif(not FASTAPI_AVAILABLE, reason="FastAPI not available")
+class TestAnalyzePaperV1Legacy:
+    """Coverage for the /api/v1 wrapper endpoints. These call
+    analyze_paper_simple directly (NOT analyze_paper_with_rag(use_rag=False))
+    — see the module docstring in bugsigdb_analysis_v2.py for why that
+    distinction matters. Patch target is analyze_paper_simple, imported at
+    module scope in app.api.routers.bugsigdb_analysis_v2.
+    """
+
+    @patch("app.api.routers.bugsigdb_analysis_v2.analyze_paper_simple")
+    def test_get_success(self, mock_analyze, client):
+        mock_analyze.return_value = _mock_result()
+        response = client.get("/api/v1/analyze/12345678")
+        assert response.status_code == 200
+        assert response.json()["pmid"] == "12345678"
+
+    @patch("app.api.routers.bugsigdb_analysis_v2.analyze_paper_simple")
+    def test_get_passes_force_refresh(self, mock_analyze, client):
+        mock_analyze.return_value = _mock_result()
+        response = client.get("/api/v1/analyze/12345678?refresh=true")
+        assert response.status_code == 200
+        _, kwargs = mock_analyze.call_args
+        assert kwargs["force_refresh"] is True
+
+    @patch("app.api.routers.bugsigdb_analysis_v2.analyze_paper_simple")
+    def test_get_default_no_refresh(self, mock_analyze, client):
+        mock_analyze.return_value = _mock_result()
+        response = client.get("/api/v1/analyze/12345678")
+        assert response.status_code == 200
+        _, kwargs = mock_analyze.call_args
+        assert kwargs["force_refresh"] is False
+
+    @patch("app.api.routers.bugsigdb_analysis_v2.analyze_paper_simple")
+    def test_post_success(self, mock_analyze, client):
+        mock_analyze.return_value = _mock_result()
+        response = client.post("/api/v1/analyze/12345678")
+        assert response.status_code == 200
+        assert response.json()["pmid"] == "12345678"
+
+    @patch("app.api.routers.bugsigdb_analysis_v2.analyze_paper_simple")
+    def test_not_found_returns_404(self, mock_analyze, client):
+        mock_analyze.return_value = None
+        response = client.get("/api/v1/analyze/12345678")
+        assert response.status_code == 404
+        # carried over from the old TestBugSigDBAnalysisEndpoints
+        assert "failed" in response.json()["detail"].lower()
+
+    @patch("app.api.routers.bugsigdb_analysis_v2.analyze_paper_simple")
+    def test_exception_returns_masked_500(self, mock_analyze, client):
+        mock_analyze.side_effect = Exception("secret api key leaked here")
+        response = client.get("/api/v1/analyze/12345678")
+        assert response.status_code == 500
+        assert "secret api key" not in response.text
+        # carried over from the old TestBugSigDBAnalysisEndpoints
+        assert "error" in response.json()["detail"].lower()
+
+    def test_get_essential_fields_v1_shape(self, client):
+        response = client.get("/api/v1/fields")
+        assert response.status_code == 200
+        data = response.json()
+        assert "essential_fields" in data
+        # carried over from the old TestBugSigDBAnalysisEndpoints — status
+        # values and full per-field structure, not just presence of the key
+        assert "status_values" in data
+        essential_fields = data["essential_fields"]
+        for name in (
+            "host_species",
+            "body_site",
+            "condition",
+            "sequencing_type",
+            "sample_size",
+        ):
+            assert name in essential_fields
+        for field_name, field_info in essential_fields.items():
+            assert "name" in field_info
+            assert "description" in field_info
+            assert "required" in field_info
+            assert field_info["required"] is True
+
+    def test_get_field_details_v1_known_field(self, client):
+        response = client.get("/api/v1/fields/host_species")
+        assert response.status_code == 200
+
+    def test_get_field_details_v1_unknown_field(self, client):
+        response = client.get("/api/v1/fields/not_a_real_field")
         assert response.status_code in (404, 400)
