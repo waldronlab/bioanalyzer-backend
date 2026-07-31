@@ -217,7 +217,6 @@ class TestSystemEndpoints:
 
 
 @pytest.mark.skipif(not FASTAPI_AVAILABLE, reason="FastAPI not available")
-
 @pytest.mark.skipif(not FASTAPI_AVAILABLE, reason="FastAPI not available")
 class TestQAEndpoint:
     """Tests for Q&A endpoint."""

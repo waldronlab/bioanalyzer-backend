@@ -301,7 +301,13 @@ class TestAnalyzePaperV1Legacy:
         # values and full per-field structure, not just presence of the key
         assert "status_values" in data
         essential_fields = data["essential_fields"]
-        for name in ("host_species", "body_site", "condition", "sequencing_type", "sample_size"):
+        for name in (
+            "host_species",
+            "body_site",
+            "condition",
+            "sequencing_type",
+            "sample_size",
+        ):
             assert name in essential_fields
         for field_name, field_info in essential_fields.items():
             assert "name" in field_info
