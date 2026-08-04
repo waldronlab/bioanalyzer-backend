@@ -164,20 +164,24 @@ class TestBatchAnalysisV2:
 
     @patch("app.api.routers.bugsigdb_analysis_v2.analyze_paper_with_rag")
     def test_batch_filters_out_failed_pmids(self, mock_analyze, client):
+        # PMIDs must be numeric strings - validate_pmid() rejects anything
+        # else before this mock is ever reached, which would otherwise drop
+        # BOTH pmids (not just the intentionally-failing one) and make this
+        # test's own assertions impossible to satisfy.
         async def side_effect(pmid, rag_config=None, use_rag=True):
-            if pmid == "bad":
+            if pmid == "222":
                 raise RuntimeError("boom")
             return _mock_result(pmid)
 
         mock_analyze.side_effect = side_effect
         response = client.post(
             "/api/v2/analyze/batch",
-            json={"pmids": ["good", "bad"], "use_rag": False, "max_concurrent": 2},
+            json={"pmids": ["111", "222"], "use_rag": False, "max_concurrent": 2},
         )
         assert response.status_code == 200
         data = response.json()
         assert len(data) == 1
-        assert data[0]["pmid"] == "good"
+        assert data[0]["pmid"] == "111"
 
     @patch("app.api.routers.bugsigdb_analysis_v2.analyze_paper_with_rag")
     def test_batch_default_rag_config_used_when_enabled(self, mock_analyze, client):
