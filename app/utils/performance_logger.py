@@ -2,6 +2,7 @@ import logging
 import time
 import json
 from datetime import datetime
+from pathlib import Path
 from typing import Dict, Any
 import traceback
 
@@ -10,6 +11,10 @@ class PerformanceLogger:
     """Specialized logger for tracking PMID query performance and timing."""
 
     def __init__(self):
+        # Self-sufficient: don't rely on import order for app.utils.config to
+        # have already created logs/ - ensure it exists here too.
+        Path("logs").mkdir(parents=True, exist_ok=True)
+
         self.logger = logging.getLogger("performance")
         self.logger.setLevel(logging.INFO)
 

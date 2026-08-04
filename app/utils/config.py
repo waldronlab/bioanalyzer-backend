@@ -18,18 +18,6 @@ except ImportError:
         )
 
 
-def get_genai():
-    try:
-        import google.generativeai as genai
-
-        return genai
-    except ImportError:
-        raise RuntimeError(
-            "google-generativeai is not installed. "
-            "Install with: pip install google-generativeai"
-        )
-
-
 possible_env_paths = [
     Path(__file__).parents[1] / ".env",  # Original location
     Path("/app/.env"),  # Docker container location
@@ -174,7 +162,17 @@ LOG_FILE_FORMAT = (
 
 # Logging paths
 LOG_DIR = Path("logs")
-LOG_DIR.mkdir(exist_ok=True)
+try:
+    LOG_DIR.mkdir(exist_ok=True)
+except (PermissionError, OSError) as e:
+    # This runs at import time, before this module's own `logger` (set up
+    # further down via setup_logging()) exists - use the stdlib logger
+    # directly rather than depending on that module-level assignment order.
+    logging.getLogger(__name__).warning(
+        "Could not create log directory %s: %s. File logging may be unavailable.",
+        LOG_DIR,
+        e,
+    )
 
 # Main application log
 MAIN_LOG_FILE = LOG_DIR / "bioanalyzer.log"
@@ -231,7 +229,9 @@ def setup_logging() -> logging.Logger:
         file_handlers_created.append("main")
     except (PermissionError, OSError) as e:
         # Fall back to console-only logging if file handlers fail
-        pass
+        logging.getLogger(__name__).warning(
+            "Could not create main log file handler: %s", e
+        )
 
     try:
         # Performance log handler
@@ -246,7 +246,9 @@ def setup_logging() -> logging.Logger:
         root_logger.addHandler(perf_file_handler)
         file_handlers_created.append("performance")
     except (PermissionError, OSError) as e:
-        pass
+        logging.getLogger(__name__).warning(
+            "Could not create performance log file handler: %s", e
+        )
 
     try:
         # Error log handler
@@ -261,7 +263,9 @@ def setup_logging() -> logging.Logger:
         root_logger.addHandler(error_file_handler)
         file_handlers_created.append("error")
     except (PermissionError, OSError) as e:
-        pass
+        logging.getLogger(__name__).warning(
+            "Could not create error log file handler: %s", e
+        )
 
     try:
         # API log handler
@@ -276,7 +280,9 @@ def setup_logging() -> logging.Logger:
         root_logger.addHandler(api_file_handler)
         file_handlers_created.append("api")
     except (PermissionError, OSError) as e:
-        pass
+        logging.getLogger(__name__).warning(
+            "Could not create API log file handler: %s", e
+        )
 
     # Always add console handler (it should always work)
     root_logger.addHandler(console_handler)

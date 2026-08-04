@@ -9,9 +9,9 @@ from app.utils.credential_masking import mask_exception_message
 logger = logging.getLogger(__name__)
 
 
-def log_masked_exception(exc: Exception, message: str, *, level: str = "error") -> None:
+def log_masked_exception(exc: Exception, message: str) -> None:
     """Log an exception with credential-masked details."""
-    getattr(logger, level)("%s: %s", message, mask_exception_message(exc))
+    logger.error("%s: %s", message, mask_exception_message(exc))
 
 
 async def generic_exception_handler(request: Request, exc: Exception) -> JSONResponse:

@@ -37,7 +37,6 @@ def find_bioanalyzer_backend():
         Path(__file__).parent / "BioAnalyzer-Backend",  # Adjacent directory
         Path.home() / "Desktop" / "BioAnalyzer-Backend",  # Desktop
         Path("/opt/bioanalyzer"),  # System installation
-        Path("/usr/local/bin/bioanalyzer"),  # Local installation
     ]
     
     for path in possible_paths:
@@ -63,7 +62,7 @@ Possible solutions:
 2. Install BioAnalyzer system-wide: ./install.sh
 3. Set BIOANALYZER_PATH environment variable
 
-For help, visit: https://github.com/your-repo/bioanalyzer-backend
+For help, visit: https://github.com/waldronlab/bioanalyzer-backend
         """)
         sys.exit(1)
     
@@ -82,7 +81,7 @@ For help, visit: https://github.com/your-repo/bioanalyzer-backend
                 from dotenv import load_dotenv
                 load_dotenv(str(env_path))
                 print(f"Loaded environment variables from {env_path}")
-            except Exception:
+            except ImportError:
                 # Fallback: parse the .env file manually if python-dotenv is not installed
                 try:
                     with open(env_path, 'r', encoding='utf-8') as f:
@@ -99,10 +98,10 @@ For help, visit: https://github.com/your-repo/bioanalyzer-backend
                             if key and val and os.environ.get(key) is None:
                                 os.environ[key] = val
                     print(f"Loaded environment variables from {env_path} (fallback parser)")
-                except Exception:
-                    pass
-    except Exception:
-        pass
+                except Exception as e:
+                    print(f"⚠️  Could not load {env_path}: {e}")
+    except Exception as e:
+        print(f"⚠️  Error while loading environment variables: {e}")
     
     # Import and run the CLI
     try:

@@ -27,7 +27,7 @@ import streamlit as st
 # -----------------------------
 CONFIG = {
     "feedback_dir": Path(os.getenv("FEEDBACK_DIR", "results")),
-    "curator_id_default": os.getenv("USER", ""),
+    "curator_id_default": os.getenv("USER") or os.getenv("USERNAME", ""),
     "bioanalyzer_version_default": os.getenv("BIOANALYZER_VERSION", ""),
 }
 
@@ -104,19 +104,29 @@ def _parse_candidates(raw: str) -> list[tuple[str, str]]:
     return out
 
 
+def _value_col_triplet_names(col: str) -> tuple[str, str, str]:
+    """(pred, true, col_feedback) column names for one value column."""
+    s = _safe(col)
+    return f"{PRED_PREFIX}{s}", f"{TRUE_PREFIX}{s}", f"{COL_FB_PREFIX}{s}"
+
+
+def _onto_col_pair_names(col: str) -> tuple[str, str]:
+    """(pred, true) column names for one ontology-ID column."""
+    s = _safe(col)
+    return f"{PRED_PREFIX}{s}", f"{TRUE_PREFIX}{s}"
+
+
 def _feedback_schema() -> list[str]:
     """Full feedback column schema: every value field gets a pred/true/
     col_feedback triplet; the 3 ontology-mapped fields additionally get a
     pred/true Ontology ID pair (no col_feedback - only value fields get the
     'was BioAnalyzer correct?' dropdown)."""
+    triplets = [_value_col_triplet_names(c) for c in VALUE_COLUMNS]
+    pairs = [_onto_col_pair_names(c) for c in ONTOLOGY_ID_COLUMNS]
     value_triplets = (
-        [f"{PRED_PREFIX}{_safe(c)}" for c in VALUE_COLUMNS]
-        + [f"{TRUE_PREFIX}{_safe(c)}" for c in VALUE_COLUMNS]
-        + [f"{COL_FB_PREFIX}{_safe(c)}" for c in VALUE_COLUMNS]
+        [t[0] for t in triplets] + [t[1] for t in triplets] + [t[2] for t in triplets]
     )
-    onto_pairs = [f"{PRED_PREFIX}{_safe(c)}" for c in ONTOLOGY_ID_COLUMNS] + [
-        f"{TRUE_PREFIX}{_safe(c)}" for c in ONTOLOGY_ID_COLUMNS
-    ]
+    onto_pairs = [p[0] for p in pairs] + [p[1] for p in pairs]
     return FEEDBACK_BASE_COLS + value_triplets + onto_pairs
 
 
@@ -141,8 +151,14 @@ def _safe_int(x) -> Optional[int]:
 # Data loading (unified)
 # -----------------------------
 @st.cache_data(show_spinner=False)
-def _load_data(source, is_path: bool) -> pd.DataFrame:
-    """Load from file path (str/Path) or uploaded file; returns empty DataFrame on failure."""
+def _load_data(
+    source, is_path: bool, mtime: float = 0.0, size: int = 0
+) -> pd.DataFrame:
+    """Load from file path (str/Path) or uploaded file; returns empty DataFrame on failure.
+
+    mtime/size are part of the cache key (not just `source`) so that editing
+    the underlying file on disk at the same path busts the Streamlit cache
+    instead of silently serving a stale DataFrame."""
     if source is None or (is_path and not source):
         return pd.DataFrame()
     if is_path:
@@ -163,7 +179,7 @@ def _load_data(source, is_path: bool) -> pd.DataFrame:
         return pd.read_csv(buf)
     if ext in (".parquet", ".pq"):
         return pd.read_parquet(buf)
-    raise ValueError(f"Unsupported format. Use .csv or .parquet.")
+    raise ValueError("Unsupported format. Use .csv or .parquet.")
 
 
 def normalize_dataset(df: pd.DataFrame) -> pd.DataFrame:
@@ -186,8 +202,8 @@ def normalize_dataset(df: pd.DataFrame) -> pd.DataFrame:
             df = df.assign(
                 Year=pd.to_datetime(df["Publication Date"], errors="coerce").dt.year
             )
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Year derivation from Publication Date failed: %s", e)
     for col in BOOLEAN_COLUMNS:
         if col in df.columns:
             df[col] = df[col].map(
@@ -356,9 +372,16 @@ def render_table(df: pd.DataFrame) -> Optional[int]:
     return int(selected) if selected else None
 
 
-def render_column_level_validation(selected_row: pd.Series) -> dict[str, str]:
+def render_column_level_validation(
+    selected_row: pd.Series, selected_pmid: Optional[int]
+) -> dict[str, str]:
     """Per-field value + ontology-mapping confirmation. Returns
-    true__*/col_feedback__* for value fields and true__* for ontology ID fields."""
+    true__*/col_feedback__* for value fields and true__* for ontology ID fields.
+
+    Widget keys are namespaced by selected_pmid so that switching PMIDs gets
+    fresh widget state instead of Streamlit reusing the previous paper's
+    session-state values (Streamlit ignores a widget's value= default once
+    its key already has session state)."""
     st.markdown("### Field-by-field validation (ground truth)")
     st.caption(
         "For each field, correct BioAnalyzer's predicted value if needed. For "
@@ -379,14 +402,14 @@ def render_column_level_validation(selected_row: pd.Series) -> dict[str, str]:
                 out[true_key] = st.text_input(
                     f"Curator value for {col}",
                     value="",
-                    key=f"ui__{true_key}",
+                    key=f"ui__{true_key}__{selected_pmid}",
                 )
                 fb_key = f"{COL_FB_PREFIX}{safe}"
                 out[fb_key] = st.selectbox(
                     f"Was BioAnalyzer correct for {col}?",
                     options=OPTIONS["col_feedback"],
                     index=0,
-                    key=f"ui__{fb_key}",
+                    key=f"ui__{fb_key}__{selected_pmid}",
                 )
 
                 onto_col = _ontology_id_col_for(col)
@@ -419,14 +442,14 @@ def render_column_level_validation(selected_row: pd.Series) -> dict[str, str]:
                         options=range(len(option_labels)),
                         format_func=lambda i: option_labels[i],
                         index=0,
-                        key=f"ui__{onto_true_key}",
+                        key=f"ui__{onto_true_key}__{selected_pmid}",
                     )
                     chosen_value = option_values[choice_idx]
                     if chosen_value == "__other__":
                         chosen_value = st.text_input(
                             f"Enter ontology ID manually for {col}",
                             value="",
-                            key=f"ui__{onto_true_key}__manual",
+                            key=f"ui__{onto_true_key}__manual__{selected_pmid}",
                         ).strip()
                     out[onto_true_key] = chosen_value
                 st.divider()
@@ -434,7 +457,7 @@ def render_column_level_validation(selected_row: pd.Series) -> dict[str, str]:
 
 
 def render_feedback_section(
-    selected_pmid: Optional[int], dataset_df: pd.DataFrame
+    selected_pmid: Optional[int], dataset_df: pd.DataFrame, full_df: pd.DataFrame
 ) -> None:
     st.subheader("Curator feedback")
     st.caption(
@@ -445,7 +468,8 @@ def render_feedback_section(
     if selected_pmid is not None:
         try:
             selected_row = dataset_df.loc[dataset_df["PMID"] == selected_pmid].iloc[0]
-        except Exception:
+        except Exception as e:
+            logger.debug("Selected-row lookup failed for PMID %s: %s", selected_pmid, e)
             selected_row = None
     title_prefill = (
         str(selected_row.get("Title", ""))
@@ -482,7 +506,7 @@ def render_feedback_section(
             placeholder="e.g. 1.0.0, commit SHA, docker tag",
         ).strip()
         field_validation = (
-            render_column_level_validation(selected_row)
+            render_column_level_validation(selected_row, selected_pmid)
             if selected_row is not None
             else {}
         )
@@ -504,7 +528,7 @@ def render_feedback_section(
             if (
                 selected_pmid is not None
                 and pid != selected_pmid
-                and pid not in dataset_df["PMID"].values
+                and pid not in full_df["PMID"].values
             ):
                 st.warning("PMID not in current dataset; feedback will still be saved.")
             row = {
@@ -516,24 +540,22 @@ def render_feedback_section(
                 "bioanalyzer_version": bioanalyzer_version,
             }
             for col in VALUE_COLUMNS:
-                s = _safe(col)
-                row[f"{PRED_PREFIX}{s}"] = (
+                pred_key, true_key, fb_key = _value_col_triplet_names(col)
+                row[pred_key] = (
                     str(selected_row.get(col, "")).strip()
                     if selected_row is not None and col in selected_row.index
                     else ""
                 )
-                row[f"{TRUE_PREFIX}{s}"] = field_validation.get(f"{TRUE_PREFIX}{s}", "")
-                row[f"{COL_FB_PREFIX}{s}"] = field_validation.get(
-                    f"{COL_FB_PREFIX}{s}", "Not reviewed"
-                )
+                row[true_key] = field_validation.get(true_key, "")
+                row[fb_key] = field_validation.get(fb_key, "Not reviewed")
             for onto_col in ONTOLOGY_ID_COLUMNS:
-                s = _safe(onto_col)
-                row[f"{PRED_PREFIX}{s}"] = (
+                pred_key, true_key = _onto_col_pair_names(onto_col)
+                row[pred_key] = (
                     str(selected_row.get(onto_col, "")).strip()
                     if selected_row is not None and onto_col in selected_row.index
                     else ""
                 )
-                row[f"{TRUE_PREFIX}{s}"] = field_validation.get(f"{TRUE_PREFIX}{s}", "")
+                row[true_key] = field_validation.get(true_key, "")
             feedback_df = upsert_feedback(feedback_df, row)
             save_feedback(feedback_df)
             logger.info("Saved feedback for PMID %s (curator=%s)", pid, curator_id)
@@ -549,17 +571,13 @@ def render_feedback_section(
         + [
             k
             for c in VALUE_COLUMNS
-            for k in (
-                f"{PRED_PREFIX}{_safe(c)}",
-                f"{TRUE_PREFIX}{_safe(c)}",
-                f"{COL_FB_PREFIX}{_safe(c)}",
-            )
+            for k in _value_col_triplet_names(c)
             if k in feedback_df.columns
         ]
         + [
             k
             for c in ONTOLOGY_ID_COLUMNS
-            for k in (f"{PRED_PREFIX}{_safe(c)}", f"{TRUE_PREFIX}{_safe(c)}")
+            for k in _onto_col_pair_names(c)
             if k in feedback_df.columns
         ]
     )
@@ -611,9 +629,17 @@ This dashboard provides a **sortable, searchable, filterable** table of BioAnaly
         ).strip()
         if path:
             try:
-                raw_df = _load_data(path, is_path=True)
+                _p = Path(path)
+                _stat = _p.stat() if _p.exists() else None
+                raw_df = _load_data(
+                    path,
+                    is_path=True,
+                    mtime=_stat.st_mtime if _stat else 0.0,
+                    size=_stat.st_size if _stat else 0,
+                )
             except Exception as e:
                 st.error(str(e))
+                logger.exception("Path load failed")
                 return
     if raw_df.empty:
         st.info("Upload a dataset or provide a file path to begin.")
@@ -631,7 +657,7 @@ This dashboard provides a **sortable, searchable, filterable** table of BioAnaly
     filtered_df = render_filters(df)
     selected_pmid = render_table(filtered_df)
     st.divider()
-    render_feedback_section(selected_pmid, filtered_df)
+    render_feedback_section(selected_pmid, filtered_df, df)
     st.sidebar.divider()
     st.sidebar.header("Notes")
     st.sidebar.markdown(

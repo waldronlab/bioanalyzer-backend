@@ -15,10 +15,8 @@ def test_check_backend_health_success(monkeypatch):
         assert url.endswith("/health")
         return DummyResponse(200)
 
-    import requests
-
-    monkeypatch.setattr(requests, "get", _fake_get)
     cli = BioAnalyzerCLI()
+    monkeypatch.setattr(cli._session, "get", _fake_get)
     assert cli.check_backend_health() is True
 
 
@@ -28,10 +26,8 @@ def test_check_backend_health_failure(monkeypatch):
     def _fake_get(url, timeout=5):
         raise RuntimeError("boom")
 
-    import requests
-
-    monkeypatch.setattr(requests, "get", _fake_get)
     cli = BioAnalyzerCLI()
+    monkeypatch.setattr(cli._session, "get", _fake_get)
     assert cli.check_backend_health() is False
 
 

@@ -12,6 +12,21 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def _deep_merge(base: dict, override: dict) -> dict:
+    """Recursively merge ``override`` into ``base``, returning a new dict.
+
+    Nested dicts are merged key-by-key; any other value in ``override``
+    replaces the corresponding value in ``base`` outright.
+    """
+    result = base.copy()
+    for key, value in override.items():
+        if key in result and isinstance(result[key], dict) and isinstance(value, dict):
+            result[key] = _deep_merge(result[key], value)
+        else:
+            result[key] = value
+    return result
+
+
 class SummaryLength(str, Enum):
     """Summary length options."""
 
@@ -531,20 +546,7 @@ class BioAnalyzerSettings(BaseModel):
         current_dict = settings.model_dump(exclude_none=True)
 
         # Deep merge
-        def deep_merge(base: dict, override: dict) -> dict:
-            result = base.copy()
-            for key, value in override.items():
-                if (
-                    key in result
-                    and isinstance(result[key], dict)
-                    and isinstance(value, dict)
-                ):
-                    result[key] = deep_merge(result[key], value)
-                else:
-                    result[key] = value
-            return result
-
-        merged_dict = deep_merge(current_dict, update_dict)
+        merged_dict = _deep_merge(current_dict, update_dict)
 
         # Create new settings with merged data (Pydantic will validate enums)
         return cls.model_validate(merged_dict)
@@ -555,20 +557,7 @@ class BioAnalyzerSettings(BaseModel):
         other_dict = other.model_dump(exclude_none=True)
 
         # Deep merge
-        def deep_merge(base: dict, override: dict) -> dict:
-            result = base.copy()
-            for key, value in override.items():
-                if (
-                    key in result
-                    and isinstance(result[key], dict)
-                    and isinstance(value, dict)
-                ):
-                    result[key] = deep_merge(result[key], value)
-                else:
-                    result[key] = value
-            return result
-
-        merged = deep_merge(self_dict, other_dict)
+        merged = _deep_merge(self_dict, other_dict)
         return self.from_dict(merged)
 
     def apply_to_environment(self):

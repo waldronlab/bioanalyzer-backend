@@ -6,10 +6,7 @@ Tests the RCS (Retrieval Contextual Summarization) functionality.
 
 import pytest
 import asyncio
-from unittest.mock import Mock, AsyncMock, patch, MagicMock
-from pathlib import Path
-import tempfile
-import shutil
+from unittest.mock import AsyncMock, patch
 
 from app.services.contextual_summarization import (
     ContextualSummarizationService,
@@ -18,13 +15,8 @@ from app.services.contextual_summarization import (
 )
 from paperqa.types import Text
 
-
-@pytest.fixture
-def temp_cache_dir():
-    """Create a temporary cache directory."""
-    temp_dir = tempfile.mkdtemp()
-    yield Path(temp_dir)
-    shutil.rmtree(temp_dir, ignore_errors=True)
+# `temp_cache_dir` and `mock_llm_provider` fixtures are provided by
+# tests/conftest.py, shared with test_advanced_rag.py.
 
 
 @pytest.fixture
@@ -53,18 +45,6 @@ def sample_chunks():
             doc=test_doc,
         ),
     ]
-
-
-@pytest.fixture
-def mock_llm_provider():
-    """Create a mock LLM provider."""
-    mock = Mock()
-    mock.chat = AsyncMock(
-        return_value={
-            "text": "This study analyzed the gut microbiome in human participants with IBD using 16S sequencing. Key findings include genus-level analysis of 100 participants."
-        }
-    )
-    return mock
 
 
 @pytest.fixture

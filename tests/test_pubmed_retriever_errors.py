@@ -1,4 +1,4 @@
-import pytest
+from conftest import import_with_fallback
 
 
 def test_fetch_paper_metadata_handles_no_response(monkeypatch):
@@ -6,31 +6,13 @@ def test_fetch_paper_metadata_handles_no_response(monkeypatch):
     fetch_paper_metadata should return a structured error when the
     underlying _make_request returns no data (e.g., network failure).
     """
-    import sys
-    import importlib.util
-    from pathlib import Path
+    PubMedRetriever = import_with_fallback("data_retrieval", "PubMedRetriever")
 
-    # Try direct import first
-    try:
-        from app.services.data_retrieval import PubMedRetriever
-    except ImportError:
-        # Fallback: use importlib to load directly from file
-        # Use project root path instead of hardcoded /app/app
-        project_root = Path(__file__).parent.parent
-        data_retrieval_path = project_root / "app" / "services" / "data_retrieval.py"
-
-        if not data_retrieval_path.exists():
-            pytest.skip("data_retrieval.py not found")
-
-        spec = importlib.util.spec_from_file_location(
-            "data_retrieval", str(data_retrieval_path)
-        )
-        if spec is None or spec.loader is None:
-            pytest.skip("Could not load data_retrieval module")
-
-        data_retrieval_module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(data_retrieval_module)
-        PubMedRetriever = data_retrieval_module.PubMedRetriever
+    # PubMedRetriever.__init__ calls _verify_connectivity(), which makes a
+    # real NCBI network request by design. Patch it to a no-op before
+    # construction so this test stays hermetic, matching every sibling test
+    # in tests/test_data_retrieval.py.
+    monkeypatch.setattr(PubMedRetriever, "_verify_connectivity", lambda self, **k: None)
 
     retriever = PubMedRetriever(api_key=None)
 

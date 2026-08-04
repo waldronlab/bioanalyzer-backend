@@ -2,6 +2,8 @@
 
 import logging
 import time
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as pkg_version
 from typing import Any, Dict, Optional
 
 import psutil
@@ -177,12 +179,22 @@ async def get_version() -> Dict[str, Any]:
 
     import torch
 
+    try:
+        fastapi_version = pkg_version("fastapi")
+    except (PackageNotFoundError, ImportError):
+        fastapi_version = "0.104.1"
+
+    try:
+        pydantic_version = pkg_version("pydantic")
+    except (PackageNotFoundError, ImportError):
+        pydantic_version = "2.5.0"
+
     return {
         "application_version": "1.0.0",
         "python_version": sys.version,
         "torch_version": torch.__version__,
-        "fastapi_version": "0.104.1",
-        "pydantic_version": "2.5.0",
+        "fastapi_version": fastapi_version,
+        "pydantic_version": pydantic_version,
         "timestamp": get_current_timestamp(),
     }
 

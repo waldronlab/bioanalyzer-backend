@@ -15,6 +15,7 @@ import asyncio
 import pytest
 import requests
 
+from conftest import make_fake_response_class
 from app.services.data_retrieval import PubMedRetriever, PubMedRetrieverError
 
 
@@ -72,16 +73,14 @@ ESEARCH_XML = """<?xml version="1.0"?>
 <eSearchResult><IdList><Id>111</Id><Id>222</Id></IdList></eSearchResult>"""
 
 
-class _FakeResponse:
-    def __init__(self, text="", status_code=200):
-        self.text = text
-        self.status_code = status_code
-
-    def raise_for_status(self):
-        if self.status_code >= 400:
-            err = requests.exceptions.HTTPError(f"{self.status_code} error")
-            err.response = self
-            raise err
+# PubMedRetriever._make_request inspects `error.response.status_code` to
+# detect a 429 rate-limit response and apply extra backoff (see
+# data_retrieval.py), so the fake response here needs
+# set_response_on_error=True for TestMakeRequest's rate-limit test to
+# actually exercise that path - unlike
+# test_standalone_pubmed_retriever.py's identical-looking fixture, whose
+# retriever doesn't inspect the response on error.
+_FakeResponse = make_fake_response_class(set_response_on_error=True)
 
 
 @pytest.fixture

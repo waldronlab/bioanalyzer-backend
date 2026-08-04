@@ -105,7 +105,7 @@ def _render_table(results: List[Dict[str, Any]]) -> str:
             )
         lines += [
             "-" * 60,
-            f"📋 Summary: {r.get('curation_summary ', 'N/A')}",
+            f"📋 Summary: {r.get('curation_summary', 'N/A')}",
             f"⏱️  Time: {r.get('processing_time', 0):.2f}s",
             "",
         ]
@@ -218,8 +218,8 @@ def _render_xml(results: List[Dict[str, Any]]) -> str:
         lines += [
             "  <Analysis>",
             f"    <PMID>{r.get('pmid', 'N/A')}</PMID>",
-            f"    <Title>{r.get('title', 'N/A')}</Title>",
-            f"    <Journal>{r.get('journal', 'N/A')}</Journal>",
+            f"    <Title><![CDATA[{r.get('title', 'N/A')}]]></Title>",
+            f"    <Journal><![CDATA[{r.get('journal', 'N/A')}]]></Journal>",
             f"    <ProcessingTime>{r.get('processing_time', 0)}</ProcessingTime>",
             "    <Fields>",
         ]

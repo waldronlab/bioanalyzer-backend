@@ -334,11 +334,14 @@ Summary should:
             batch = tasks[i : i + batch_size]
             batch_results = await asyncio.gather(*batch, return_exceptions=True)
 
-            for result in batch_results:
+            for j, result in enumerate(batch_results):
                 if isinstance(result, Exception):
                     logger.error(f"Summary generation failed: {result}")
-                    # Create empty summary as fallback
-                    chunk = chunks[tasks.index(batch[batch_results.index(result)])]
+                    # Create empty summary as fallback. batch_results[j]
+                    # corresponds 1:1 to batch[j], and batch is
+                    # tasks[i : i + batch_size] built from chunks in the
+                    # same order, so chunks[i + j] is the source chunk.
+                    chunk = chunks[i + j]
                     summaries.append(
                         ChunkSummary(
                             chunk_id=getattr(chunk, "name", "unknown"),

@@ -13,12 +13,14 @@ from typing import Any, Dict, List, Optional, Tuple
 import app.services.bugsigdb_analyzer as _pkg
 from app.normalization.body_site import normalize_body_site
 from app.normalization.condition import normalize_condition
+from app.normalization.grounding import TIER_AUTO, tier_for
 from app.normalization.host_species import normalize_host_species
 from app.normalization.sample_size import normalize_sample_size
 from app.normalization.sequencing_type import normalize_sequencing_type
+from app.normalization.types import NormalizedTerm
 from app.utils.config import ANALYSIS_TIMEOUT
 
-from .constants import EXTRACTION_PROMPT
+from .constants import EXTRACTION_PROMPT, FIELD_KEYS
 
 # ---------------------------------------------------------------------------
 # Shared disease-phrase regex (used by both the heuristic fallback and
@@ -120,9 +122,6 @@ def _build_field_result_from_term(term: Any) -> Dict[str, Any]:
     populated only by normalize_sequencing_type, e.g. when it falls back
     to "other") so the side-by-side original wording isn't lost.
     """
-    from app.normalization.grounding import TIER_AUTO, tier_for
-    from app.normalization.types import NormalizedTerm
-
     if not isinstance(term, NormalizedTerm):
         raise TypeError("expected NormalizedTerm")
     conf = (
@@ -158,13 +157,7 @@ def _is_low_quality_cached_result(analysis_data: Dict[str, Any]) -> bool:
     fields = analysis_data.get("fields") if isinstance(analysis_data, dict) else None
     if not isinstance(fields, dict) or not fields:
         return True
-    for key in (
-        "host_species",
-        "body_site",
-        "condition",
-        "sequencing_type",
-        "sample_size",
-    ):
+    for key in FIELD_KEYS:
         field = fields.get(key)
         if not isinstance(field, dict):
             return False
@@ -441,13 +434,7 @@ def _field_results_from_unified_payload(
 
     # Heuristic payloads get a confidence cap — they are less reliable
     if payload.get("_source") == "heuristic":
-        for key in (
-            "host_species",
-            "body_site",
-            "condition",
-            "sequencing_type",
-            "sample_size",
-        ):
+        for key in FIELD_KEYS:
             field = field_results.get(key, {})
             status = field.get("status")
             if status == "PRESENT":

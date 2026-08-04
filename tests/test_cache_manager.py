@@ -8,29 +8,11 @@ import json
 import os
 from pathlib import Path
 
-# Import CacheManager directly to avoid import chain issues
-try:
-    # Try direct import first
-    from app.services.cache_manager import CacheManager
-except ImportError:
-    # If that fails, try importing the module directly
-    import sys
-    from pathlib import Path
+from conftest import import_with_fallback
 
-    cache_manager_path = (
-        Path(__file__).parent.parent / "app" / "services" / "cache_manager.py"
-    )
-    if cache_manager_path.exists():
-        import importlib.util
-
-        spec = importlib.util.spec_from_file_location(
-            "cache_manager", cache_manager_path
-        )
-        cache_manager_module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(cache_manager_module)
-        CacheManager = cache_manager_module.CacheManager
-    else:
-        raise
+# Import CacheManager directly to avoid import chain issues, falling back to
+# loading the module straight from its file when the normal import fails.
+CacheManager = import_with_fallback("cache_manager", "CacheManager", on_missing="raise")
 
 
 @pytest.fixture

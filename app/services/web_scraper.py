@@ -17,6 +17,17 @@ from app.utils.url_safety import UnsafeURLError, assert_public_url
 
 logger = logging.getLogger(__name__)
 
+# Browser-like User-Agent shared by both HTML page fetches and file
+# downloads, so requests aren't trivially blocked by servers that reject
+# non-browser User-Agents. The rest of the headers differ intentionally
+# between the two use cases (e.g. Accept is HTML-specific for page fetches
+# vs "*/*" for arbitrary file downloads), so only the duplicated literal is
+# factored out here.
+DEFAULT_USER_AGENT = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+)
+
 
 class WebScraperService:
     """Web scraper service that converts web pages to markdown."""
@@ -154,7 +165,7 @@ class WebScraperService:
 
         # Set headers to mimic a real browser request
         headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "User-Agent": DEFAULT_USER_AGENT,
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
             "Accept-Language": "en-US,en;q=0.5",
             "Accept-Encoding": "gzip, deflate, br",
@@ -231,7 +242,7 @@ class WebScraperService:
 
         # Use same headers as HTML fetching
         headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "User-Agent": DEFAULT_USER_AGENT,
             "Accept": "*/*",
             "Accept-Language": "en-US,en;q=0.5",
             "Connection": "keep-alive",

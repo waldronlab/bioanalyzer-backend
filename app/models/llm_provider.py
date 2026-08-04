@@ -127,17 +127,7 @@ class LLMProviderManager:
 
     def _configure_litellm(self):
         """Configure LiteLLM with provider-specific settings."""
-        # Set API keys in environment for LiteLLM
-        if self.provider == LLMProvider.OPENAI:
-            if os.getenv("OPENAI_API_KEY"):
-                os.environ["OPENAI_API_KEY"] = os.getenv("OPENAI_API_KEY")
-        elif self.provider == LLMProvider.ANTHROPIC:
-            if os.getenv("ANTHROPIC_API_KEY"):
-                os.environ["ANTHROPIC_API_KEY"] = os.getenv("ANTHROPIC_API_KEY")
-        elif self.provider == LLMProvider.GEMINI:
-            if os.getenv("GEMINI_API_KEY"):
-                os.environ["GEMINI_API_KEY"] = os.getenv("GEMINI_API_KEY")
-        elif self.provider == LLMProvider.OLLAMA:
+        if self.provider == LLMProvider.OLLAMA:
             # Configure Ollama base URL if provided
             ollama_base = os.getenv("OLLAMA_BASE_URL") or os.getenv(
                 "OLLAMA_HOST", "http://localhost:11434"
@@ -284,38 +274,3 @@ class LLMProviderManager:
         # llamafile is always available if installed locally
 
         return available
-
-    @staticmethod
-    def get_supported_models(provider: str) -> List[str]:
-        """Get list of supported models for a provider."""
-        models = {
-            LLMProvider.OPENAI.value: [
-                "gpt-4o",
-                "gpt-4o-mini",
-                "gpt-4-turbo",
-                "gpt-4",
-                "gpt-3.5-turbo",
-            ],
-            LLMProvider.ANTHROPIC.value: [
-                "claude-3-5-sonnet-20241022",
-                "claude-3-opus-20240229",
-                "claude-3-sonnet-20240229",
-                "claude-3-haiku-20240307",
-            ],
-            LLMProvider.GEMINI.value: [
-                "gemini/gemini-2.0-flash",
-                "gemini/gemini-1.5-pro",
-                "gemini/gemini-1.5-flash",
-            ],
-            LLMProvider.OLLAMA.value: [
-                "ollama/llama3",
-                "ollama/llama3.1",
-                "ollama/mistral",
-                "ollama/codellama",
-            ],
-            LLMProvider.LLAMAFILE.value: [
-                "llamafile/llama-3.2-3b",
-                "llamafile/llama-3.1-8b",
-            ],
-        }
-        return models.get(provider.lower(), [])

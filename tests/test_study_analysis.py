@@ -25,11 +25,11 @@ from app.api.routers.study_analysis import JobStatus, process_url_analysis
 from app.models.extraction_schemas import StudyAnalysisResult
 
 
-@pytest.fixture
-def client():
-    if not FASTAPI_AVAILABLE:
-        pytest.skip("FastAPI not available")
-    return TestClient(app)
+# `client` fixture (raise_server_exceptions=False) is provided by
+# tests/conftest.py, shared with test_api_endpoints.py, test_integration.py
+# and test_bugsigdb_analysis_v2.py. Every endpoint exercised here raises
+# HTTPException explicitly (see app/api/routers/study_analysis.py), so
+# raise_server_exceptions=False doesn't change any of these tests' outcomes.
 
 
 @pytest.fixture(autouse=True)

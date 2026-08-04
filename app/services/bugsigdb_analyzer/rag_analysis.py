@@ -16,6 +16,7 @@ from app.utils.config import ANALYSIS_TIMEOUT, DEFAULT_MODEL, GEMINI_API_KEY
 from .constants import _current_timestamp
 from .field_extraction import (
     _avg_confidence,
+    _build_curation_summary,
     _extract_structured_metadata,
     _field_results_from_unified_payload,
     _heuristic_payload_from_text,
@@ -41,8 +42,6 @@ async def analyze_paper_with_rag(
     use_rag: bool = True,
 ) -> Optional[Dict]:
     """Analyse a paper with optional RAG augmentation."""
-    import time
-
     start_time = time.time()
 
     try:
@@ -108,6 +107,7 @@ async def analyze_paper_with_rag(
 
         # ── Optional RAG context retrieval ─────────────────────────────────
         context_for_prompt = analysis_text
+        rag_service = None
         if use_rag_final and chunks:
             try:
                 from app.services.advanced_rag import AdvancedRAGService
@@ -174,6 +174,7 @@ async def analyze_paper_with_rag(
             "differential_abundance_confidence": diff_abund_conf,
             "in_bugsigdb": _pkg.is_in_bugsigdb(pmid),
             "fields": field_results,
+            "curation_summary": _build_curation_summary(field_results),
             "analysis_timestamp": _current_timestamp(),
             "model_used": DEFAULT_MODEL,
             # RAG-specific extras (not consumed by data.R; useful for debugging)
@@ -185,6 +186,7 @@ async def analyze_paper_with_rag(
 
         if use_rag_final and chunks:
             result["rag_stats"] = _collect_rag_stats(
+                rag_service=rag_service,
                 chunks=chunks,
                 field_results=field_results,
                 rag_config_dict=rag_config_dict,
@@ -226,6 +228,7 @@ async def analyze_paper_with_rag(
 
 def _collect_rag_stats(
     *,
+    rag_service: Optional[Any],
     chunks: List,
     field_results: Dict[str, Dict[str, Any]],
     rag_config_dict: Optional[Dict],
@@ -233,20 +236,13 @@ def _collect_rag_stats(
 ) -> Dict[str, Any]:
     _rc = rag_config_dict or {}
     rag_metrics: Dict[str, Any] = {}
-    try:
-        from app.services.advanced_rag import AdvancedRAGService
-
-        svc = AdvancedRAGService(
-            rerank_method=_rc.get("rerank_method", "hybrid"),
-            evidence_k=_rc.get("evidence_k"),
-            max_sources=_rc.get("max_sources"),
-            use_10_scale=_rc.get("use_10_scale", True),
-        )
-        rag_metrics = svc.get_rerank_metrics()
-    except Exception as e:
-        logger.warning(
-            "Failed to compute RAG rerank metrics: %s", mask_exception_message(e)
-        )
+    if rag_service is not None:
+        try:
+            rag_metrics = rag_service.get_rerank_metrics()
+        except Exception as e:
+            logger.warning(
+                "Failed to compute RAG rerank metrics: %s", mask_exception_message(e)
+            )
 
     return {
         "chunks_processed": len(chunks),

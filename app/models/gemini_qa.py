@@ -245,7 +245,7 @@ Please provide a detailed analysis in the following structured format:
                 },
             }
         except Exception as e:
-            error_str = str(e)
+            error_str = mask_exception_message(e)
             logger.error(f"Model API error in paper analysis: {error_str}")
             return {
                 "error": error_str,

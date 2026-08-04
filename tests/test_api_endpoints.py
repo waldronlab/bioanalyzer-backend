@@ -29,19 +29,9 @@ except ImportError:
     get_system_service = None
 
 
-@pytest.fixture
-def client():
-    """Create a test client for the FastAPI app.
-
-    raise_server_exceptions=False so an unhandled exception in an
-    endpoint comes back as a normal 500 response (what these tests
-    assert on), instead of re-raising into the test process — Starlette
-    always re-raises past a bare-Exception handler for debugging,
-    regardless of whether one is registered.
-    """
-    if not FASTAPI_AVAILABLE:
-        pytest.skip("FastAPI not available")
-    return TestClient(app, raise_server_exceptions=False)
+# `client` fixture (raise_server_exceptions=False) is provided by
+# tests/conftest.py, shared with test_integration.py, test_study_analysis.py
+# and test_bugsigdb_analysis_v2.py.
 
 
 @pytest.mark.skipif(not FASTAPI_AVAILABLE, reason="FastAPI not available")
@@ -216,7 +206,6 @@ class TestSystemEndpoints:
             assert "metrics" in data
 
 
-@pytest.mark.skipif(not FASTAPI_AVAILABLE, reason="FastAPI not available")
 @pytest.mark.skipif(not FASTAPI_AVAILABLE, reason="FastAPI not available")
 class TestQAEndpoint:
     """Tests for Q&A endpoint."""

@@ -8,12 +8,18 @@ It also re-applies the configuration during pytest startup and collection,
 since pytest may adjust import paths.
 """
 
+import importlib
+import importlib.util
 import os
+import shutil
 import sys
+import tempfile
 from contextlib import contextmanager
 from pathlib import Path
+from unittest.mock import AsyncMock, Mock
 
 import pytest
+import requests
 
 PROJECT_ROOT = Path(__file__).parent.parent.resolve()
 PROJECT_ROOT_STR = str(PROJECT_ROOT)
@@ -113,6 +119,122 @@ try:
 except ImportError:
     fastapi_app = None
     FASTAPI_AVAILABLE = False
+
+
+def import_with_fallback(
+    module_name: str, class_name: str, *, on_missing: str = "skip"
+):
+    """
+    Import `class_name` from app.services.<module_name>, falling back to
+    loading the module directly from its file under app/services/ when the
+    normal package import fails (e.g. an unrelated broken import elsewhere
+    in the app.* import chain).
+
+    This is the try/except-with-importlib boilerplate previously
+    copy-pasted across test_cache_manager.py, test_integration.py (x4), and
+    test_pubmed_retriever_errors.py.
+
+    on_missing controls what happens if the fallback file can't be found or
+    loaded:
+      - "skip" (default): pytest.skip(...) - matches the behavior used by
+        test_integration.py and test_pubmed_retriever_errors.py.
+      - "raise": re-raise the original ImportError - matches the behavior
+        used by test_cache_manager.py.
+    """
+    dotted = f"app.services.{module_name}"
+    try:
+        module = importlib.import_module(dotted)
+        return getattr(module, class_name)
+    except (ImportError, AttributeError):
+        service_path = PROJECT_ROOT / "app" / "services" / f"{module_name}.py"
+        if not service_path.exists():
+            if on_missing == "raise":
+                raise
+            pytest.skip(f"{module_name}.py not found")
+        spec = importlib.util.spec_from_file_location(module_name, str(service_path))
+        if spec is None or spec.loader is None:
+            if on_missing == "raise":
+                raise
+            pytest.skip(f"Could not load {module_name} module")
+        loaded_module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(loaded_module)
+        return getattr(loaded_module, class_name)
+
+
+def make_fake_response_class(set_response_on_error: bool = False):
+    """
+    Build a minimal fake `requests` response class for monkeypatching
+    `session.get()` in PubMed retriever tests.
+
+    set_response_on_error controls whether raise_for_status() attaches
+    itself as the raised HTTPError's `.response` attribute:
+      - False (default): matches
+        tests/test_standalone_pubmed_retriever.py's _FakeResponse.
+      - True: matches tests/test_data_retrieval.py's _FakeResponse, needed
+        by tests there that inspect `err.response` after catching the
+        HTTPError.
+    """
+
+    class _FakeResponse:
+        def __init__(self, text="", status_code=200):
+            self.text = text
+            self.status_code = status_code
+
+        def raise_for_status(self):
+            if self.status_code >= 400:
+                err = requests.exceptions.HTTPError(f"{self.status_code} error")
+                if set_response_on_error:
+                    err.response = self
+                raise err
+
+    return _FakeResponse
+
+
+@pytest.fixture
+def temp_cache_dir():
+    """Create a temporary cache directory for a RAG service under test.
+
+    Shared by test_advanced_rag.py and test_contextual_summarization.py,
+    which previously redefined this identically.
+    """
+    temp_dir = tempfile.mkdtemp()
+    yield Path(temp_dir)
+    shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+@pytest.fixture
+def mock_llm_provider():
+    """Create a mock LLM provider returning a fixed chat() response.
+
+    Shared by test_advanced_rag.py and test_contextual_summarization.py,
+    which previously redefined this identically. test_chunk_reranking.py
+    needs a different return value (score/reasoning text) so it keeps its
+    own local override of the same fixture name.
+    """
+    mock = Mock()
+    mock.chat = AsyncMock(
+        return_value={
+            "text": "This study analyzed the gut microbiome in human participants with IBD using 16S sequencing. Key findings include genus-level analysis of 100 participants."
+        }
+    )
+    return mock
+
+
+@pytest.fixture
+def client():
+    """Shared FastAPI TestClient fixture.
+
+    raise_server_exceptions=False so an unhandled exception in an
+    endpoint comes back as a normal 500 response (what these tests
+    assert on), instead of re-raising into the test process — Starlette
+    always re-raises past a bare-Exception handler for debugging,
+    regardless of whether one is registered.
+    """
+    if not FASTAPI_AVAILABLE:
+        pytest.skip("FastAPI not available")
+    from fastapi.testclient import TestClient
+
+    return TestClient(fastapi_app, raise_server_exceptions=False)
 
 
 @pytest.fixture

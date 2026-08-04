@@ -263,8 +263,11 @@ class TestVectorStoreService:
 
             await service.add_texts([])
 
-            # Should not fail
-            assert True
+            # With no texts to embed, embedding generation should be
+            # skipped entirely, but the (empty) list is still passed
+            # through to the vector store unchanged.
+            assert not service.embedding_model.embed_documents.called
+            mock_vector_store.add_texts_and_embeddings.assert_called_once_with([])
 
     def test_embedding_model_initialization(self):
         """Test embedding model initialization."""

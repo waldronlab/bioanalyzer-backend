@@ -1,5 +1,6 @@
 """Chunking utilities using Paper-QA's chunking functions."""
 
+import asyncio
 import logging
 from typing import Optional
 
@@ -43,7 +44,10 @@ class ChunkingService:
             ),
         )
 
-        chunks = chunk_text(
+        # chunk_text is synchronous/CPU-bound - run it in a worker thread so
+        # this coroutine doesn't block the event loop.
+        chunks = await asyncio.to_thread(
+            chunk_text,
             parsed_text=parsed_text,
             doc=doc,
             chunk_chars=self.chunk_chars,

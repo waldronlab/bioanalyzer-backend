@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 """
-Archived: Log Cleanup for BioAnalyzer
-=====================================
+Log Cleanup for BioAnalyzer
+============================
 
 This script helps manage log files by cleaning up old entries and rotating logs.
-Moved to scripts/archive/ to indicate it's a dev/ops utility and not part of the
-core backend runtime.
+This is a standalone dev/ops utility, not part of the core backend runtime.
 """
 
 import os

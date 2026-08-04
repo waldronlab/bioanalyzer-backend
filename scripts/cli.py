@@ -6,20 +6,16 @@ BioAnalyzer CLI - User-Friendly Command Line Interface
 from __future__ import annotations
 
 import argparse
-import asyncio
 import csv
-import grp
 import io
 import json
 import logging
 import os
-import pwd
-import re
 import subprocess
 import sys
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any
 from xml.etree import ElementTree
 
 if TYPE_CHECKING:
@@ -46,10 +42,14 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-COMPOSE_PROJECT_NAME = "bioanalyzer-package"
+# Single source of truth: the compose project, the image, and the container
+# all currently share this name. Kept as one constant instead of three
+# independently-typed literals so they can't silently drift apart.
+APP_NAME = "bioanalyzer-package"
+COMPOSE_PROJECT_NAME = APP_NAME
 
 
-def _read_existing_pmids(path: Path) -> set:
+def _read_existing_pmids(path: Path) -> set[str]:
     """Return the set of PMIDs already present in a curator-desk CSV file
     (--format csv / curator_desk_csv).
 
@@ -82,31 +82,35 @@ class BioAnalyzerCLI:
         "UVICORN_RELOAD",
     ]
 
-    def __init__(self):
-        self.container_name = "bioanalyzer-package"
-        self.image_name = "bioanalyzer-package"
-        self.network_name = "bioanalyzer-network"
+    def __init__(self) -> None:
+        self.container_name = APP_NAME
+        self.image_name = APP_NAME
         self.verbose = False
         self.api_base_url = os.getenv(
             "BIOANALYZER_API_URL", "http://localhost:8000/api/v1"
         )
+        # Reused across every HTTP call this instance makes so repeated
+        # requests to the same host (health checks, per-PMID analysis
+        # fetches, polling) get connection keep-alive instead of a fresh
+        # TCP/TLS handshake each time.
+        self._session = requests.Session()
 
     # ------------------------------------------------------------------
     # Environment helpers
     # ------------------------------------------------------------------
 
-    def _env_file_path(self) -> Optional[str]:
+    def _env_file_path(self) -> str | None:
         p = project_root / ".env"
         return str(p.resolve()) if p.exists() else None
 
-    def _env_file_values(self) -> Dict[str, str]:
+    def _env_file_values(self) -> dict[str, str]:
         env_file = self._env_file_path()
         if not env_file or dotenv_values is None:
             return {}
         return {k: v for k, v in (dotenv_values(env_file) or {}).items() if v}
 
-    def _collect_env_flags(self) -> List[str]:
-        flags: List[str] = []
+    def _collect_env_flags(self) -> list[str]:
+        flags: list[str] = []
         env_file = self._env_file_path()
         if env_file:
             flags += ["--env-file", env_file]
@@ -131,11 +135,20 @@ class BioAnalyzerCLI:
     def _build_api_url(self, path: str) -> str:
         return f"{self.api_base_url.rstrip('/')}/{path.lstrip('/')}"
 
+    @staticmethod
+    def _emit(content: str, output_file: str | None, label: str = "Saved to") -> None:
+        """Write `content` to `output_file` if given, else print it."""
+        if output_file:
+            Path(output_file).write_text(content, encoding="utf-8")
+            print(f"💾 {label}: {output_file}")
+        else:
+            print(content)
+
     # ------------------------------------------------------------------
     # Docker helpers
     # ------------------------------------------------------------------
 
-    def _run(self, cmd: List[str], **kwargs) -> subprocess.CompletedProcess:
+    def _run(self, cmd: list[str], **kwargs) -> subprocess.CompletedProcess:
         return subprocess.run(
             cmd, capture_output=True, text=True, check=False, **kwargs
         )
@@ -153,18 +166,17 @@ class BioAnalyzerCLI:
             self._run(["docker", "image", "inspect", self.image_name]).returncode == 0
         )
 
-    def _compose_cmd(self) -> List[str]:
+    def _compose_cmd(self) -> list[str]:
         if self._run(["which", "docker-compose"]).stdout.strip():
             return ["docker-compose"]
         return ["docker", "compose"]
 
     def _is_container_running(self) -> bool:
-        for name in [self.container_name, "bioanalyzer-package"]:
-            if self._run(
-                ["docker", "ps", "--filter", f"name={name}", "-q"]
-            ).stdout.strip():
-                return True
-        return False
+        return bool(
+            self._run(
+                ["docker", "ps", "--filter", f"name={self.container_name}", "-q"]
+            ).stdout.strip()
+        )
 
     def _ensure_volume_directories(self) -> bool:
         for name in ["cache", "logs", "results"]:
@@ -182,7 +194,7 @@ class BioAnalyzerCLI:
     def check_backend_health(self) -> bool:
         try:
             return (
-                requests.get("http://localhost:8000/health", timeout=5).status_code
+                self._session.get("http://localhost:8000/health", timeout=5).status_code
                 == 200
             )
         except Exception:
@@ -195,15 +207,6 @@ class BioAnalyzerCLI:
             if self.check_backend_health():
                 return True
             time.sleep(max(0.5, interval))
-        return False
-
-    def _wait_for_backend_health(self, timeout: int = 60, interval: float = 2) -> bool:
-        deadline = time.time() + timeout
-        print(f"⏳ Waiting for API health (timeout: {timeout}s)...")
-        while time.time() < deadline:
-            if self.check_backend_health():
-                return True
-            time.sleep(max(0.01, interval))
         return False
 
     # ------------------------------------------------------------------
@@ -260,6 +263,12 @@ class BioAnalyzerCLI:
 
         env = os.environ.copy()
         try:
+            # grp/pwd are POSIX-only; imported here (not at module level) so
+            # that merely loading this file doesn't fail on platforms that
+            # lack them - only this UID/GID mapping feature is affected.
+            import grp
+            import pwd
+
             env["UID"] = str(pwd.getpwuid(os.getuid()).pw_uid)
             env["GID"] = str(grp.getgrgid(os.getgid()).gr_gid)
         except Exception:
@@ -303,11 +312,9 @@ class BioAnalyzerCLI:
                     cwd=str(project_root),
                     capture_output=True,
                 )
-        if not self._is_container_running():
-            print("✅ BioAnalyzer application stopped")
-            return True
-        for name in [self.container_name, "bioanalyzer-package", "bioanalyzer-redis"]:
-            self._run(["docker", "rm", "-f", name])
+        if self._is_container_running():
+            for name in (self.container_name, "bioanalyzer-redis"):
+                self._run(["docker", "rm", "-f", name])
         print("✅ BioAnalyzer application stopped")
         return True
 
@@ -345,7 +352,7 @@ class BioAnalyzerCLI:
         ]
         return subprocess.run(cmd, cwd=project_root).returncode == 0
 
-    def get_system_status(self):
+    def get_system_status(self) -> None:
         print("📊 BioAnalyzer System Status\n" + "=" * 40)
         ok = self.check_docker()
         print(f"Docker:          {'✅ Available' if ok else '❌ Not Available'}")
@@ -367,7 +374,7 @@ class BioAnalyzerCLI:
     # PMID file loader
     # ------------------------------------------------------------------
 
-    def load_pmids_from_file(self, file_path: str) -> List[str]:
+    def load_pmids_from_file(self, file_path: str) -> list[str]:
         ext = Path(file_path).suffix.lower()
         if ext in [".xls", ".xlsx"]:
             return self._read_excel_via_docker(file_path)
@@ -376,7 +383,7 @@ class BioAnalyzerCLI:
                 return [
                     row[0].strip() for row in csv.reader(f) if row and row[0].strip()
                 ]
-        pmids: List[str] = []
+        pmids: list[str] = []
         with open(file_path, encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
@@ -384,7 +391,7 @@ class BioAnalyzerCLI:
                     pmids.extend(p.strip() for p in line.split(",") if p.strip())
         return pmids
 
-    def _read_excel_via_docker(self, file_path: str) -> List[str]:
+    def _read_excel_via_docker(self, file_path: str) -> list[str]:
         file_path_obj = Path(file_path).resolve()
         if not self.check_docker() or not self.check_image():
             raise Exception(
@@ -444,7 +451,7 @@ class BioAnalyzerCLI:
             )
         return json.loads(result.stdout.strip())
 
-    def get_curator_desk_csv_content(self, results: List[Dict[str, Any]]) -> str:
+    def get_curator_desk_csv_content(self, results: list[dict[str, Any]]) -> str:
         return render_results(results, "curator_desk_csv")
 
     # ------------------------------------------------------------------
@@ -453,12 +460,12 @@ class BioAnalyzerCLI:
 
     def search_pubmed(
         self,
-        query: Optional[str] = None,
+        query: str | None = None,
         preset: str = "discovery",
         max_results: int = 100,
         fmt: str = "txt",
-        output_file: Optional[str] = None,
-    ) -> List[str]:
+        output_file: str | None = None,
+    ) -> list[str]:
         from app.services.pubmed_queries import (
             RECOMMENDED_DISCOVERY_QUERY,
             SEARCH_PRESETS,
@@ -493,11 +500,7 @@ class BioAnalyzerCLI:
             content = out.getvalue()
         else:
             content = "\n".join(pmids) + "\n"
-        if output_file:
-            Path(output_file).write_text(content, encoding="utf-8")
-            print(f"💾 PMIDs saved to: {output_file}")
-        else:
-            print(content)
+        self._emit(content, output_file, "PMIDs saved to")
         return pmids
 
     # ------------------------------------------------------------------
@@ -529,7 +532,7 @@ class BioAnalyzerCLI:
         attempt = 0
         while True:
             try:
-                r = requests.get(
+                r = self._session.get(
                     f"http://localhost:8000/api/v1/analyze/{pmid}",
                     params={"refresh": "true"} if refresh else None,
                     timeout=request_timeout,
@@ -551,13 +554,13 @@ class BioAnalyzerCLI:
                 detail = f"HTTP {r.status_code}"
             return None, detail
 
-    async def analyze_papers(
+    def analyze_papers(
         self,
-        pmids: List[str],
+        pmids: list[str],
         fmt: str = "table",
-        output_file: Optional[str] = None,
+        output_file: str | None = None,
         refresh: bool = False,
-    ):
+    ) -> None:
         request_timeout = int(os.getenv("BIOANALYZER_ANALYZE_TIMEOUT", "180"))
 
         # Cumulative output: when re-running against the same curator-desk CSV
@@ -615,15 +618,15 @@ class BioAnalyzerCLI:
 
     def handle_url_analysis(
         self,
-        urls: List[str],
-        file_path: Optional[str],
+        urls: list[str],
+        file_path: str | None,
         embedding_model: str,
         llm_model: str,
         fmt: str,
-        output_file: Optional[str],
+        output_file: str | None,
         poll_interval: int,
         timeout: int,
-    ):
+    ) -> None:
         all_urls = self._collect_urls(urls, file_path)
         if not all_urls:
             print("❌ No URLs provided.")
@@ -641,31 +644,24 @@ class BioAnalyzerCLI:
             print("❌ No URL analyses completed.")
             return
         content = self._render_url_results(results, fmt)
-        if output_file:
-            Path(output_file).write_text(content, encoding="utf-8")
-            print(f"💾 Saved to: {output_file}")
-        else:
-            print(content)
+        self._emit(content, output_file)
 
-    def _collect_urls(self, inline: List[str], file_path: Optional[str]) -> List[str]:
-        urls: List[str] = []
+    def _collect_urls(self, inline: list[str], file_path: str | None) -> list[str]:
+        urls: list[str] = []
         for v in inline or []:
             urls.extend(v.split(",") if "," in v else [v])
         if file_path:
             try:
-                urls.extend(
-                    line.strip()
-                    for line in open(file_path, encoding="utf-8")
-                    if line.strip()
-                )
+                with open(file_path, encoding="utf-8") as f:
+                    urls.extend(line.strip() for line in f if line.strip())
             except Exception as e:
                 print(f"❌ Error reading URL file: {e}")
-        seen: set = set()
-        return [u.strip() for u in urls if u.strip() and u.strip() not in seen and not seen.add(u.strip())]  # type: ignore
+        stripped = [u.strip() for u in urls if u.strip()]
+        return _dedup(stripped)
 
-    def _start_url_job(self, url: str, emb: str, llm: str) -> Optional[str]:
+    def _start_url_job(self, url: str, emb: str, llm: str) -> str | None:
         try:
-            r = requests.post(
+            r = self._session.post(
                 self._build_api_url("/analyze-url"),
                 json={"url": url, "embedding_model": emb, "llm_model": llm},
                 timeout=30,
@@ -674,25 +670,30 @@ class BioAnalyzerCLI:
                 job_id = r.json().get("job_id")
                 print(f"🆔 Job ID: {job_id}")
                 return job_id
-            print(f"❌ {r.json().get('detail', r.text)}")
+            try:
+                detail = r.json().get("detail", r.text)
+            except ValueError:
+                detail = r.text
+            print(f"❌ {detail}")
         except requests.RequestException as e:
             print(f"❌ Network error: {e}")
         return None
 
-    def _poll_url_job(self, job_id: str, interval: int, timeout: int) -> Optional[Dict]:
+    def _poll_url_job(self, job_id: str, interval: int, timeout: int) -> dict | None:
         deadline = time.time() + timeout
         while time.time() < deadline:
             try:
-                status = requests.get(
+                status = self._session.get(
                     self._build_api_url(f"/analysis-status/{job_id}"), timeout=15
                 ).json()
-                print(f"   ⏳ {status.get('status')} ({status.get('progress', '')})")
-                if status.get("status") == "completed":
-                    r = requests.get(
+                state = status.get("status")
+                print(f"   ⏳ {state} ({status.get('progress', '')})")
+                if state == "completed":
+                    r = self._session.get(
                         self._build_api_url(f"/analysis-result/{job_id}"), timeout=30
                     )
                     return r.json() if r.status_code == 200 else None
-                if status.get("status") == "failed":
+                if state == "failed":
                     print(f"❌ Failed: {status.get('error', '')}")
                     return None
                 time.sleep(max(1, interval))
@@ -702,7 +703,7 @@ class BioAnalyzerCLI:
         print(f"⚠️  Job {job_id} timed out.")
         return None
 
-    def _render_url_results(self, results: List[Dict], fmt: str) -> str:
+    def _render_url_results(self, results: list[dict], fmt: str) -> str:
         if fmt == "json":
             return json.dumps(results, indent=2, ensure_ascii=False)
         lines = [
@@ -735,13 +736,13 @@ class BioAnalyzerCLI:
     # Retrieval
     # ------------------------------------------------------------------
 
-    async def retrieve_papers(
+    def retrieve_papers(
         self,
-        pmids: List[str],
+        pmids: list[str],
         fmt: str = "table",
-        output_file: Optional[str] = None,
+        output_file: str | None = None,
         save: bool = False,
-    ):
+    ) -> None:
         retriever = self._get_retriever()
         total = len(pmids)
         print(f"📥 Retrieving {total} paper(s)...")
@@ -760,11 +761,7 @@ class BioAnalyzerCLI:
                 self._save_paper(data)
             results.append(data)
         content = render_retrieval(results, fmt)
-        if output_file:
-            Path(output_file).write_text(content, encoding="utf-8")
-            print(f"💾 Saved to: {output_file}")
-        else:
-            print(content)
+        self._emit(content, output_file)
 
     def _get_retriever(self):
         try:
@@ -777,11 +774,13 @@ class BioAnalyzerCLI:
             return self._fallback_retriever()
 
     def _fallback_retriever(self):
+        session = self._session
+
         class _R:
-            def get_full_paper_data(self, pmid: str) -> Dict:
+            def get_full_paper_data(self, pmid: str) -> dict:
                 try:
                     url = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi"
-                    r = requests.get(
+                    r = session.get(
                         url,
                         params={
                             "db": "pubmed",
@@ -817,7 +816,7 @@ class BioAnalyzerCLI:
 
         return _R()
 
-    def _save_paper(self, data: Dict) -> str:
+    def _save_paper(self, data: dict) -> str:
         try:
             pmid = data.get("pmid", "unknown")
             fp = (
@@ -839,20 +838,21 @@ class BioAnalyzerCLI:
     # Q&A
     # ------------------------------------------------------------------
 
-    async def ask_question(self, question: str) -> Optional[str]:
+    def ask_question(self, question: str) -> str | None:
         if not self.check_backend_health():
             print("⚠️  API not running. Start with: BioAnalyzer start")
             return None
         try:
             print("🤔 Thinking...")
-            r = requests.post(
+            r = self._session.post(
                 "http://localhost:8000/api/v1/qa",
                 json={"question": question},
                 timeout=60,
             )
             if r.status_code == 200:
-                answer = r.json().get("answer") or r.json().get("text", "")
-                conf = r.json().get("confidence", 0.8)
+                payload = r.json()
+                answer = payload.get("answer") or payload.get("text", "")
+                conf = payload.get("confidence", 0.8)
                 if answer:
                     print(
                         f"\n💡 Answer (confidence: {conf:.2f}):\n{'-'*60}\n{answer}\n{'-'*60}"
@@ -861,12 +861,16 @@ class BioAnalyzerCLI:
             elif r.status_code == 404:
                 print("⚠️  Q&A endpoint not available yet.")
             else:
-                print(f"❌ API error: {r.json().get('detail', 'Unknown')}")
+                try:
+                    detail = r.json().get("detail", "Unknown")
+                except ValueError:
+                    detail = "Unknown"
+                print(f"❌ API error: {detail}")
         except Exception as e:
             print(f"❌ {e}")
         return None
 
-    def interactive_qa(self):
+    def interactive_qa(self) -> None:
         self.print_banner()
         if not self.check_backend_health():
             print("⚠️  Start BioAnalyzer first: BioAnalyzer start")
@@ -878,7 +882,7 @@ class BioAnalyzerCLI:
                 if q.lower() in ("quit", "exit", "q"):
                     break
                 if q:
-                    asyncio.run(self.ask_question(q))
+                    self.ask_question(q)
             except KeyboardInterrupt:
                 break
         print("👋 Goodbye!")
@@ -887,7 +891,7 @@ class BioAnalyzerCLI:
     # Fields info
     # ------------------------------------------------------------------
 
-    def show_fields_info(self):
+    def show_fields_info(self) -> None:
         print("\n🧬 BioAnalyzer - BugSigDB Essential Fields\n" + "=" * 42)
         descriptions = {
             "host_species": "Host organism (e.g. Human, Mouse, Rat)",
@@ -904,7 +908,7 @@ class BioAnalyzerCLI:
     # Settings
     # ------------------------------------------------------------------
 
-    def handle_settings_command(self, args):
+    def handle_settings_command(self, args: argparse.Namespace) -> None:
         try:
             from app.core.settings import BioAnalyzerSettings, SettingsManager
         except ImportError as e:
@@ -963,7 +967,7 @@ class BioAnalyzerCLI:
             manager.migrate_settings(old, out)
             print(f"✅ Migrated → {out}")
 
-    def _format_settings_table(self, settings: "BioAnalyzerSettings") -> str:
+    def _format_settings_table(self, settings: BioAnalyzerSettings) -> str:
         s = settings
         lines = [
             "=" * 60,
@@ -986,12 +990,12 @@ class BioAnalyzerCLI:
     # Banner / help
     # ------------------------------------------------------------------
 
-    def print_banner(self):
+    def print_banner(self) -> None:
         print("\n🧬 ============================================= 🧬")
         print("   BioAnalyzer - Curatable Signature Analysis Tool")
         print("🧬 ============================================= 🧬\n")
 
-    def print_help(self):
+    def print_help(self) -> None:
         self.print_banner()
         print(
             """📋 COMMANDS
@@ -1120,16 +1124,33 @@ def _build_parser() -> argparse.ArgumentParser:
     return p
 
 
-def _dedup(pmids: List[str]) -> List[str]:
-    seen: set = set()
-    return [p for p in pmids if p not in seen and not seen.add(p)]  # type: ignore
+def _dedup(items: list[str]) -> list[str]:
+    seen: set[str] = set()
+    return [x for x in items if x not in seen and not seen.add(x)]  # type: ignore
 
 
-def _expand_pmids(raw: List[str]) -> List[str]:
-    out: List[str] = []
+def _expand_pmids(raw: list[str]) -> list[str]:
+    out: list[str] = []
     for p in raw or []:
         out.extend(x.strip() for x in p.split(",") if x.strip())
     return out
+
+
+def _resolve_pmids(
+    cli: BioAnalyzerCLI, args: argparse.Namespace, announce_load: bool = False
+) -> list[str] | None:
+    """Merge inline PMIDs with any --file PMIDs, deduped. None on load failure."""
+    pmids = _dedup(_expand_pmids(args.pmids))
+    if args.file:
+        try:
+            loaded = cli.load_pmids_from_file(args.file)
+        except Exception as e:
+            print(f"❌ {e}")
+            return None
+        if announce_load:
+            print(f"📁 Loaded {len(loaded)} PMID(s) from {args.file}")
+        pmids = _dedup(pmids + loaded)
+    return pmids
 
 
 # ---------------------------------------------------------------------------
@@ -1137,7 +1158,7 @@ def _expand_pmids(raw: List[str]) -> List[str]:
 # ---------------------------------------------------------------------------
 
 
-def main():
+def main() -> None:
     parser = _build_parser()
     args = parser.parse_args()
     cli = BioAnalyzerCLI()
@@ -1150,7 +1171,7 @@ def main():
     elif cmd == "start":
         cli.start_application()
         if getattr(args, "interactive", False):
-            asyncio.run(cli.ask_question(""))
+            cli.ask_question("")
     elif cmd == "stop":
         cli.stop_application()
     elif cmd == "restart":
@@ -1168,7 +1189,7 @@ def main():
         if args.interactive or not args.question:
             cli.interactive_qa()
         else:
-            asyncio.run(cli.ask_question(args.question))
+            cli.ask_question(args.question)
     elif cmd == "search":
         cli.search_pubmed(
             query=getattr(args, "query", None),
@@ -1178,21 +1199,15 @@ def main():
             output_file=getattr(args, "output", None),
         )
     elif cmd == "analyze":
-        pmids = _dedup(_expand_pmids(args.pmids))
-        if args.file:
-            try:
-                loaded = cli.load_pmids_from_file(args.file)
-                print(f"📁 Loaded {len(loaded)} PMID(s) from {args.file}")
-                pmids = _dedup(pmids + loaded)
-            except Exception as e:
-                print(f"❌ {e}")
-                return
+        pmids = _resolve_pmids(cli, args, announce_load=True)
+        if pmids is None:
+            return
         if not pmids:
             print(
                 "❌ No PMIDs provided. Use: BioAnalyzer analyze <pmid> or --file <file>"
             )
             return
-        asyncio.run(cli.analyze_papers(pmids, args.format, args.output, args.refresh))
+        cli.analyze_papers(pmids, args.format, args.output, args.refresh)
     elif cmd == "analyze-url":
         cli.handle_url_analysis(
             args.urls,
@@ -1205,17 +1220,13 @@ def main():
             args.timeout,
         )
     elif cmd == "retrieve":
-        pmids = _dedup(_expand_pmids(args.pmids))
-        if args.file:
-            try:
-                pmids = _dedup(pmids + cli.load_pmids_from_file(args.file))
-            except Exception as e:
-                print(f"❌ {e}")
-                return
+        pmids = _resolve_pmids(cli, args)
+        if pmids is None:
+            return
         if not pmids:
             print("❌ No PMIDs provided.")
             return
-        asyncio.run(cli.retrieve_papers(pmids, args.format, args.output, args.save))
+        cli.retrieve_papers(pmids, args.format, args.output, args.save)
     elif cmd == "settings":
         cli.handle_settings_command(args)
 

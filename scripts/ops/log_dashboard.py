@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 """
-Archived: Log Dashboard for BioAnalyzer
-=======================================
+Log Dashboard for BioAnalyzer
+==============================
 
 A simple dashboard to monitor logs in real-time with performance metrics.
-Moved to scripts/archive/ to indicate it's a dev/ops utility and not part of the
-core backend runtime.
+This is a standalone dev/ops utility, not part of the core backend runtime.
 """
 
 import os
@@ -14,6 +13,7 @@ import time
 import json
 from pathlib import Path
 from datetime import datetime, timedelta
+from collections import deque
 import argparse
 import re
 
@@ -46,6 +46,26 @@ class LogDashboard:
             else:
                 self.file_positions[log_file] = 0
 
+        # Running aggregates for the average response time, maintained across
+        # incremental reads since _update_performance_stats no longer
+        # re-scans the whole file every poll (see _read_new_lines).
+        self._response_time_sum = 0.0
+        self._response_time_count = 0
+
+        # Rolling buffers of the last N raw lines seen, maintained across
+        # incremental reads for the same reason.
+        self._recent_error_lines = deque(maxlen=10)
+        self._recent_activity_lines = deque(maxlen=10)
+
+    def _read_new_lines(self, log_file: Path) -> list:
+        """Read only the content appended to log_file since the last call,
+        advancing the tracked file position in self.file_positions."""
+        with open(log_file, "r", encoding="utf-8") as f:
+            f.seek(self.file_positions.get(log_file, 0))
+            lines = f.readlines()
+            self.file_positions[log_file] = f.tell()
+        return lines
+
     def update_stats(self):
         """Update statistics from log files."""
         self._update_performance_stats()
@@ -58,15 +78,7 @@ class LogDashboard:
             return
 
         try:
-            with open(self.performance_log, "r", encoding="utf-8") as f:
-                lines = f.readlines()
-
-            # Reset counters
-            self.stats["total_queries"] = 0
-            self.stats["successful_queries"] = 0
-            self.stats["failed_queries"] = 0
-            self.stats["cached_queries"] = 0
-            response_times = []
+            lines = self._read_new_lines(self.performance_log)
 
             for line in lines:
                 if "PMID_QUERY_END" in line:
@@ -85,12 +97,14 @@ class LogDashboard:
                     # Parse duration
                     duration_match = re.search(r"Duration: ([\d.]+)s", line)
                     if duration_match:
-                        response_times.append(float(duration_match.group(1)))
+                        self._response_time_sum += float(duration_match.group(1))
+                        self._response_time_count += 1
 
-            # Calculate average response time
-            if response_times:
-                self.stats["avg_response_time"] = sum(response_times) / len(
-                    response_times
+            # Calculate average response time (cumulative across every line
+            # seen so far, not just this batch of newly-read lines)
+            if self._response_time_count:
+                self.stats["avg_response_time"] = (
+                    self._response_time_sum / self._response_time_count
                 )
 
         except Exception as e:
@@ -102,12 +116,11 @@ class LogDashboard:
             return
 
         try:
-            with open(self.error_log, "r", encoding="utf-8") as f:
-                lines = f.readlines()
+            self._recent_error_lines.extend(self._read_new_lines(self.error_log))
 
             # Get last 10 errors
             recent_errors = []
-            for line in lines[-10:]:
+            for line in self._recent_error_lines:
                 if line.strip():
                     # Extract error summary
                     error_match = re.search(
@@ -129,14 +142,12 @@ class LogDashboard:
             return
 
         try:
-            with open(self.main_log, "r", encoding="utf-8") as f:
-                lines = f.readlines()
+            self._recent_activity_lines.extend(self._read_new_lines(self.main_log))
 
             # Get last 10 log entries
-            recent_lines = lines[-10:]
             self.stats["recent_activity"] = []
 
-            for line in recent_lines:
+            for line in self._recent_activity_lines:
                 if line.strip():
                     # Extract timestamp and message
                     timestamp_match = re.search(
