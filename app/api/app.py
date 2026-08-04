@@ -7,7 +7,7 @@ from fastapi import FastAPI
 
 from app.api.models.api_models import HealthResponse
 from app.api.routers import (
-    bugsigdb_analysis,
+    bugsigdb_analysis_v2,
     study_analysis,
     system,
 )
@@ -86,8 +86,8 @@ if ENABLE_RATE_LIMITING:
 
 app.include_router(study_analysis.router)
 app.include_router(system.router)
-app.include_router(bugsigdb_analysis.v1_router)
-app.include_router(bugsigdb_analysis.router)
+app.include_router(bugsigdb_analysis_v2.v1_router)
+app.include_router(bugsigdb_analysis_v2.router)
 
 
 @app.get("/")

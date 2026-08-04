@@ -15,6 +15,36 @@ logger = logging.getLogger(__name__)
 # In-memory rate limit store (use Redis in production)
 _rate_limit_store: Dict[str, list] = defaultdict(list)
 
+# Tracks when the store was last swept for fully-stale IP entries, so the
+# sweep only runs periodically instead of on every single request.
+_last_sweep_time: float = 0.0
+_SWEEP_INTERVAL_SECONDS = 60
+
+
+def _sweep_stale_ips(window_seconds: int = 60) -> None:
+    """Remove client IPs whose request timestamps have all aged out of the window.
+
+    Without this, `_rate_limit_store` accumulates one key per distinct IP
+    forever: normal per-request pruning only trims each IP's timestamp list,
+    it never deletes the (now-empty) key itself. This sweep is throttled to
+    run at most once every `_SWEEP_INTERVAL_SECONDS` so it doesn't add
+    per-request overhead.
+    """
+    global _last_sweep_time
+    now = time.time()
+    if now - _last_sweep_time < _SWEEP_INTERVAL_SECONDS:
+        return
+    _last_sweep_time = now
+
+    window_start = now - window_seconds
+    stale_ips = [
+        ip
+        for ip, timestamps in _rate_limit_store.items()
+        if not [t for t in timestamps if t > window_start]
+    ]
+    for ip in stale_ips:
+        del _rate_limit_store[ip]
+
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
     """
@@ -94,6 +124,10 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         """Check if client IP is within rate limit."""
         current_time = time.time()
         window_start = current_time - 60  # 1 minute window
+
+        # Periodically sweep out IPs that have aged out entirely so the
+        # store doesn't grow by one key per distinct IP forever.
+        _sweep_stale_ips()
 
         # Clean old entries
         requests = _rate_limit_store[client_ip]

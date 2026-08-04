@@ -61,6 +61,10 @@ class ChunkReRanker:
             return max(0.0, min(1.0, score / 10.0))
         return max(0.0, min(1.0, score))
 
+    def get_metrics(self) -> Dict[str, Any]:
+        """Return a copy of the internal performance metrics."""
+        return dict(self._metrics)
+
     async def rerank_chunks(
         self,
         chunks: List[Text],
@@ -167,7 +171,6 @@ class ChunkReRanker:
         matches = sum(1 for t in terms if t in text.lower())
         return matches / len(terms) if terms else 0.0
 
-    # ✅ Correctly inside the class
     def _parse_score_from_response(self, response: str) -> float:
         """Parse score from LLM response, returning 0.5 as default for invalid input."""
         match = re.search(r"([0-9]*\.?[0-9]+)", response)

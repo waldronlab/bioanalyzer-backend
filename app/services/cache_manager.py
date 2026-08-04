@@ -5,8 +5,8 @@ from typing import Dict, List, Optional, Any
 from datetime import datetime, timedelta
 import logging
 import asyncio
-import concurrent.futures
 import time
+from app.utils.credential_masking import mask_exception_message
 from app.utils.performance_logger import perf_logger
 
 logger = logging.getLogger(__name__)
@@ -37,6 +37,7 @@ class CacheManager:
 
     def _init_database(self):
         """Initialize SQLite database for caching."""
+        conn = None
         try:
             conn = sqlite3.connect(self.db_path, check_same_thread=False)
             cursor = conn.cursor()
@@ -125,11 +126,15 @@ class CacheManager:
             )
 
             conn.commit()
-            conn.close()
             logger.info("Cache database initialized successfully")
 
         except Exception as e:
-            logger.error(f"Failed to initialize cache database: {str(e)}")
+            logger.error(
+                f"Failed to initialize cache database: {mask_exception_message(e)}"
+            )
+        finally:
+            if conn:
+                conn.close()
 
     def store_analysis_result(
         self,
@@ -171,7 +176,9 @@ class CacheManager:
         except Exception as e:
             duration = time.time() - start_time
             perf_logger.log_cache_operation("STORE", pmid, "analysis", duration, False)
-            logger.error(f"Failed to store analysis result for PMID {pmid}: {str(e)}")
+            logger.error(
+                f"Failed to store analysis result for PMID {pmid}: {mask_exception_message(e)}"
+            )
             return False
         finally:
             if conn:
@@ -210,7 +217,7 @@ class CacheManager:
 
         except Exception as e:
             logger.error(
-                f"Failed to retrieve analysis result for PMID {pmid}: {str(e)}"
+                f"Failed to retrieve analysis result for PMID {pmid}: {mask_exception_message(e)}"
             )
             return None
         finally:
@@ -262,8 +269,9 @@ class CacheManager:
 
     def store_metadata(self, pmid: str, metadata: Dict, source: str = "pubmed") -> bool:
         """Store paper metadata in cache."""
+        conn = None
         try:
-            conn = sqlite3.connect(self.db_path)
+            conn = self._get_connection()
             cursor = conn.cursor()
 
             cursor.execute(
@@ -281,18 +289,23 @@ class CacheManager:
             )
 
             conn.commit()
-            conn.close()
             logger.info(f"Stored metadata for PMID {pmid}")
             return True
 
         except Exception as e:
-            logger.error(f"Failed to store metadata for PMID {pmid}: {str(e)}")
+            logger.error(
+                f"Failed to store metadata for PMID {pmid}: {mask_exception_message(e)}"
+            )
             return False
+        finally:
+            if conn:
+                self._return_connection(conn)
 
     def get_metadata(self, pmid: str) -> Optional[Dict]:
         """Retrieve paper metadata from cache."""
+        conn = None
         try:
-            conn = sqlite3.connect(self.db_path)
+            conn = self._get_connection()
             cursor = conn.cursor()
 
             cursor.execute(
@@ -305,7 +318,6 @@ class CacheManager:
             )
 
             result = cursor.fetchone()
-            conn.close()
 
             if result:
                 metadata, timestamp, source = result
@@ -319,13 +331,19 @@ class CacheManager:
             return None
 
         except Exception as e:
-            logger.error(f"Failed to retrieve metadata for PMID {pmid}: {str(e)}")
+            logger.error(
+                f"Failed to retrieve metadata for PMID {pmid}: {mask_exception_message(e)}"
+            )
             return None
+        finally:
+            if conn:
+                self._return_connection(conn)
 
     def store_fulltext(self, pmid: str, fulltext: str, source: str = "pmc") -> bool:
         """Store full text in cache."""
+        conn = None
         try:
-            conn = sqlite3.connect(self.db_path)
+            conn = self._get_connection()
             cursor = conn.cursor()
 
             cursor.execute(
@@ -338,18 +356,23 @@ class CacheManager:
             )
 
             conn.commit()
-            conn.close()
             logger.info(f"Stored fulltext for PMID {pmid}")
             return True
 
         except Exception as e:
-            logger.error(f"Failed to store fulltext for PMID {pmid}: {str(e)}")
+            logger.error(
+                f"Failed to store fulltext for PMID {pmid}: {mask_exception_message(e)}"
+            )
             return False
+        finally:
+            if conn:
+                self._return_connection(conn)
 
     def get_fulltext(self, pmid: str) -> Optional[Dict]:
         """Retrieve full text from cache."""
+        conn = None
         try:
-            conn = sqlite3.connect(self.db_path)
+            conn = self._get_connection()
             cursor = conn.cursor()
 
             cursor.execute(
@@ -362,7 +385,6 @@ class CacheManager:
             )
 
             result = cursor.fetchone()
-            conn.close()
 
             if result:
                 fulltext, timestamp, source = result
@@ -376,8 +398,13 @@ class CacheManager:
             return None
 
         except Exception as e:
-            logger.error(f"Failed to retrieve fulltext for PMID {pmid}: {str(e)}")
+            logger.error(
+                f"Failed to retrieve fulltext for PMID {pmid}: {mask_exception_message(e)}"
+            )
             return None
+        finally:
+            if conn:
+                self._return_connection(conn)
 
     def get_ontology_term(self, provider: str, term: str) -> Optional[tuple]:
         """Return a cached (label, ontology_id, confidence) for *term*, or None.
@@ -400,7 +427,7 @@ class CacheManager:
             return tuple(result) if result else None
         except Exception as e:
             logger.warning(
-                f"Failed to read ontology cache for {provider}/{term}: {str(e)}"
+                f"Failed to read ontology cache for {provider}/{term}: {mask_exception_message(e)}"
             )
             return None
         finally:
@@ -439,7 +466,7 @@ class CacheManager:
             return True
         except Exception as e:
             logger.warning(
-                f"Failed to store ontology cache for {provider}/{term}: {str(e)}"
+                f"Failed to store ontology cache for {provider}/{term}: {mask_exception_message(e)}"
             )
             return False
         finally:
@@ -491,7 +518,7 @@ class CacheManager:
             }
         except Exception as e:
             logger.warning(
-                f"Failed to read grounding cache for {ontology_id}: {str(e)}"
+                f"Failed to read grounding cache for {ontology_id}: {mask_exception_message(e)}"
             )
             return None
         finally:
@@ -535,7 +562,7 @@ class CacheManager:
             return True
         except Exception as e:
             logger.warning(
-                f"Failed to store grounding cache for {ontology_id}: {str(e)}"
+                f"Failed to store grounding cache for {ontology_id}: {mask_exception_message(e)}"
             )
             return False
         finally:
@@ -552,13 +579,16 @@ class CacheManager:
             return age < timedelta(hours=max_age_hours)
 
         except Exception as e:
-            logger.warning(f"Failed to check cache validity: {str(e)}")
+            logger.warning(
+                f"Failed to check cache validity: {mask_exception_message(e)}"
+            )
             return False
 
     def get_cache_stats(self) -> Dict[str, Any]:
         """Get cache statistics and information."""
+        conn = None
         try:
-            conn = sqlite3.connect(self.db_path)
+            conn = self._get_connection()
             cursor = conn.cursor()
 
             # Get counts for each table
@@ -585,8 +615,6 @@ class CacheManager:
             ready_count = 0
             not_ready_count = 0
 
-            conn.close()
-
             return {
                 "analysis_cache_count": analysis_count,
                 "metadata_cache_count": metadata_count,
@@ -603,8 +631,11 @@ class CacheManager:
             }
 
         except Exception as e:
-            logger.error(f"Failed to get cache stats: {str(e)}")
+            logger.error(f"Failed to get cache stats: {mask_exception_message(e)}")
             return {}
+        finally:
+            if conn:
+                self._return_connection(conn)
 
     def _get_cache_size_mb(self) -> float:
         """Get the size of the cache database in MB."""
@@ -618,8 +649,9 @@ class CacheManager:
 
     def clear_old_cache(self, max_age_hours: int = 168) -> int:
         """Clear cache entries older than specified age. Returns number of cleared entries."""
+        conn = None
         try:
-            conn = sqlite3.connect(self.db_path)
+            conn = self._get_connection()
             cursor = conn.cursor()
 
             cutoff_time = (datetime.now() - timedelta(hours=max_age_hours)).isoformat()
@@ -641,7 +673,6 @@ class CacheManager:
             fulltext_cleared = cursor.rowcount
 
             conn.commit()
-            conn.close()
 
             total_cleared = analysis_cleared + metadata_cleared + fulltext_cleared
             logger.info(f"Cleared {total_cleared} old cache entries")
@@ -649,13 +680,17 @@ class CacheManager:
             return total_cleared
 
         except Exception as e:
-            logger.error(f"Failed to clear old cache: {str(e)}")
+            logger.error(f"Failed to clear old cache: {mask_exception_message(e)}")
             return 0
+        finally:
+            if conn:
+                self._return_connection(conn)
 
     def search_cache(self, query: str, search_type: str = "all") -> List[Dict]:
         """Search cache for papers matching the query."""
+        conn = None
         try:
-            conn = sqlite3.connect(self.db_path)
+            conn = self._get_connection()
             cursor = conn.cursor()
 
             if search_type == "analysis":
@@ -694,25 +729,27 @@ class CacheManager:
                 )
 
             results = cursor.fetchall()
-            conn.close()
 
             return results
 
         except Exception as e:
-            logger.error(f"Failed to search cache: {str(e)}")
+            logger.error(f"Failed to search cache: {mask_exception_message(e)}")
             return []
+        finally:
+            if conn:
+                self._return_connection(conn)
 
     def delete_analysis_result(self, pmid: str) -> bool:
         """Delete cached analysis results for a specific PMID."""
+        conn = None
         try:
-            conn = sqlite3.connect(self.db_path)
+            conn = self._get_connection()
             cursor = conn.cursor()
 
             cursor.execute("DELETE FROM analysis_cache WHERE pmid = ?", (pmid,))
             deleted = cursor.rowcount > 0
 
             conn.commit()
-            conn.close()
 
             if deleted:
                 logger.info(f"Deleted analysis cache for PMID {pmid}")
@@ -722,20 +759,25 @@ class CacheManager:
             return deleted
 
         except Exception as e:
-            logger.error(f"Failed to delete analysis cache for PMID {pmid}: {str(e)}")
+            logger.error(
+                f"Failed to delete analysis cache for PMID {pmid}: {mask_exception_message(e)}"
+            )
             return False
+        finally:
+            if conn:
+                self._return_connection(conn)
 
     def delete_metadata(self, pmid: str) -> bool:
         """Delete cached metadata for a specific PMID."""
+        conn = None
         try:
-            conn = sqlite3.connect(self.db_path)
+            conn = self._get_connection()
             cursor = conn.cursor()
 
             cursor.execute("DELETE FROM metadata_cache WHERE pmid = ?", (pmid,))
             deleted = cursor.rowcount > 0
 
             conn.commit()
-            conn.close()
 
             if deleted:
                 logger.info(f"Deleted metadata cache for PMID {pmid}")
@@ -745,20 +787,25 @@ class CacheManager:
             return deleted
 
         except Exception as e:
-            logger.error(f"Failed to delete metadata cache for PMID {pmid}: {str(e)}")
+            logger.error(
+                f"Failed to delete metadata cache for PMID {pmid}: {mask_exception_message(e)}"
+            )
             return False
+        finally:
+            if conn:
+                self._return_connection(conn)
 
     def delete_fulltext(self, pmid: str) -> bool:
         """Delete cached full text for a specific PMID."""
+        conn = None
         try:
-            conn = sqlite3.connect(self.db_path)
+            conn = self._get_connection()
             cursor = conn.cursor()
 
             cursor.execute("DELETE FROM fulltext_cache WHERE pmid = ?", (pmid,))
             deleted = cursor.rowcount > 0
 
             conn.commit()
-            conn.close()
 
             if deleted:
                 logger.info(f"Deleted full text cache for PMID {pmid}")
@@ -768,13 +815,19 @@ class CacheManager:
             return deleted
 
         except Exception as e:
-            logger.error(f"Failed to delete full text cache for PMID {pmid}: {str(e)}")
+            logger.error(
+                f"Failed to delete full text cache for PMID {pmid}: {mask_exception_message(e)}"
+            )
             return False
+        finally:
+            if conn:
+                self._return_connection(conn)
 
     def clear_all_cache(self) -> bool:
         """Clear all cached data."""
+        conn = None
         try:
-            conn = sqlite3.connect(self.db_path)
+            conn = self._get_connection()
             cursor = conn.cursor()
 
             cursor.execute("DELETE FROM analysis_cache")
@@ -787,7 +840,6 @@ class CacheManager:
             fulltext_deleted = cursor.rowcount
 
             conn.commit()
-            conn.close()
 
             total_deleted = analysis_deleted + metadata_deleted + fulltext_deleted
             logger.info(f"Cleared all cache: {total_deleted} entries deleted")
@@ -795,5 +847,8 @@ class CacheManager:
             return True
 
         except Exception as e:
-            logger.error(f"Failed to clear all cache: {str(e)}")
+            logger.error(f"Failed to clear all cache: {mask_exception_message(e)}")
             return False
+        finally:
+            if conn:
+                self._return_connection(conn)

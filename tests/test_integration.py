@@ -7,6 +7,8 @@ import pytest
 import asyncio
 from unittest.mock import patch, MagicMock, AsyncMock
 
+from conftest import import_with_fallback
+
 # Try to import FastAPI-dependent modules, skip tests if not available
 try:
     from fastapi.testclient import TestClient
@@ -21,19 +23,9 @@ except ImportError:
     get_unified_qa = None
 
 
-@pytest.fixture
-def client():
-    """Create a test client for the FastAPI app.
-
-    raise_server_exceptions=False so an unhandled exception in an
-    endpoint comes back as a normal 500 response (what these tests
-    assert on), instead of re-raising into the test process — Starlette
-    always re-raises past a bare-Exception handler for debugging,
-    regardless of whether one is registered.
-    """
-    if not FASTAPI_AVAILABLE:
-        pytest.skip("FastAPI not available")
-    return TestClient(app, raise_server_exceptions=False)
+# `client` fixture (raise_server_exceptions=False) is provided by
+# tests/conftest.py, shared with test_api_endpoints.py, test_study_analysis.py
+# and test_bugsigdb_analysis_v2.py.
 
 
 @pytest.mark.skipif(not FASTAPI_AVAILABLE, reason="FastAPI not available")
@@ -98,29 +90,10 @@ class TestCacheIntegration:
 
     def test_cache_and_retrieval_workflow(self):
         """Test that caching and retrieval work together."""
-        # Import CacheManager directly to avoid import chain issues
-        try:
-            from app.services.cache_manager import CacheManager
-        except ImportError:
-            # Fallback: use importlib to load directly from file
-            import sys
-            import importlib.util
-            from pathlib import Path
-
-            project_root = Path(__file__).parent.parent
-            cache_manager_path = project_root / "app" / "services" / "cache_manager.py"
-            if cache_manager_path.exists():
-                spec = importlib.util.spec_from_file_location(
-                    "cache_manager", str(cache_manager_path)
-                )
-                if spec and spec.loader:
-                    cache_manager_module = importlib.util.module_from_spec(spec)
-                    spec.loader.exec_module(cache_manager_module)
-                    CacheManager = cache_manager_module.CacheManager
-                else:
-                    pytest.skip("Could not load cache_manager module")
-            else:
-                pytest.skip("cache_manager.py not found")
+        # Import CacheManager directly to avoid import chain issues, falling
+        # back to loading the module straight from its file when the normal
+        # import fails.
+        CacheManager = import_with_fallback("cache_manager", "CacheManager")
 
         import tempfile
         import os
@@ -151,42 +124,6 @@ class TestCacheIntegration:
             # Check stats (inside context manager before cleanup)
             stats = cache.get_cache_stats()
             assert stats["analysis_cache_count"] >= 1
-
-
-class TestFieldValidationIntegration:
-    """Integration tests for field validation workflow."""
-
-    def test_field_validation_and_enhancement_workflow(self):
-        """Test that field validation and enhancement work together."""
-        from app.utils.field_validator import (
-            EnhancedFieldValidator,
-            FieldExtractionEnhancer,
-        )
-
-        validator = EnhancedFieldValidator()
-        enhancer = FieldExtractionEnhancer()
-
-        # Simulate extracted data
-        extracted_data = {
-            "host_species": {"value": "Human"},
-            "body_site": {"site": "Gut"},
-        }
-        full_text = "This study included 50 human participants. Fecal samples were collected from the gut."
-
-        # Enhance extraction
-        enhanced = enhancer.enhance_extraction(extracted_data, full_text)
-
-        # Verify structure
-        assert "host_species" in enhanced
-        assert "body_site" in enhanced
-        assert "missing_fields" in enhanced
-        assert "curation_preparation_summary" in enhanced
-
-        # Verify validation was applied
-        assert (
-            "status" in enhanced["host_species"]
-            or "confidence" in enhanced["host_species"]
-        )
 
 
 @pytest.mark.skipif(not FASTAPI_AVAILABLE, reason="FastAPI not available")
@@ -228,91 +165,6 @@ class TestAPIIntegration:
         assert "overall_status" in status_data
 
 
-class TestTextProcessingIntegration:
-    """Integration tests for text processing workflow."""
-
-    def test_text_cleaning_and_processing_workflow(self):
-        """Test that text cleaning and processing work together."""
-        try:
-            from app.utils.text_processing import AdvancedTextProcessor
-        except ImportError:
-            pytest.skip("torch not available")
-
-        processor = AdvancedTextProcessor()
-
-        # Text with citations and figures
-        dirty_text = "This is a test [1, 2, 3] with Figure 1 and https://example.com"
-
-        # Process text (should clean it)
-        processed = processor.process_text(dirty_text)
-
-        # Verify cleaning occurred
-        assert isinstance(processed, str)
-        assert len(processed) > 0
-        # Citations, figures, and URLs should be removed or cleaned
-        assert "[" not in processed or "]" not in processed
-
-    def test_text_encoding_decoding_workflow(self):
-        """Test that encoding and decoding work together."""
-        try:
-            from app.utils.text_processing import AdvancedTextProcessor
-        except ImportError:
-            pytest.skip("torch not available")
-
-        processor = AdvancedTextProcessor()
-        original_text = "Test text for encoding"
-
-        # Encode
-        encoded = processor.encode_text(original_text)
-        assert encoded is not None
-
-        # Decode
-        decoded = processor.decode_tokens(encoded)
-        assert isinstance(decoded, str)
-
-
-class TestUtilityIntegration:
-    """Integration tests for utility functions working together."""
-
-    def test_pmid_validation_and_cache_key_workflow(self):
-        """Test that PMID validation and cache key creation work together."""
-        from app.utils.common import validate_pmid, create_cache_key
-
-        # Validate PMID
-        valid_pmid = "12345678"
-        assert validate_pmid(valid_pmid) is True
-
-        # Create cache key
-        cache_key = create_cache_key("analysis", valid_pmid)
-        assert cache_key == "analysis_12345678"
-
-    def test_json_save_load_workflow(self):
-        """Test that JSON save and load work together."""
-        from app.utils.common import save_json, load_json
-        import tempfile
-        from pathlib import Path
-
-        with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".json") as f:
-            temp_path = Path(f.name)
-
-        try:
-            # Save data
-            test_data = {
-                "pmid": "12345678",
-                "fields": {"host_species": {"value": "Human", "confidence": 0.95}},
-            }
-            save_json(test_data, temp_path)
-
-            # Load data
-            loaded_data = load_json(temp_path)
-
-            # Verify
-            assert loaded_data["pmid"] == test_data["pmid"]
-            assert loaded_data["fields"]["host_species"]["value"] == "Human"
-        finally:
-            temp_path.unlink()
-
-
 @pytest.mark.skipif(not FASTAPI_AVAILABLE, reason="FastAPI not available")
 class TestErrorHandlingIntegration:
     """Integration tests for error handling across components."""
@@ -333,29 +185,10 @@ class TestErrorHandlingIntegration:
 
     def test_cache_error_handling(self):
         """Test that cache errors are handled gracefully."""
-        # Import CacheManager directly to avoid import chain issues
-        try:
-            from app.services.cache_manager import CacheManager
-        except ImportError:
-            # Fallback: use importlib to load directly from file
-            import sys
-            import importlib.util
-            from pathlib import Path
-
-            project_root = Path(__file__).parent.parent
-            cache_manager_path = project_root / "app" / "services" / "cache_manager.py"
-            if cache_manager_path.exists():
-                spec = importlib.util.spec_from_file_location(
-                    "cache_manager", str(cache_manager_path)
-                )
-                if spec and spec.loader:
-                    cache_manager_module = importlib.util.module_from_spec(spec)
-                    spec.loader.exec_module(cache_manager_module)
-                    CacheManager = cache_manager_module.CacheManager
-                else:
-                    pytest.skip("Could not load cache_manager module")
-            else:
-                pytest.skip("cache_manager.py not found")
+        # Import CacheManager directly to avoid import chain issues, falling
+        # back to loading the module straight from its file when the normal
+        # import fails.
+        CacheManager = import_with_fallback("cache_manager", "CacheManager")
 
         import tempfile
         import os
@@ -387,8 +220,11 @@ class TestPerformanceLoggingIntegration:
         logger.log_analysis_step("12345678", "extraction", duration=0.3)
         logger.log_pmid_query_end("12345678", duration=0.8, success=True)
 
-        # Should complete without errors
-        assert True
+        # log_pmid_query_end should have updated the logger's request
+        # counters, confirming the end-of-workflow bookkeeping actually ran.
+        assert logger.total_requests == 1
+        assert logger.successful_requests == 1
+        assert logger.failed_requests == 0
 
 
 class TestDataFlowIntegration:
@@ -396,29 +232,10 @@ class TestDataFlowIntegration:
 
     def test_data_flow_from_api_to_cache(self):
         """Test data flow from API request through to cache."""
-        # Import CacheManager directly to avoid import chain issues
-        try:
-            from app.services.cache_manager import CacheManager
-        except ImportError:
-            # Fallback: use importlib to load directly from file
-            import sys
-            import importlib.util
-            from pathlib import Path
-
-            project_root = Path(__file__).parent.parent
-            cache_manager_path = project_root / "app" / "services" / "cache_manager.py"
-            if cache_manager_path.exists():
-                spec = importlib.util.spec_from_file_location(
-                    "cache_manager", str(cache_manager_path)
-                )
-                if spec and spec.loader:
-                    cache_manager_module = importlib.util.module_from_spec(spec)
-                    spec.loader.exec_module(cache_manager_module)
-                    CacheManager = cache_manager_module.CacheManager
-                else:
-                    pytest.skip("Could not load cache_manager module")
-            else:
-                pytest.skip("cache_manager.py not found")
+        # Import CacheManager directly to avoid import chain issues, falling
+        # back to loading the module straight from its file when the normal
+        # import fails.
+        CacheManager = import_with_fallback("cache_manager", "CacheManager")
 
         import tempfile
         import os
@@ -455,29 +272,10 @@ class TestAsyncIntegration:
 
     async def test_async_cache_operations(self):
         """Test that async cache operations work correctly."""
-        # Import CacheManager directly to avoid import chain issues
-        try:
-            from app.services.cache_manager import CacheManager
-        except ImportError:
-            # Fallback: use importlib to load directly from file
-            import sys
-            import importlib.util
-            from pathlib import Path
-
-            project_root = Path(__file__).parent.parent
-            cache_manager_path = project_root / "app" / "services" / "cache_manager.py"
-            if cache_manager_path.exists():
-                spec = importlib.util.spec_from_file_location(
-                    "cache_manager", str(cache_manager_path)
-                )
-                if spec and spec.loader:
-                    cache_manager_module = importlib.util.module_from_spec(spec)
-                    spec.loader.exec_module(cache_manager_module)
-                    CacheManager = cache_manager_module.CacheManager
-                else:
-                    pytest.skip("Could not load cache_manager module")
-            else:
-                pytest.skip("cache_manager.py not found")
+        # Import CacheManager directly to avoid import chain issues, falling
+        # back to loading the module straight from its file when the normal
+        # import fails.
+        CacheManager = import_with_fallback("cache_manager", "CacheManager")
 
         import tempfile
         import os

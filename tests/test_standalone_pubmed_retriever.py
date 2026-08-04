@@ -9,9 +9,10 @@ class uses a requests.Session, not the bare requests module).
 import pytest
 import requests
 
+from conftest import make_fake_response_class
 from app.services.standalone_pubmed_retriever import (
     StandalonePubMedRetriever,
-    PubMedRetrieverError,
+    StandalonePubMedRetrieverError,
 )
 
 
@@ -82,14 +83,11 @@ ESEARCH_XML = """<?xml version="1.0"?>
 </eSearchResult>"""
 
 
-class _FakeResponse:
-    def __init__(self, text="", status_code=200):
-        self.text = text
-        self.status_code = status_code
-
-    def raise_for_status(self):
-        if self.status_code >= 400:
-            raise requests.exceptions.HTTPError(f"{self.status_code} error")
+# StandalonePubMedRetriever._make_request doesn't inspect the response on
+# error, so this fake doesn't need to attach one to the raised HTTPError -
+# unlike tests/test_data_retrieval.py's identical-looking fixture, whose
+# retriever does.
+_FakeResponse = make_fake_response_class(set_response_on_error=False)
 
 
 @pytest.fixture
@@ -335,4 +333,4 @@ class TestSearchPapers:
 
 
 def test_pubmed_retriever_error_is_an_exception():
-    assert issubclass(PubMedRetrieverError, Exception)
+    assert issubclass(StandalonePubMedRetrieverError, Exception)

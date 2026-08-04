@@ -65,7 +65,21 @@ _pqa_temp_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
 # pre-existing directory from an earlier run is restricted too.
 os.chmod(_pqa_temp_dir, 0o700)
 os.environ["PQA_DIRECTORY"] = str(_pqa_temp_dir.absolute())
-os.environ["HOME"] = str(_pqa_temp_dir.parent.absolute())
+# paperqa.utils.pqa_directory() (used for paperqa's own default index/
+# config storage, e.g. Settings.index_directory) falls back to
+# Path.home() / ".pqa" unless PQA_HOME is set, in which case it uses
+# Path(PQA_HOME) / ".pqa" instead. Some deployment environments have a
+# read-only or unset HOME, so paperqa needs pointing at a writable
+# directory — but reassigning the process-wide os.environ["HOME"] (as
+# this used to do) also silently changes what every OTHER part of the
+# process resolves as the home directory. In particular,
+# app.core.settings.SettingsManager.DEFAULT_SETTINGS_DIR is computed as
+# Path.home() / ".bioanalyzer" at class-definition/import time, so a
+# global HOME reassignment here (depending on which module happens to
+# import first) could make user settings resolve to the wrong
+# directory. Use paperqa's own PQA_HOME knob instead, which only
+# affects paperqa's directory resolution.
+os.environ["PQA_HOME"] = str(_pqa_temp_dir.parent.absolute())
 
 _pqa_base_directory: List[Optional[str]] = [str(_pqa_temp_dir.absolute())]
 
@@ -89,7 +103,7 @@ try:
     from paperqa import Docs, Settings  # noqa: E402
     from paperqa.settings import AgentSettings  # noqa: E402
     from paperqa.agents import agent_query  # noqa: E402
-    from paperqa.types import Doc, Text  # noqa: E402
+    from paperqa.types import Text  # noqa: E402
 
     PAPERQA_AGENT_API_AVAILABLE = True
 except ImportError:
@@ -103,7 +117,7 @@ except ImportError:
     # stay usable/testable even when the agent feature itself isn't.
     # AgentOrchestrator.__init__ raises a clear error instead of failing
     # at import time.
-    Docs = Settings = AgentSettings = Doc = Text = object  # type: ignore
+    Docs = Settings = AgentSettings = Text = object  # type: ignore
 
     async def agent_query(*args, **kwargs):  # type: ignore[misc]
         raise RuntimeError(
@@ -253,20 +267,14 @@ class AgentOrchestrator:
         indexes_dir = paper_dir / "indexes"
         indexes_dir.mkdir(parents=True, exist_ok=True)
 
-        # Keep the patch in sync with our chosen directory
-        try:
-            _pqa_base_directory[0] = paper_dir_str
-            import paperqa.utils as _pqu
-
-            def _local_patch(subdir: str = "") -> Path:
-                base = Path(paper_dir_str)
-                target = (base / subdir) if subdir else base
-                target.mkdir(parents=True, exist_ok=True)
-                return target
-
-            _pqu.pqa_directory = _local_patch
-        except Exception as e:
-            logger.warning("Could not re-patch pqa_directory: %s", e)
+        # Keep the module-level pqa_directory() patch (see top of file) in
+        # sync with this instance's chosen directory. This is enough on its
+        # own — _patched_pqa_directory reads _pqa_base_directory[0] on every
+        # call, so updating the shared list here is all that's needed;
+        # re-patching paperqa.utils.pqa_directory again per-instance would
+        # just install an equivalent function and serves no purpose beyond
+        # what Settings(paper_directory=...) below and this line already do.
+        _pqa_base_directory[0] = paper_dir_str
 
         # ── AgentSettings ─────────────────────────────────────────────────
         agent_settings = self._make_agent_settings(llm_model, indexes_dir)

@@ -20,6 +20,7 @@ except ImportError as e:
     logging.warning(f"Paper-QA not available: {e}")
 
 from app.utils.config import GEMINI_TIMEOUT
+from app.utils.credential_masking import mask_exception_message
 
 logger = logging.getLogger(__name__)
 
@@ -104,8 +105,9 @@ class PaperQAAgent:
             logger.error(f"Paper-QA agent query timed out after {GEMINI_TIMEOUT}s")
             return {"text": "Query timed out", "confidence": 0.0}
         except Exception as e:
-            logger.error(f"Paper-QA agent query error: {e}")
-            return {"text": f"Error: {str(e)}", "confidence": 0.0}
+            safe_error = mask_exception_message(e)
+            logger.error(f"Paper-QA agent query error: {safe_error}")
+            return {"text": f"Error: {safe_error}", "confidence": 0.0}
 
     async def analyze_paper(
         self, paper_content: Dict[str, str]
@@ -184,9 +186,10 @@ class PaperQAAgent:
                 "curation_readiness": "UNKNOWN",
             }
         except Exception as e:
-            logger.error(f"Paper analysis error: {e}")
+            safe_error = mask_exception_message(e)
+            logger.error(f"Paper analysis error: {safe_error}")
             return {
-                "error": str(e),
+                "error": safe_error,
                 "confidence": 0.0,
                 "key_findings": "",
                 "curation_readiness": "UNKNOWN",
@@ -292,8 +295,9 @@ class PaperQAAgent:
                 "confidence": 0.0,
             }
         except Exception as e:
-            logger.error(f"Enhanced analysis error: {e}")
-            return {"error": str(e), "key_findings": "{}", "confidence": 0.0}
+            safe_error = mask_exception_message(e)
+            logger.error(f"Enhanced analysis error: {safe_error}")
+            return {"error": safe_error, "key_findings": "{}", "confidence": 0.0}
 
     async def ask_question(
         self, question: str, context: Optional[str] = None, pmid: Optional[str] = None
@@ -347,5 +351,6 @@ class PaperQAAgent:
             logger.error(f"Question query timed out after {GEMINI_TIMEOUT}s")
             return {"answer": "Query timed out", "confidence": 0.0, "pmid": pmid}
         except Exception as e:
-            logger.error(f"Question query error: {e}")
-            return {"answer": f"Error: {str(e)}", "confidence": 0.0, "pmid": pmid}
+            safe_error = mask_exception_message(e)
+            logger.error(f"Question query error: {safe_error}")
+            return {"answer": f"Error: {safe_error}", "confidence": 0.0, "pmid": pmid}

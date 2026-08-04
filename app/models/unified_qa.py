@@ -343,7 +343,10 @@ class UnifiedQA:
             try:
                 genai.configure(api_key=GEMINI_API_KEY)
             except Exception as cfg_exc:  # pragma: no cover - defensive
-                logger.error("Failed to configure Gemini client: %s", cfg_exc)
+                logger.error(
+                    "Failed to configure Gemini client: %s",
+                    mask_exception_message(cfg_exc),
+                )
                 return (
                     "Image analysis is unavailable because the Gemini client could not be configured. "
                     "Check GEMINI_API_KEY and network connectivity."
@@ -361,7 +364,11 @@ class UnifiedQA:
                     response = requests.get(image_url, timeout=10)
                     response.raise_for_status()
                 except Exception as req_exc:
-                    logger.error("Error downloading image %s: %s", image_url, req_exc)
+                    logger.error(
+                        "Error downloading image %s: %s",
+                        image_url,
+                        mask_exception_message(req_exc),
+                    )
                     return (
                         "Unable to download image for analysis. "
                         "Check that the URL is reachable from the backend."

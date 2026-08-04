@@ -5,7 +5,6 @@ import sys
 import os
 import argparse
 import traceback
-from pathlib import Path
 
 # Import errors are usually import errors, not generic exceptions
 try:

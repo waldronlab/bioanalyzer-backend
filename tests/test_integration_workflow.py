@@ -4,7 +4,6 @@ Integration test for the enhanced BioAnalyzer workflow.
 Tests the complete pipeline from URL scraping to vector storage.
 """
 
-import asyncio
 import pytest
 from pathlib import Path
 
@@ -169,10 +168,3 @@ async def test_vector_store_with_ollama():
 
     except Exception as e:
         print(f"Note: OLLAMA test skipped (OLLAMA may not be running): {e}")
-
-
-if __name__ == "__main__":
-    print("Running integration tests...\n")
-    asyncio.run(test_complete_workflow())
-    print("\n" + "=" * 60 + "\n")
-    asyncio.run(test_vector_store_with_ollama())

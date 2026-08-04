@@ -2,8 +2,9 @@
 
 import asyncio
 import logging
+import time
 import uuid
-from typing import Optional
+from typing import Dict, Optional
 from fastapi import APIRouter, HTTPException, BackgroundTasks
 from pydantic import BaseModel, HttpUrl
 from app.utils.credential_masking import mask_exception_message
@@ -22,6 +23,24 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1", tags=["Study Analysis"])
 
 job_store = {}
+
+# Tracks creation time per job_id so stale entries can be swept from job_store.
+# Kept separate from job_store's values so the stored JobStatus shape is untouched.
+_job_created_at: Dict[str, float] = {}
+_JOB_TTL_SECONDS = 24 * 60 * 60  # 24 hours
+
+
+def _evict_stale_jobs(ttl_seconds: float = _JOB_TTL_SECONDS) -> None:
+    """Remove jobs older than ``ttl_seconds`` from job_store to prevent unbounded growth."""
+    now = time.time()
+    stale_job_ids = [
+        job_id
+        for job_id, created_at in _job_created_at.items()
+        if now - created_at > ttl_seconds
+    ]
+    for job_id in stale_job_ids:
+        job_store.pop(job_id, None)
+        _job_created_at.pop(job_id, None)
 
 
 class AnalyzeURLRequest(BaseModel):
@@ -49,9 +68,13 @@ async def analyze_url(
     """Start analysis of a study URL. Returns job ID for tracking progress."""
     job_id = str(uuid.uuid4())
 
+    # Sweep stale jobs before adding a new one so job_store doesn't grow unbounded.
+    _evict_stale_jobs()
+
     job_store[job_id] = JobStatus(
         job_id=job_id, status="pending", progress="Job queued"
     )
+    _job_created_at[job_id] = time.time()
 
     background_tasks.add_task(
         process_url_analysis,

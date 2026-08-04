@@ -12,11 +12,11 @@ except ImportError:
     app = None
 
 
-@pytest.fixture
-def client():
-    if not FASTAPI_AVAILABLE:
-        pytest.skip("FastAPI not available")
-    return TestClient(app)
+# `client` fixture (raise_server_exceptions=False) is provided by
+# tests/conftest.py, shared with test_api_endpoints.py, test_integration.py
+# and test_study_analysis.py. Every endpoint exercised here catches Exception
+# and re-raises as HTTPException (see app/api/routers/bugsigdb_analysis_v2.py),
+# so raise_server_exceptions=False doesn't change any of these tests' outcomes.
 
 
 def _mock_result(pmid="12345678"):

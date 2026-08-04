@@ -61,9 +61,9 @@ def _parse_pmc_sections(xml_text: str) -> Dict[str, str]:
         tag = _local_tag(node.tag)
         if tag == "sec":
             ns_prefix = (node.tag.split("}")[0] + "}") if "}" in node.tag else ""
-            title_el = node.find(f".//{ns_prefix}title") or node.find(
-                f"{ns_prefix}title"
-            )
+            title_el = node.find(f".//{ns_prefix}title")
+            if title_el is None:
+                title_el = node.find(f"{ns_prefix}title")
             raw_title = ""
             if title_el is not None:
                 raw_title = (title_el.text or "").strip() or "".join(

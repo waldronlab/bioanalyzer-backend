@@ -471,20 +471,3 @@ class StudyAnalysisResult(BaseModel):
             "analysis_timestamp": self.analysis_timestamp.isoformat(),
             "model_used": self.model_used,
         }
-
-
-# ---------------------------------------------------------------------------
-# ExtractionQuery
-# ---------------------------------------------------------------------------
-
-
-class ExtractionQuery(BaseModel):
-    """Query for a single-field extraction pass."""
-
-    query_type: str = Field(
-        description="Type of query: experiment | signature | metadata."
-    )
-    query_text: str = Field(description="The actual query string sent to the LLM.")
-    context_chunks: List[str] = Field(
-        default_factory=list, description="Relevant context chunks."
-    )

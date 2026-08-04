@@ -64,6 +64,11 @@ dependencies = [
     "pytz>=2023.3",
     # Vector database (optional - for persistent storage)
     "qdrant-client>=1.7.0",
+    # Sample-size text normalization (app/normalization/sample_size.py) and
+    # confusion-matrix reporting (scripts/eval/confusion_matrix_analysis.py)
+    "word2number>=1.1",
+    "matplotlib>=3.7.0",
+    "seaborn>=0.12.0",
     # Curator table (sortable/searchable Streamlit UI)
     "streamlit>=1.28.0",
     "pyarrow>=14.0.0",

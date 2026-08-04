@@ -26,7 +26,7 @@ sys.path.insert(0, str(project_root))
 
 from app.services.pubmed_queries import RECOMMENDED_DISCOVERY_QUERY, SEARCH_PRESETS
 from app.services.data_retrieval import PubMedRetriever
-from scripts.cli import render_results
+from scripts.cli_rendering import render_results
 
 
 def _load_analyzed_pmids(state_path: Path) -> set[str]:
@@ -115,7 +115,9 @@ def main() -> int:
     )
     parser.add_argument("-o", "--output", default="results/curator_predictions.csv")
     parser.add_argument("--state-file", default="results/analyzed_pmids.json")
-    parser.add_argument("--skip-analyzed", action="store_true", default=True)
+    parser.add_argument(
+        "--skip-analyzed", action=argparse.BooleanOptionalAction, default=True
+    )
     parser.add_argument(
         "--api-url",
         default=None,

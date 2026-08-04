@@ -7,8 +7,13 @@ unified LLM call, with heuristic and post-processing fallbacks.
 Output contract (result dict)
 ------------------------------
 Every public entry-point (analyze_paper_simple, analyze_paper_with_rag)
-returns a dict with EXACTLY the following top-level keys.  data.R /
-normalize_dataset() and the curator desk depend on this shape.
+returns a dict with AT LEAST the following top-level keys.  data.R /
+normalize_dataset() and the curator desk depend on this shape; extra keys
+are permitted and both entry points currently add some
+(analyze_paper_simple adds "curation_summary" and "processing_time";
+analyze_paper_with_rag adds "curation_summary", "processing_time",
+"rag_enabled", "rag_stats", and "rag_config_used") that are not consumed by
+data.R.
 
     pmid                             str
     title                            str

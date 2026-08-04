@@ -61,8 +61,9 @@ def found_vocab_types(lowered: str, lookup: Dict[str, str]) -> set[str]:
 # MetaHarmonizer's _BRITISH_TO_AMERICAN list after a benchmark against
 # BugSigDB's real curated corpus found this exact gap (see
 # docs/METACURATOR_METAHARMONIZER_ANALYSIS.md). Applied before matching, not
-# as a lookup-dict key, so it benefits every normalizer (and the live search
-# fallback) without duplicating entries.
+# as a lookup-dict key, so it benefits the normalizers that call it today
+# (body_site.py, condition.py — and their live search fallback) without
+# duplicating entries.
 _BRITISH_TO_AMERICAN = (
     (re.compile(r"faeces", re.IGNORECASE), "feces"),
     (re.compile(r"faecal", re.IGNORECASE), "fecal"),
@@ -86,9 +87,11 @@ _BRITISH_TO_AMERICAN = (
 def normalize_spelling(text: str) -> str:
     """Rewrite British spelling variants to American, case-insensitively.
 
-    Applied before dict/keyword matching and before building a live OLS/MONDO
-    search query, so a British-spelled term in the source paper matches the
-    same lookup entries and search results an American-spelled one would.
+    Called by body_site.py and condition.py before dict/keyword matching and
+    before building a live OLS/MONDO search query, so a British-spelled term
+    in the source paper matches the same lookup entries and search results an
+    American-spelled one would. Not currently called by host_species.py or
+    sequencing_type.py.
     """
     for pattern, replacement in _BRITISH_TO_AMERICAN:
         text = pattern.sub(replacement, text)

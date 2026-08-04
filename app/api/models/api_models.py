@@ -6,47 +6,6 @@ from pydantic import BaseModel
 from typing import Dict, List, Optional, Any
 
 
-class Message(BaseModel):
-    """WebSocket message model."""
-
-    content: str
-    role: str = "user"
-
-
-class Question(BaseModel):
-    """Question model for paper analysis."""
-
-    question: str
-
-
-class AnalysisRequest(BaseModel):
-    """Request model for paper analysis."""
-
-    pmid: str
-
-
-class BatchAnalysisRequest(BaseModel):
-    """Request model for batch analysis."""
-
-    pmids: List[str]
-    page: int = 1
-    page_size: int = 20
-
-
-class EnhancedBatchAnalysisRequest(BaseModel):
-    """Request model for enhanced batch analysis."""
-
-    pmids: List[str]
-    max_concurrent: int = 5
-
-
-class CacheSearchRequest(BaseModel):
-    """Request model for cache search."""
-
-    query: str
-    search_type: str = "all"
-
-
 class HealthResponse(BaseModel):
     """Health check response model."""
 
@@ -75,18 +34,6 @@ class MetricsResponse(BaseModel):
     average_response_time: float
     cache_hit_rate: float
     memory_usage: Dict[str, Any]
-
-
-class CacheStatsResponse(BaseModel):
-    """Cache statistics response model."""
-
-    total_entries: int
-    analysis_cache_entries: int
-    metadata_cache_entries: int
-    fulltext_cache_entries: int
-    cache_size_mb: float
-    oldest_entry: Optional[str]
-    newest_entry: Optional[str]
 
 
 class FieldAnalysis(BaseModel):

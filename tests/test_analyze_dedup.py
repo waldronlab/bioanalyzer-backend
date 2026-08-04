@@ -4,7 +4,6 @@ is the manifest: re-running against the same path must skip both
 re-analysis and re-emission for PMIDs it already contains.
 """
 
-import asyncio
 import csv
 import io
 from unittest.mock import MagicMock
@@ -43,23 +42,15 @@ def test_second_run_skips_already_emitted_pmids(tmp_path, monkeypatch):
         resp.json.return_value = _fake_analysis(pmid)
         return resp
 
-    monkeypatch.setattr("scripts.cli.requests.get", fake_get)
+    monkeypatch.setattr(cli._session, "get", fake_get)
 
-    asyncio.run(
-        cli.analyze_papers(
-            ["1", "2"], fmt="curator_desk_csv", output_file=str(out_path)
-        )
-    )
+    cli.analyze_papers(["1", "2"], fmt="curator_desk_csv", output_file=str(out_path))
     assert call_log == ["1", "2"]
     rows = _rows(out_path)
     assert [r["PMID"] for r in rows] == ["1", "2"]
 
     call_log.clear()
-    asyncio.run(
-        cli.analyze_papers(
-            ["2", "3"], fmt="curator_desk_csv", output_file=str(out_path)
-        )
-    )
+    cli.analyze_papers(["2", "3"], fmt="curator_desk_csv", output_file=str(out_path))
     # PMID 2 was already in the file — only 3 should have been (re-)analysed.
     assert call_log == ["3"]
 
@@ -90,11 +81,11 @@ def test_second_run_skips_already_emitted_pmids_with_plain_csv_format(
         resp.json.return_value = _fake_analysis(pmid)
         return resp
 
-    monkeypatch.setattr("scripts.cli.requests.get", fake_get)
+    monkeypatch.setattr(cli._session, "get", fake_get)
 
-    asyncio.run(cli.analyze_papers(["1", "2"], fmt="csv", output_file=str(out_path)))
+    cli.analyze_papers(["1", "2"], fmt="csv", output_file=str(out_path))
     call_log.clear()
-    asyncio.run(cli.analyze_papers(["2", "3"], fmt="csv", output_file=str(out_path)))
+    cli.analyze_papers(["2", "3"], fmt="csv", output_file=str(out_path))
     assert call_log == ["3"]
     assert [r["PMID"] for r in _rows(out_path)] == ["1", "2", "3"]
 
@@ -123,9 +114,9 @@ def test_rate_limited_pmid_is_retried_instead_of_dropped(tmp_path, monkeypatch):
             resp.json.return_value = _fake_analysis("1")
         return resp
 
-    monkeypatch.setattr("scripts.cli.requests.get", fake_get)
+    monkeypatch.setattr(cli._session, "get", fake_get)
 
-    asyncio.run(cli.analyze_papers(["1"], fmt="csv", output_file=str(out_path)))
+    cli.analyze_papers(["1"], fmt="csv", output_file=str(out_path))
     assert call_count["n"] == 3
     assert len(sleeps) == 2
     assert [r["PMID"] for r in _rows(out_path)] == ["1"]
@@ -145,16 +136,12 @@ def test_nothing_new_skips_network_entirely(tmp_path, monkeypatch):
         resp.json.return_value = _fake_analysis(pmid)
         return resp
 
-    monkeypatch.setattr("scripts.cli.requests.get", fake_get)
+    monkeypatch.setattr(cli._session, "get", fake_get)
 
-    asyncio.run(
-        cli.analyze_papers(["1"], fmt="curator_desk_csv", output_file=str(out_path))
-    )
+    cli.analyze_papers(["1"], fmt="curator_desk_csv", output_file=str(out_path))
     call_log.clear()
 
-    asyncio.run(
-        cli.analyze_papers(["1"], fmt="curator_desk_csv", output_file=str(out_path))
-    )
+    cli.analyze_papers(["1"], fmt="curator_desk_csv", output_file=str(out_path))
     assert call_log == []
     assert [r["PMID"] for r in _rows(out_path)] == ["1"]
 
@@ -170,17 +157,11 @@ def test_refresh_bypasses_dedup_and_overwrites(tmp_path, monkeypatch):
         resp.json.return_value = _fake_analysis(pmid)
         return resp
 
-    monkeypatch.setattr("scripts.cli.requests.get", fake_get)
+    monkeypatch.setattr(cli._session, "get", fake_get)
 
-    asyncio.run(
-        cli.analyze_papers(
-            ["1", "2"], fmt="curator_desk_csv", output_file=str(out_path)
-        )
-    )
-    asyncio.run(
-        cli.analyze_papers(
-            ["2"], fmt="curator_desk_csv", output_file=str(out_path), refresh=True
-        )
+    cli.analyze_papers(["1", "2"], fmt="curator_desk_csv", output_file=str(out_path))
+    cli.analyze_papers(
+        ["2"], fmt="curator_desk_csv", output_file=str(out_path), refresh=True
     )
     # --refresh overwrites rather than appending/deduping.
     rows = _rows(out_path)
@@ -198,14 +179,10 @@ def test_deleting_output_file_starts_clean_slate(tmp_path, monkeypatch):
         resp.json.return_value = _fake_analysis(pmid)
         return resp
 
-    monkeypatch.setattr("scripts.cli.requests.get", fake_get)
+    monkeypatch.setattr(cli._session, "get", fake_get)
 
-    asyncio.run(
-        cli.analyze_papers(["1"], fmt="curator_desk_csv", output_file=str(out_path))
-    )
+    cli.analyze_papers(["1"], fmt="curator_desk_csv", output_file=str(out_path))
     out_path.unlink()
 
-    asyncio.run(
-        cli.analyze_papers(["1"], fmt="curator_desk_csv", output_file=str(out_path))
-    )
+    cli.analyze_papers(["1"], fmt="curator_desk_csv", output_file=str(out_path))
     assert [r["PMID"] for r in _rows(out_path)] == ["1"]

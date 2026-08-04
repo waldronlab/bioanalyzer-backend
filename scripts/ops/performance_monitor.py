@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
-Archived: Performance Monitor for BioAnalyzer
-============================================
+Performance Monitor for BioAnalyzer
+====================================
 
 This script monitors the performance of PMID queries and helps identify
-API bottlenecks. Moved to scripts/archive/ to indicate it's a dev/ops
-utility and not part of the core backend runtime.
+API bottlenecks. This is a standalone dev/ops utility, not part of the
+core backend runtime.
 """
 
 import os
@@ -132,13 +132,13 @@ def test_multiple_pmids(pmids, base_url: str):
                 f"  Total analyzed: {cache_stats.get('total_curation_analyzed', 'N/A')}"
             )
             print(
-                f"  Cache hit rate: {cache_stats.get('curation_readiness_rate', 'N/A'):.1%}"
+                f"  Cache hit rate: {cache_stats.get('curation_readiness_rate', 0.0):.1%}"
             )
             print(
                 f"  Recent activity (24h): {cache_stats.get('recent_analysis_24h', 'N/A')}"
             )
-    except:
-        print("\nCould not retrieve cache statistics")
+    except Exception as e:
+        print(f"\nCould not retrieve cache statistics: {e}")
 
 
 def main():

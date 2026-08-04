@@ -1,26 +1,13 @@
-import sys
-from pathlib import Path
+"""
+Root-level pytest conftest.
 
-_PROJECT_ROOT = str(Path(__file__).parent.resolve())
-if _PROJECT_ROOT not in sys.path:
-    sys.path.insert(0, _PROJECT_ROOT)
+sys.path/PYTHONPATH setup for the `app` package is handled by
+tests/conftest.py's _ensure_paths()/_ensure_app_importable() (which pytest
+loads as soon as it starts collecting, since pytest.ini sets
+`testpaths = tests`), together with pytest.ini's own `pythonpath = .`
+option - both already cover what this file used to do by hand.
 
-import os
-
-existing = os.environ.get("PYTHONPATH", "")
-if _PROJECT_ROOT not in existing.split(":"):
-    os.environ["PYTHONPATH"] = (
-        f"{_PROJECT_ROOT}:{existing}" if existing else _PROJECT_ROOT
-    )
-
-# Debug: print what pytest sees
-print(">>> conftest.py loaded, sys.path[0:3]:", sys.path[:3])
-try:
-    import app
-
-    print(">>> app.__file__:", app.__file__)
-    import app.services
-
-    print(">>> app.services.__file__:", app.services.__file__)
-except Exception as e:
-    print(">>> IMPORT FAILED:", e)
+This file is intentionally left in place as a no-op rather than removed
+outright: a root-level conftest.py can affect pytest's plugin/fixture
+discovery scope in ways a tests/-level one does not.
+"""

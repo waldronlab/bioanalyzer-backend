@@ -33,8 +33,14 @@ from app.utils.credential_masking import mask_exception_message
 logger = logging.getLogger(__name__)
 
 
-class PubMedRetrieverError(Exception):
-    """Raised for unrecoverable PubMed retrieval failures."""
+class StandalonePubMedRetrieverError(Exception):
+    """Raised for unrecoverable PubMed retrieval failures.
+
+    Distinct from app.services.data_retrieval.PubMedRetrieverError — the two
+    exception types are unrelated even though an earlier version of this
+    module used the same name, which meant code catching one type would not
+    catch the other.
+    """
 
 
 class StandalonePubMedRetriever:

@@ -13,9 +13,12 @@ from app.utils.config import GEMINI_API_KEY
 from app.utils.performance_logger import perf_logger
 
 try:
-    from app.services.cache_manager import CacheManager
+    # Reuse the app's existing CacheManager singleton instead of
+    # constructing a fresh one (with its own SQLite connection setup) on
+    # every /metrics call.
+    from app.services.bugsigdb_analyzer.singletons import get_cache_manager
 except ImportError:
-    CacheManager = None
+    get_cache_manager = None
 
 logger = logging.getLogger(__name__)
 
@@ -109,10 +112,18 @@ class SystemService:
         )
 
     def _cache_hit_rate(self) -> float:
-        if CacheManager is None:
+        # NOTE: CacheManager.get_cache_stats() doesn't track total_requests/
+        # cache_hits — no real hit/miss counters exist yet — so `total`
+        # below is always 0 and this always evaluates to the placeholder
+        # 0.0 today. MetricsResponse.cache_hit_rate is a required (non-
+        # Optional) float, so we can't signal "unknown" via None without
+        # widening that API contract; returning an honest-but-inert 0.0
+        # here, rather than fabricating counters just to make this "work",
+        # is the least-bad option until real cache hit/miss tracking exists.
+        if get_cache_manager is None:
             return 0.0
         try:
-            stats = CacheManager().get_cache_stats()
+            stats = get_cache_manager().get_cache_stats()
             total = stats.get("total_requests", 0)
             return (stats.get("cache_hits", 0) / total) if total else 0.0
         except Exception as exc:

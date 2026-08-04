@@ -5,7 +5,6 @@ Singleton service instances for the BugSigDB analyzer.
 import logging
 from typing import Optional
 
-import app.services.bugsigdb_analyzer as _pkg
 from app.models.unified_qa import UnifiedQA
 from app.services.cache_manager import CacheManager
 from app.services.data_retrieval import PubMedRetriever
@@ -32,7 +31,7 @@ def get_unified_qa() -> Optional[UnifiedQA]:
     global _unified_qa
     if _unified_qa is None:
         try:
-            _unified_qa = _pkg.UnifiedQA(
+            _unified_qa = UnifiedQA(
                 provider="gemini",
                 model=DEFAULT_MODEL,
                 gemini_api_key=GEMINI_API_KEY,
@@ -57,7 +56,7 @@ def get_pubmed_retriever() -> Optional[PubMedRetriever]:
     global _pubmed_retriever
     if _pubmed_retriever is None:
         try:
-            _pubmed_retriever = _pkg.PubMedRetriever(api_key=NCBI_API_KEY)
+            _pubmed_retriever = PubMedRetriever(api_key=NCBI_API_KEY)
         except Exception as e:
             logger.error("PubMedRetriever init failed: %s", mask_exception_message(e))
     return _pubmed_retriever
@@ -66,5 +65,5 @@ def get_pubmed_retriever() -> Optional[PubMedRetriever]:
 def get_cache_manager() -> CacheManager:
     global _cache_manager
     if _cache_manager is None:
-        _cache_manager = _pkg.CacheManager()
+        _cache_manager = CacheManager()
     return _cache_manager

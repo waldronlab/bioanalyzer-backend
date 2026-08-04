@@ -40,12 +40,26 @@ class ImageProcessorService:
         self.max_image_size = max_image_size_mb * 1024 * 1024
 
     async def process_image_url(
-        self, image_url: str, index: int = 0
+        self,
+        image_url: str,
+        index: int = 0,
+        session: Optional[aiohttp.ClientSession] = None,
     ) -> Optional[ProcessedImage]:
-        """Download image URL and prepare for processing."""
+        """Download image URL and prepare for processing.
+
+        Args:
+            image_url: URL of the image to download.
+            index: Position of this image within its batch.
+            session: Optional shared aiohttp session. Callers processing
+                every image in a paper should create one session for the
+                whole batch and pass it in here to avoid opening a new
+                connection pool per image (see web_scraper.py's
+                _download_files for the same pattern). When omitted, a
+                session is created and closed locally for this call.
+        """
         try:
             logger.info("Processing image: %s", image_url)
-            download = await self._download_image(image_url)
+            download = await self._download_image(image_url, session=session)
             if not download:
                 return None
 
@@ -63,8 +77,19 @@ class ImageProcessorService:
             logger.error("Error processing image %s: %s", image_url, exc)
             return None
 
-    async def _download_image(self, image_url: str) -> Optional[tuple[Path, str]]:
-        """Download image from URL to cache directory."""
+    async def _download_image(
+        self,
+        image_url: str,
+        session: Optional[aiohttp.ClientSession] = None,
+    ) -> Optional[tuple[Path, str]]:
+        """Download image from URL to cache directory.
+
+        Args:
+            image_url: URL of the image to download.
+            session: Optional shared aiohttp session (see
+                process_image_url). When omitted, a session is created
+                and closed locally for just this download.
+        """
         try:
             assert_public_url(image_url)
         except UnsafeURLError as e:
@@ -72,41 +97,49 @@ class ImageProcessorService:
             return None
 
         try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(image_url, timeout=30) as response:
-                    response.raise_for_status()
-
-                    content_length = response.headers.get("content-length")
-                    if content_length and int(content_length) > self.max_image_size:
-                        logger.warning(
-                            "Skipping %s: image too large (%.2f MB)",
-                            image_url,
-                            int(content_length) / 1024 / 1024,
-                        )
-                        return None
-
-                    import hashlib
-
-                    # Use SHA-256 for non-cryptographic filename hashing
-                    url_hash = hashlib.sha256(image_url.encode()).hexdigest()[:16]
-                    mime_type = response.headers.get("content-type", "").lower()
-                    extension = self._get_image_extension(image_url, mime_type)
-
-                    filename = f"{url_hash}{extension}"
-                    image_path = self.cache_dir / filename
-
-                    if not image_path.exists():
-                        content = await response.read()
-                        image_path.write_bytes(content)
-                        logger.info("Downloaded image: %s", filename)
-                    else:
-                        logger.info("Using cached image: %s", filename)
-
-                    return image_path, self._infer_mime_type(extension, mime_type)
+            if session is not None:
+                return await self._fetch_image(session, image_url)
+            async with aiohttp.ClientSession() as local_session:
+                return await self._fetch_image(local_session, image_url)
 
         except Exception as exc:
             logger.error("Error downloading image %s: %s", image_url, exc)
             return None
+
+    async def _fetch_image(
+        self, session: aiohttp.ClientSession, image_url: str
+    ) -> Optional[tuple[Path, str]]:
+        """GET *image_url* via *session* and cache it. Returns (path, mime_type)."""
+        async with session.get(image_url, timeout=30) as response:
+            response.raise_for_status()
+
+            content_length = response.headers.get("content-length")
+            if content_length and int(content_length) > self.max_image_size:
+                logger.warning(
+                    "Skipping %s: image too large (%.2f MB)",
+                    image_url,
+                    int(content_length) / 1024 / 1024,
+                )
+                return None
+
+            import hashlib
+
+            # Use SHA-256 for non-cryptographic filename hashing
+            url_hash = hashlib.sha256(image_url.encode()).hexdigest()[:16]
+            mime_type = response.headers.get("content-type", "").lower()
+            extension = self._get_image_extension(image_url, mime_type)
+
+            filename = f"{url_hash}{extension}"
+            image_path = self.cache_dir / filename
+
+            if not image_path.exists():
+                content = await response.read()
+                image_path.write_bytes(content)
+                logger.info("Downloaded image: %s", filename)
+            else:
+                logger.info("Using cached image: %s", filename)
+
+            return image_path, self._infer_mime_type(extension, mime_type)
 
     def _infer_mime_type(self, extension: str, fallback: str) -> str:
         mapping = {
