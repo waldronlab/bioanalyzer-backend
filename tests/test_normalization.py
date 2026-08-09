@@ -246,6 +246,77 @@ def test_body_site_precise_anatomical_terms_outrank_specimen_type_alias():
     assert normalize_body_site("oral swab").label == "saliva"
 
 
+def test_body_site_local_store_override_catches_phrasings_beyond_the_static_dict():
+    """2026-08-09 semantic-hardening follow-up: the fix above (adding
+    "Small intestine"/"Oral cavity" as their own dict keys) only ever
+    covers the exact phrasings someone thought to hand-add - real BugSigDB
+    curation has many more real, distinct terms sharing a substring with a
+    casual specimen-alias key ("dental"/"oral"/"intestinal" -> saliva/
+    feces) that the static dict alone can't catch one at a time. Fixed
+    generally: when a casual specimen-alias key is the *only* static match,
+    body_site.py now also checks the local UBERON store against the full
+    raw text (`_resolve_structure_override()`) and prefers a real, high-
+    confidence, different match over the generic alias - not another
+    hand-added dict entry per phrasing.
+
+    Every (text, label, id) triple here is a real UBERON term confirmed
+    against the local ontology store, and every text is a real, common
+    BugSigDB body-site value ("Dental plaque" family: 322 combined real
+    occurrences; "Intestinal mucosa": 62)."""
+    for text, expected_label, expected_id in [
+        ("Dental plaque", "dental plaque", "UBERON:0016482"),
+        ("Subgingival dental plaque", "subgingival dental plaque", "UBERON:0016484"),
+        ("Supragingival dental plaque", "supragingival dental plaque", "UBERON:0016485"),
+        ("Intestinal mucosa", "intestinal mucosa", "UBERON:0001242"),
+        ("Mucosa of oral region", "mucosa of oral region", "UBERON:0003343"),
+        ("Oral epithelium", "oral epithelium", "UBERON:0002424"),
+    ]:
+        t = normalize_body_site(text)
+        assert t.label == expected_label, text
+        assert t.ontology_id == expected_id, text
+        # Never "auto" - local_lookup() is capped below the static dict's
+        # confidence ceiling, so this still routes to curator review even
+        # though it's now the *correct* candidate instead of a confident
+        # wrong one.
+        assert t.mapping_confidence < 1.0, text
+
+    # "Mouth" alone is genuinely ambiguous in real UBERON data (a real,
+    # separate "oral opening" term exists) - that honest ambiguity must
+    # surface as PARTIALLY_PRESENT with a candidate, not silently pick
+    # either one, and specifically must not still be "saliva".
+    mouth = normalize_body_site("Mouth")
+    assert mouth.label == "mouth"
+    assert mouth.ontology_id == "UBERON:0000165"
+    assert mouth.status == "PARTIALLY_PRESENT"
+    assert mouth.candidates
+
+    # Casual specimen-collection phrasing has no matching full-text UBERON
+    # term (confirmed against the real local store) and must keep using
+    # the existing specimen-alias default, unaffected by this change.
+    for text in (
+        "gut microbiome",
+        "oral swab",
+        "intestinal samples",
+        "stool sample",
+        "fecal sample",
+    ):
+        t = normalize_body_site(text)
+        assert t.mapping_confidence == 1.0, text
+
+    # Weak/ambiguous local evidence (below the override's confidence
+    # ceiling) must not override the existing default either - "gut" alone
+    # only weakly matches "digestive tract" (0.56) in the local store,
+    # nowhere near confident enough to prefer over "feces".
+    assert normalize_body_site("gut").label == "feces"
+    assert normalize_body_site("gut").mapping_confidence == 1.0
+
+    # Bare alias words with literally no local-store match of their own
+    # ("oral", "dental" alone aren't UBERON labels) must be completely
+    # unaffected.
+    assert normalize_body_site("oral").label == "saliva"
+    assert normalize_body_site("dental").label == "saliva"
+
+
 def test_condition_normalization_variants():
     t = normalize_condition("Parkinson's disease patients")
     assert t.label == "Parkinson disease"
@@ -279,6 +350,111 @@ def test_condition_normalization_variants():
     t = normalize_condition("COVID-19 cases")
     assert t.label == "COVID-19"
     assert t.ontology_id == "MONDO:0100096"
+
+
+def test_condition_disease_subtype_specificity_against_real_mondo_data():
+    """2026-08-09 semantic-hardening pass, disease-specificity section: a
+    generic key ("diabetes"/"allergy") must not silently swallow a more
+    specific subtype when a real, non-obsolete MONDO term for that subtype
+    exists - each case below was individually verified against the live
+    local MONDO store before being added as a fix, not assumed.
+
+    Also documents two real, deliberately *not* "fixed" cases from the same
+    investigation: MONDO has no disease-level split between HIV-1 and HIV-2
+    infection (only NCBITaxon distinguishes viral strains, a different
+    ontology/field) and no "metastatic colorectal cancer" term at all - in
+    both, the generic term this dict already returns is the correct,
+    honest answer, and forcing a more specific one would mean fabricating
+    an ID, exactly what this pass was told not to do."""
+    t = normalize_condition("gestational diabetes")
+    assert t.label == "gestational diabetes"
+    assert t.ontology_id == "MONDO:0005406"
+    assert t.mapping_confidence == 1.0
+
+    t = normalize_condition("gestational diabetes mellitus")
+    assert t.ontology_id == "MONDO:0005406"
+
+    # Must not regress the plain/type-specific keys sharing the word
+    # "diabetes".
+    assert normalize_condition("diabetes").ontology_id == "MONDO:0005015"
+    assert normalize_condition("type 2 diabetes").ontology_id == "MONDO:0005148"
+
+    t = normalize_condition("food allergy")
+    assert t.label == "food allergy"
+    assert t.ontology_id == "MONDO:0700226"
+
+    # "egg allergy" has no real, non-obsolete MONDO term (both real MONDO
+    # hits are obsolete with no replacement), but EFO:0007248 "egg allergy"
+    # is real and current - caught not by a dict entry but by
+    # `_resolve_more_specific_override()` (see test_condition_full_text_
+    # override_catches_measurement_and_subtype_terms below), which checks
+    # both EFO and MONDO against the complete raw text.
+    t = normalize_condition("egg allergy")
+    assert t.ontology_id == "EFO:0007248"
+
+    # HIV-1 has no disease-level split from generic HIV in MONDO (only
+    # NCBITaxon distinguishes viral strains) - MONDO alone would leave this
+    # a residual gap, but EFO:0000180 "HIV-1 infection" is real and exact,
+    # so the same full-text override resolves it correctly too.
+    assert normalize_condition("HIV-1 infection").ontology_id == "EFO:0000180"
+    # Plain "HIV" (no exact EFO/MONDO full-text match beyond the generic
+    # term) correctly keeps the generic disease answer.
+    assert normalize_condition("HIV").ontology_id == "MONDO:0005109"
+
+    # No real EFO or MONDO term exists for "metastatic colorectal cancer"
+    # as a MONDO id, but EFO:1001480 does - resolved the same way.
+    assert (
+        normalize_condition("metastatic colorectal cancer").ontology_id
+        == "EFO:1001480"
+    )
+
+
+def test_condition_full_text_override_catches_measurement_and_subtype_terms():
+    """2026-08-09 semantic-hardening pass, EFO semantic-type validation
+    section: a static-dict key can match only because it's a *substring* of
+    a longer, more specific phrase - "alzheimer's" inside "Alzheimer's
+    disease biomarker measurement", "hepatitis" inside "Hepatitis
+    virus-related hepatocellular carcinoma" (a different disease entirely,
+    not a hepatitis subtype) - silently returning the generic disease
+    instead of the real, more specific EFO/MONDO term for the complete
+    phrase. Every case here is a real false-AUTO this codebase's own
+    independent BugSigDB evaluation found (see
+    docs/GROUNDING_ARCHITECTURE.md's 2026-08-09 section) - not synthetic
+    examples - and every expected ID was independently confirmed to exist,
+    be non-obsolete, and exactly label-match the input text against the
+    live local EFO/MONDO store before being asserted here."""
+    cases = [
+        ("Alzheimer's disease biomarker measurement", "EFO:0006514"),
+        ("Atopic asthma", "EFO:0010638"),
+        ("COVID-19 symptoms measurement", "EFO:0600019"),
+        ("HIV-associated neurocognitive disorder", "EFO:0007948"),
+        (
+            "Hepatitis virus-related hepatocellular carcinoma",
+            "EFO:0008505",
+        ),
+        ("Obese body mass index status", "EFO:0007041"),
+        ("Parkinson's disease symptom measurement", "EFO:0600011"),
+        ("Postpartum depression", "MONDO:0005929"),
+        ("Psoriasis vulgaris", "EFO:1001494"),
+    ]
+    for text, expected_id in cases:
+        t = normalize_condition(text)
+        assert t.ontology_id == expected_id, text
+        # Never "auto" - a full-text override is still a fallback match,
+        # not a pre-audited static-dict entry, so it stays at curator
+        # review even though it's now correct instead of confidently wrong.
+        assert t.mapping_confidence < 1.0, text
+
+    # Must not regress plain disease mentions that already resolve
+    # correctly via the static dict and have no more-specific exact
+    # full-text match to override with.
+    assert normalize_condition("Type 2 diabetes").ontology_id == "MONDO:0005148"
+    assert (
+        normalize_condition("Parkinson's disease patients").ontology_id
+        == "MONDO:0005180"
+    )
+    assert normalize_condition("Crohn disease").ontology_id == "MONDO:0005011"
+    assert normalize_condition("obesity").ontology_id == "MONDO:0011122"
 
     t = normalize_condition("")
     assert t.status == "ABSENT"

@@ -1905,3 +1905,261 @@ specificity-gap question) before it should be trusted at the same level.
    `run_tests.sh` permission-drift second-order fix, and candidate-
    generation coverage ceiling - remain open, updated in light of this
    pass's findings above.
+
+## 2026-08-09 (later same day) semantic accuracy hardening
+
+A follow-up pass, scoped narrowly per its own brief: no broad
+architectural redesign, focus on semantic correctness and reducing
+dangerous/coarse grounding decisions specifically, using the real
+BugSigDB corpus (`full_dump.csv`) as the evidence source throughout
+rather than reasoning from assumption. This section documents what was
+tried, what real data disproved, what was fixed, what was investigated
+and found to have no safe fix, and the honest state this leaves the
+system in.
+
+### 1. A blanket semantic-category filter was tried and reverted - real ground truth disproved it
+
+The initial design (matching the brief's literal ask - "search the
+ontology graph to determine whether a candidate belongs to the semantic
+category expected by the field") was a new `EXCLUDED_CATEGORY_ROOTS`
+table (`roots.py`, same shape as the existing `ROOTS`) plus a real,
+verified is_a-only branch-check primitive
+(`LocalOntologyBackend.is_a_reachable_from()` - deliberately *not* the
+existing `reachable_from()`, which follows every asserted relation
+including `part_of`/`has_secretion`, and was confirmed to produce false
+positives: "oral cavity"/"small intestine" both wrongly "reachable" from
+UBERON's "organism substance" root via a part_of chain through
+"mouth"/"intestine" even though neither is a kind of body substance).
+Wired as a 6th check in `tiering.ground()`, gating "auto" on a candidate
+*not* being a descendant of an excluded root (UBERON:0000463 "organism
+substance" for body_site; EFO:0001444 "measurement" for condition).
+
+Checked against real BugSigDB ground truth (not just the two protected
+examples from the brief) before being trusted, and both roots failed:
+
+- **"Feces" is UBERON:0000463's own real descendant and is also, by a
+  wide margin, the single most common correct value in BugSigDB's real
+  body-site column** - 9,477 of ~14,600 real rows, roughly 65% of all
+  body-site value instances. "Saliva" (835), "Sputum" (107), "Blood"
+  (64), "Urine" (63), "Milk" (38) are also common and correct. A blanket
+  filter would have downgraded the dataset's dominant correct answer from
+  "auto" to "review" for no safety benefit - a large, real regression,
+  not a hardening.
+- **~46% of the 369 distinct real EFO IDs BugSigDB curators actually use
+  for the "Condition" field are real descendants of EFO:0001444
+  "measurement"** (age, BMI, diet, lifestyle, biomarker/hormone levels,
+  ...) - the Experimental Factor Ontology's own name reflects that this
+  field genuinely covers more than disease. Confirmed the reverse holds
+  too (EFO:0000408 "disease" is a direct child of `owl:Thing`,
+  independently rootless, and not reachable from EFO:0001444 or
+  EFO:0000651 "phenotype" - so the filter direction itself was sound, its
+  *field scope* wasn't) before concluding the field-level premise, not
+  the check's mechanics, was wrong.
+- Even within a single field the line isn't clean: "Dental plaque"
+  (UBERON:0016482) is itself a real is_a descendant of "organism
+  substance" - exactly like "saliva" - yet BugSigDB curates "Dental
+  plaque"/"Subgingival dental plaque"/"Supragingival dental plaque" as
+  their own distinct, correct, common values (322 combined real
+  occurrences).
+
+The filter, the new backend method, and the `ChainedBackend`/
+`rank_candidates_explained()` wiring were all removed rather than left
+in place unused. This is reported in full (not quietly dropped) because
+it's the pass's clearest example of the brief's own instruction in
+action - "do not force the answer to fit the ask" - and because the real
+finding underneath it (BugSigDB's body_site/condition fields are
+legitimately broader than "structure only"/"disease only") is exactly
+what shaped the fix that replaced it.
+
+### 2. What was actually fixed: full-text local-store overrides, not more dict exceptions
+
+The real, common shape of every confirmed bug this pass found: a short,
+generic static-dict key matches as a *substring* of a longer, more
+specific real phrase, and silently wins with the generic key's answer
+instead of the phrase's own, different, real, more specific ontology
+term - not "the wrong category was returned" but "a more specific real
+answer for the *complete* text was available and ignored."
+
+Fixed with one new function per module (`body_site.py`'s
+`_resolve_structure_override()`, `condition.py`'s
+`_resolve_more_specific_override()`), both following the same shape:
+after a static-dict match, check `local_lookup()` (the complete local
+UBERON/EFO/MONDO store - thousands of real terms/synonyms, not a hand-
+maintained list) against the *full* raw text; if it finds a real,
+independently-verified, different, sufficiently-confident term, prefer
+it over the generic key's answer. This is the "reusable semantic
+validation mechanism, not more dictionary exceptions" the brief asked
+for in the sense that matters operationally: it generalizes to any
+future phrasing sharing a substring with an existing generic key,
+without needing a new hand-added dict entry per phrasing - the two
+modules differ only in what "sufficiently confident" means for their
+respective ontologies, and both reasons are evidence-based, not tuned to
+make known cases pass (see each function's docstring for the full
+argument):
+
+- **body_site.py**: requires local_lookup's confidence to be at its hard
+  ceiling (0.9 - the max that function can ever report, per its own
+  module docstring's "never auto" rule). Scoped to
+  `_OVERRIDABLE_GENERIC_KEYS` (`oral`, `mouth`, `dental`, `intestine`,
+  `intestinal`, `gut`, `nasal`) - the specific keys a real bug was found
+  for, not every key in the dict, since a bare generic word overriding
+  itself (e.g. "Gut" alone, which only weakly matches "digestive tract"
+  at 0.56 confidence in the local store) should keep the existing,
+  already-reasonable default rather than be replaced by a low-confidence
+  guess.
+- **condition.py**: requires an *exact* label match (case/whitespace-
+  insensitive) between the full raw text and the local hit's real
+  ontology label. Deliberately not a numeric confidence floor: EFO's
+  confidence for many of these correct matches lands at 0.7, not because
+  the match is weak (it's `scope=exact`, 100% textual similarity - the
+  strongest signal `rank_candidates_explained()` can report) but because
+  that function correctly penalizes it for not being reachable from
+  EFO's "disease" root - exactly right for a term that genuinely isn't a
+  disease, and exactly the finding from §1 that ruled out treating that
+  penalty as disqualifying for this field. Requiring exactness (not "any
+  hit") is what keeps this from ever replacing a real static-dict answer
+  with a weaker guess - "Type 2 diabetes" and "obesity" both return real
+  local hits that are *not* exact matches to the raw text ("type 2
+  diabetes mellitus", "obesity disorder") and correctly override nothing.
+- Both results still cap below "auto" (local_lookup's hard rule) - every
+  case this section fixes moved from *confidently wrong* to *correctly
+  answered at review tier*, never straight to a new "auto", consistent
+  with "if a mapping cannot satisfy those requirements, the correct
+  behavior is REVIEW, not a forced AUTO."
+
+Two small, individually-verified static-dict additions (same discipline
+as the roman-numeral diabetes fix from the earlier pass, each checked
+live against the real local MONDO store for existence/non-obsolescence/
+branch-validity before being added): `"gestational diabetes"` ->
+`MONDO:0005406` (previously collapsed into generic `"diabetes"` ->
+`MONDO:0005015`) and `"food allergy"` -> `MONDO:0700226` (previously
+collapsed into generic `"allergy"` -> `MONDO:0005271`; `"egg allergy"`
+was investigated the same way and deliberately *not* given its own
+MONDO dict entry - the only two real MONDO terms for it are both
+obsolete with no replacement, so the generic answer was already correct
+there; the full-text override in §2 now independently finds
+`EFO:0007248`, a real, current, exact EFO term, for that same input).
+
+### 3. Real, evidence-driven measurement of impact (before/after, this pass)
+
+Re-run of `scripts/eval/bugsigdb_independent_evaluation.py` against the
+same 14,588-row real BugSigDB dump, before vs. after this pass's fixes
+(condition.py's before/after was measured directly within this pass;
+body_site.py's fix was designed and applied before the first evaluation
+run of this pass, so its delta is reported against the prior pass's
+already-published 32→20 baseline for genuinely-wrong false-AUTO, not
+re-measured as a fresh before/after inside this same session - see
+individual-phrase testing in §2 for the direct per-case evidence
+instead):
+
+| Field | Genuinely-wrong false-AUTO | AUTO precision | Precision | Recall | F1 |
+|---|---|---|---|---|---|
+| body_site | 20 (prior pass) → **0** | n/a → 42.4% (72/170) | - | - | 0.771 |
+| condition | **20 → 4** (measured this pass) | 61.2% → **86.7%** (52/60) | 93.0% → **95.8%** | 92.8% → **95.5%** | 0.929 → **0.956** |
+| host_species | 0 → 0 (unchanged) | 100.0% (6/6) | 100.0% | 100.0% | 1.000 |
+
+body_site's remaining false-AUTO cases (98 of 170 "auto" predictions)
+are now **100% coarser-but-related** (a real, valid UBERON ancestor of
+the ground truth - e.g. "colon" for "Ascending colon", "skin" for "Skin
+of forehead") - a specificity-depth gap, not a safety defect; zero are a
+different, unrelated concept. This is the same category explicitly
+flagged as a deferred, out-of-scope limitation in the prior pass's
+report (§10/§12) and remains deferred here for the same reason: closing
+it means either an exhaustive per-subdivision dict expansion or a
+genuinely new specificity-ranking mechanism, not a bounded fix.
+
+condition's 4 remaining genuinely-wrong false-AUTO cases are all the
+*same single distinct value* ("SARS-CoV-2-related disease" → predicted
+`MONDO:0100096` "COVID-19", appearing against 4 different co-occurring
+ground-truth ID sets) - investigated and confirmed to have no safe fix:
+the ground truth's own ID, `MONDO:0100318`, is **obsolete in the real
+synced MONDO data with no recorded replacement**. `local_lookup()`
+correctly refuses to return an obsolete term (by design - this is the
+same obsolete-term safety check this whole subsystem exists to enforce),
+so there is no live term this pass could point to instead without either
+fabricating a "replacement" or weakening the obsolete-term check itself;
+"COVID-19" is a defensible, closely-related, current fallback, not a
+wrong-category error.
+
+### 4. Disease-specificity cases investigated and confirmed to have no real fix (not silently left as gaps)
+
+Per the brief's own instruction not to fabricate IDs to make a benchmark
+pass, three cases flagged as deferred in the prior pass were re-
+investigated against the live local MONDO/EFO data specifically to
+check whether a real, non-obsolete, more-specific term actually exists
+before deciding whether to fix or document them:
+
+- **HIV-1 vs. generic HIV**: MONDO has no disease-level split between
+  HIV-1 and HIV-2 infection - the only MONDO-side match for "HIV-1" is
+  literally the generic "HIV infectious disease" term; NCBITaxon
+  distinguishes HIV-1/HIV-2 *viral strains*, but that's a different
+  ontology serving a different field (host_species), not a disease
+  concept condition.py could use. EFO, however, does have a real,
+  current `EFO:0000180` "HIV-1 infection" - caught by §2's full-text
+  override, not a MONDO dict entry.
+- **Metastatic colorectal cancer vs. generic**: no MONDO term exists at
+  all for "metastatic colorectal cancer" as a distinct concept from
+  plain "colorectal cancer" - EFO does (`EFO:1001480`), again resolved
+  by §2's override rather than a fabricated MONDO ID.
+- **Egg allergy**: see §2 - both real MONDO terms are obsolete with no
+  replacement; the generic MONDO answer was already the correct choice,
+  and EFO independently supplies a real, current, exact term via the
+  same override.
+
+New regression tests
+(`test_condition_disease_subtype_specificity_against_real_mondo_data`,
+`test_condition_full_text_override_catches_measurement_and_subtype_
+terms` in `tests/test_normalization.py`) assert both the fixed cases
+*and* these confirmed-no-fix-available cases explicitly, so a future
+change can't silently "fix" HIV-1/metastatic-colorectal-cancer with a
+fabricated MONDO ID without a test catching it.
+
+### 5. Ranking re-evaluation (brief §4) and the "prefer specific over generic" question (brief §2)
+
+Re-checked `rank_candidates_explained()` (`backend.py`) against the real
+hard cases this pass surfaced (parent/child disease pairs, branch
+distance, synonym scope, lexical similarity) rather than changing its
+formula speculatively. Finding: the existing scope + edit-distance +
+branch-validity formula, unchanged, already prefers a specific match
+over a generic one whenever the query text itself contains the specific
+wording - e.g. `SequenceMatcher` similarity between "type 2 diabetes"
+and "type 2 diabetes mellitus" is higher than between "type 2 diabetes"
+and the generic "diabetes mellitus", so specificity-preference already
+falls out of the existing, deterministic formula for any case reaching
+it. No LLM, no embeddings, and no changes to the ranking formula itself
+were made or needed here - the real gap this pass found and fixed
+(§2) was upstream of ranking entirely: the *static dict* was returning a
+confident single answer before ranking ever ran, not presenting multiple
+candidates for ranking to choose badly between. Genuinely ambiguous
+local-store matches (e.g. "Mouth" vs. "oral opening" - both real,
+valid, closely related structures) already surface as
+`PARTIALLY_PRESENT` with `candidates` populated, correctly landing at
+"review" rather than a forced pick either way.
+
+### 6. Final verdict for this pass
+
+**READY WITH CONDITIONS** (unchanged from the prior pass's verdict -
+this pass narrowed, not widened, the open conditions):
+
+- body_site and condition now have **zero and near-zero (4, all one
+  root-caused-by-obsolete-ground-truth case) genuinely-wrong false-AUTO
+  cases respectively** against the full real BugSigDB corpus, down from
+  20 and 20. host_species remains at 0/100%.
+- The remaining body_site AUTO-precision number (42.4%) looks low in
+  isolation but is now proven, not assumed, to be entirely a
+  specificity/depth gap (coarser-but-real-ancestor) rather than a safety
+  defect - the metric the brief asked to be prioritized (false-AUTO
+  rate, specifically the *dangerous* kind) is the one that improved to
+  effectively zero for both fields touched this pass.
+- Every fix is a general mechanism (a full-text local-store override,
+  reusable for any future phrasing) or an individually-verified static
+  entry, not a hardcoded benchmark answer - and every case investigated
+  and found to have no safe fix is documented and test-locked as such,
+  not silently left open.
+- Explicitly still open, same as the prior pass's list: the body-site
+  specificity/depth gap (§3 above), a third independent adversarial pass
+  by a fresh reviewer, and the broader `local_lookup()`-overrides-static-
+  dict design question the prior pass deliberately deferred (item 3 in
+  its own "exact next actions" - this pass answered a *bounded* version
+  of that question narrowly, for the two specific bug patterns found,
+  not the general case).

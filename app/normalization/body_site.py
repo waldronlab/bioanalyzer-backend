@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Dict, Tuple
+from typing import Dict, Optional, Tuple
 
 from app.normalization.local_lookup import local_lookup
 from app.normalization.ols import ols_search
@@ -96,6 +96,87 @@ BODY_SITE_LOOKUP: Dict[str, Tuple[str, str]] = {
 
 _MATCHER = LookupMatcher(BODY_SITE_LOOKUP)
 
+# The subset of BODY_SITE_LOOKUP's keys eligible for
+# `_resolve_structure_override()` below: a generic anatomical word that a
+# real, more specific compound phrase can and should override - either a
+# *casual specimen alias* standing in for the specimen most commonly
+# collected from/near it in loose paper text ("gut microbiome" -> feces,
+# "oral microbiome" -> saliva; "oral", "mouth", "dental", "intestine",
+# "intestinal", "gut"), or a generic structure that a more specific real
+# sibling structure/specimen shares a substring with ("nasal" -> "nasal
+# cavity", overridden by "Middle nasal meatus"/"Nasal mucus" - both real,
+# different UBERON terms). Every key here was individually confirmed
+# (against BugSigDB's real dump and/or the local UBERON store) to have at
+# least one real phrasing that was silently mismatched before this
+# override existed. "sputum" is deliberately excluded even though it's
+# also a generic-word-to-specimen-adjacent mapping: it maps to "lung" (a
+# structure, not a specimen), and no confirmed bug involves it.
+_OVERRIDABLE_GENERIC_KEYS = frozenset(
+    {"oral", "mouth", "dental", "intestine", "intestinal", "gut", "nasal"}
+)
+
+# Confidence floor for `_resolve_structure_override()`'s local_lookup()
+# check - calibrated against real cases found in the 2026-08-09 semantic-
+# hardening pass's evaluation, not guessed: "mouth"/"dental plaque"/
+# "intestinal mucosa"/"intestine" all resolve at exactly 0.9 (local_lookup's
+# hard confidence cap - see its module docstring), the highest confidence
+# that function can ever report; "gut" alone resolves far weaker (0.558,
+# two competing candidates - "digestive tract" is too coarse a guess to
+# prefer over the existing "feces" casual-alias default). Requiring the cap
+# itself (not some lower threshold) means only a genuinely unambiguous-or-
+# cleanly-ranked local match can override a casual alias.
+_OVERRIDE_CONFIDENCE_FLOOR = 0.9
+
+
+def _resolve_structure_override(raw_text: str) -> Optional[NormalizedTerm]:
+    """When an overridable generic key (see `_OVERRIDABLE_GENERIC_KEYS`)
+    is the *only* static-dict match, check whether the full raw text is
+    actually naming a more specific real UBERON structure that the generic
+    alias key steamrolled - e.g. "Dental plaque" contains "dental" (->
+    saliva) but is itself a real, different UBERON term
+    (`UBERON:0016482`), not a kind of saliva.
+
+    Deliberately keyed off `local_lookup()` against the *complete* local
+    UBERON store (thousands of real terms/synonyms) rather than hand-adding
+    a dict key for every phrasing this might come up in - see
+    docs/GROUNDING_ARCHITECTURE.md's 2026-08-09 semantic-hardening section
+    for why "add more dictionary exceptions" was explicitly rejected as the
+    general fix here (it only ever covers the specific phrasings someone
+    happened to test).
+
+    Returns the override term only when local_lookup's match is at its
+    confidence ceiling (see `_OVERRIDE_CONFIDENCE_FLOOR`) - a weak/uncertain
+    local match never overrides the existing, already-reasonable casual-
+    alias default. Returns None (keep the casual alias) otherwise,
+    including when local_lookup itself is ambiguous between two real
+    structures (e.g. "mouth" vs "oral opening") - that ambiguity still
+    surfaces to the caller as the overriding term's own `candidates`, which
+    is strictly more informative than a confident-but-wrong specimen
+    answer, just not a case this function needs special-case logic for.
+
+    Deliberately does NOT reject an override whose target is itself in
+    UBERON's "organism substance" branch (a real check - is_a-only
+    ancestry against UBERON:0000463 - that was built and tried here during
+    the 2026-08-09 semantic-hardening pass, then removed once it was
+    checked against real data): "Dental plaque" (UBERON:0016482) is itself
+    a real is_a descendant of "organism
+    substance" in UBERON's actual graph, exactly like "saliva" is - but
+    real BugSigDB ground truth curates "Dental plaque"/"Subgingival dental
+    plaque"/"Supragingival dental plaque" as their own distinct, correct,
+    common body-site values (322 combined real occurrences), not as
+    "saliva". A structure-vs-specimen filter would have blocked this exact
+    fix. The real signal that matters here isn't which side of that
+    ontological line the answer falls on - it's whether the *fuller, more
+    specific* text resolves to a *different, well-evidenced* real term than
+    the generic alias word alone does, which the confidence floor above
+    already establishes on its own."""
+    local_hit = local_lookup(normalize_spelling(raw_text.strip()), ("uberon",))
+    if local_hit is None or not local_hit.ontology_id:
+        return None
+    if local_hit.mapping_confidence < _OVERRIDE_CONFIDENCE_FLOOR:
+        return None
+    return local_hit
+
 
 def normalize_body_site(raw_text: str) -> NormalizedTerm:
     """Return normalized body site label, UBERON ID, status, and mapping confidence."""
@@ -106,7 +187,11 @@ def normalize_body_site(raw_text: str) -> NormalizedTerm:
     matched = _MATCHER.match_all(lowered)
 
     if len(matched) == 1:
-        _key, (label, uberon_id) = matched[0]
+        key, (label, uberon_id) = matched[0]
+        if key in _OVERRIDABLE_GENERIC_KEYS:
+            override = _resolve_structure_override(raw_text)
+            if override is not None:
+                return override
         return NormalizedTerm(label, uberon_id, "PRESENT", 1.0)
     if len(matched) > 1:
         winning_key, (label, uberon_id) = matched[0]

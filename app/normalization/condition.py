@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Dict, Tuple
+from typing import Dict, Optional, Tuple
 
 from app.normalization.local_lookup import local_lookup
 from app.normalization.ols import ols_search
@@ -53,6 +53,17 @@ CONDITION_LOOKUP: Dict[str, Tuple[str, str]] = {
     # clean and graded "auto"), but a real, avoidable accuracy loss.
     "type ii diabetes": ("type 2 diabetes mellitus", "MONDO:0005148"),
     "type i diabetes": ("type 1 diabetes mellitus", "MONDO:0005147"),
+    # Real gap found in the 2026-08-09 semantic-hardening pass: "gestational
+    # diabetes"/"gestational diabetes mellitus" fell through the type-1/
+    # type-2 keys above (neither is a substring match) straight to the
+    # short, generic "diabetes" key, confidently returning the wrong
+    # (too-generic) MONDO:0005015 "diabetes mellitus" instead of the real,
+    # non-obsolete, branch-valid MONDO:0005406 "gestational diabetes" -
+    # verified against the live local MONDO store, not guessed. Listed
+    # before "diabetes" so `match_longest()` (this dict's matcher) prefers
+    # the longer, more specific key, same precedence the roman-numeral keys
+    # above rely on.
+    "gestational diabetes": ("gestational diabetes", "MONDO:0005406"),
     # EFO:0000400 was the original mapping here; the 2026-08-09 grounding
     # benchmark (scripts/eval/grounding_benchmark.py) caught it as a real
     # stale ID - it's obsolete in EFO's current release with no recorded
@@ -86,6 +97,13 @@ CONDITION_LOOKUP: Dict[str, Tuple[str, str]] = {
     "rheumatoid arthritis": ("rheumatoid arthritis", "MONDO:0008383"),
     "lupus": ("systemic lupus erythematosus", "MONDO:0007915"),
     "psoriasis": ("psoriasis", "MONDO:0005083"),
+    # Real gap found in the 2026-08-09 semantic-hardening pass: unlike "egg
+    # allergy" (the only real MONDO terms for that are both obsolete with
+    # no replacement - "allergic disease" below is genuinely the best
+    # available answer), "food allergy" has a real, non-obsolete, branch-
+    # valid MONDO term (MONDO:0700226) that the old "allergy" catch-all
+    # below was silently overriding with a too-generic answer.
+    "food allergy": ("food allergy", "MONDO:0700226"),
     "antibiotic": ("antibiotic exposure", ""),
     "healthy": ("healthy", ""),
     "control": ("healthy", ""),
@@ -181,6 +199,61 @@ def _progressive_queries(query: str, max_extra: int = 2):
                 yield candidate
 
 
+def _resolve_more_specific_override(
+    raw_text: str, generic_ontology_id: str
+) -> Optional[NormalizedTerm]:
+    """When a static-dict key matches only because it's a substring of a
+    longer, more specific phrase ("Alzheimer's" inside "Alzheimer's disease
+    biomarker measurement"; "hepatitis" inside "Hepatitis virus-related
+    hepatocellular carcinoma" - a different disease, not a hepatitis
+    subtype), check whether the *complete* raw text is itself a real, exact
+    EFO/MONDO label or synonym - and if so, prefer it over the generic
+    substring match.
+
+    Real, confirmed gap found in this pass's independent evaluation: EFO
+    has real, exact terms for disease-specific *measurements* ("Alzheimer's
+    disease biomarker measurement" EFO:0006514, "COVID-19 symptoms
+    measurement" EFO:0600019, "Parkinson's disease symptom measurement"
+    EFO:0600011, "Obese/Overweight body mass index status"), specific
+    infection subtypes ("HIV-1 infection" EFO:0000180), and specific
+    disease subtypes ("Atopic asthma", "Psoriasis vulgaris", "Metastatic
+    colorectal cancer") that the static dict's generic disease keys were
+    silently overriding at "auto" tier.
+
+    The safety criterion is deliberately "the full raw text is an exact
+    (case/whitespace-insensitive) match to a real ontology label", not a
+    numeric confidence cutoff picked to make known cases pass:
+    `local_lookup()`'s EFO confidence for many of these lands at 0.7, not
+    because the match is weak (it's scope=exact, 100% textual similarity -
+    the strongest signal that function can report) but because
+    `rank_candidates_explained()` correctly penalizes it for not being
+    reachable from EFO's "disease" root - exactly right for a term that
+    genuinely isn't a disease, but not a reason to distrust an otherwise
+    perfect full-text match here (see docs/GROUNDING_ARCHITECTURE.md's
+    2026-08-09 semantic-hardening section for why BugSigDB's Condition
+    field legitimately covers EFO's full "experimental factor" breadth,
+    not disease alone - the same finding that ruled out a blanket
+    disease-only category filter for this field). Requiring an *exact*
+    label match (not just "any hit") is what keeps this from ever
+    replacing a real static-dict answer with a weaker guess: "Type 2
+    diabetes" and "obesity" both return real local hits that are NOT exact
+    matches to the raw text ("type 2 diabetes mellitus", "obesity
+    disorder") and correctly do not override anything."""
+    cleaned = normalize_spelling(raw_text).strip()
+    if not cleaned:
+        return None
+    local_hit = local_lookup(cleaned, ("efo", "mondo"))
+    if local_hit is None or not local_hit.ontology_id:
+        return None
+    if local_hit.ontology_id == generic_ontology_id:
+        return None
+    if local_hit.status != "PRESENT":
+        return None
+    if local_hit.label.strip().casefold() != cleaned.casefold():
+        return None
+    return local_hit
+
+
 def normalize_condition(raw_text: str) -> NormalizedTerm:
     """Return normalized condition label, EFO ID, status, and mapping confidence."""
     if not raw_text or raw_text.strip() == "":
@@ -195,6 +268,9 @@ def normalize_condition(raw_text: str) -> NormalizedTerm:
             # else matched (LookupMatcher's deferred-key rule) - no
             # candidates in that case, matching the original behavior.
             return NormalizedTerm(label, efo_id, "PRESENT", 1.0)
+        override = _resolve_more_specific_override(raw_text, efo_id)
+        if override is not None:
+            return override
         candidates = _MATCHER.candidates(lowered, matched_key, (label, efo_id))
         if candidates:
             return NormalizedTerm(
