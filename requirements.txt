@@ -32,6 +32,13 @@ pypdf>=6.13.3
 # --- Vector Database ---
 qdrant-client>=1.7.0
 
+# --- Local ontology store (app/normalization/grounding/local_backend.py) ---
+# Offline SQLite/DuckDB-backed grounding backend; imported lazily and falls
+# back to Python's stdlib sqlite3 if unavailable, so this is declared for
+# full DuckDB-backed local grounding support but isn't a hard runtime
+# requirement - see local_backend.py's module docstring.
+duckdb>=1.1.0
+
 # --- Web Framework & API ---
 fastapi>=0.104.0
 uvicorn[standard]>=0.23.2

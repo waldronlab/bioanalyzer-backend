@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Dict, Tuple
 
 from app.normalization.ols import ols_search
-from app.normalization.types import NormalizedTerm, normalize_spelling
+from app.normalization.types import LookupMatcher, NormalizedTerm, normalize_spelling
 
 # keyword -> (canonical label, ontology ID)
 #
@@ -41,7 +41,13 @@ CONDITION_LOOKUP: Dict[str, Tuple[str, str]] = {
     "t2d": ("type 2 diabetes mellitus", "MONDO:0005148"),
     "type 1 diabetes": ("type 1 diabetes mellitus", "MONDO:0005147"),
     "t1d": ("type 1 diabetes mellitus", "MONDO:0005147"),
-    "diabetes": ("diabetes mellitus", "EFO:0000400"),
+    # EFO:0000400 was the original mapping here; the 2026-08-09 grounding
+    # benchmark (scripts/eval/grounding_benchmark.py) caught it as a real
+    # stale ID - it's obsolete in EFO's current release with no recorded
+    # replacement (`obsolete_diabetes mellitus`, replaced_by=None). Switched
+    # to MONDO:0005015, verified against the real synced MONDO data: exists,
+    # not obsolete, label "diabetes mellitus", reachable from MONDO:0000001.
+    "diabetes": ("diabetes mellitus", "MONDO:0005015"),
     "autism": ("autism spectrum disorder", "MONDO:0005258"),
     "asd": ("autism spectrum disorder", "MONDO:0005258"),
     "multiple sclerosis": ("multiple sclerosis", "MONDO:0005301"),
@@ -103,52 +109,64 @@ def _extract_clean_disease_name(raw_text: str) -> str:
 # would pick "control(s)" over "IBD"/"HIV"/"ASD"/"T2D" and misreport the
 # actual studied condition as "healthy". These three keys are only used as
 # a last resort, never over a real disease-name match.
-_HEALTHY_KEYS = {"healthy", "control", "normal"}
+_HEALTHY_KEYS = frozenset({"healthy", "control", "normal"})
 
-
-def _other_condition_candidates(
-    lowered: str, match_key: str, exclude: Tuple[str, str], limit: int = 2
-) -> Tuple[Tuple[str, str], ...]:
-    """Other CONDITION_LOOKUP matches that are genuinely distinct conditions
-    (not just a shorter/longer phrasing of the winning match, e.g. "diabetes"
-    vs "type 2 diabetes") - surfaced so curators can pick when a paper
-    mentions more than one condition. A key that's a substring of
-    match_key (or vice versa) is the same underlying mention at a different
-    specificity, not a separate candidate."""
-    found: list[Tuple[str, str]] = []
-    for key, pair in CONDITION_LOOKUP.items():
-        if key not in lowered or key in _HEALTHY_KEYS or pair == exclude:
-            continue
-        if key in match_key or match_key in key:
-            continue
-        if pair not in found:
-            found.append(pair)
-        if len(found) >= limit:
-            break
-    return tuple(found)
+_MATCHER = LookupMatcher(CONDITION_LOOKUP, deferred_keys=_HEALTHY_KEYS)
 
 
 def _progressive_queries(query: str, max_extra: int = 2):
-    """Yield ``query``, then progressively shorter suffixes with the leading
-    word dropped each time.
+    """Yield ``query``, then progressively shorter variants: trailing-word-
+    dropped first, then leading-word-dropped.
 
-    Found via a live cross-check against metacurator's real MONDO grounding
-    (see docs/METACURATOR_METAHARMONIZER_ANALYSIS.md): a clinical modifier
+    Leading-word-dropping found via a live cross-check against
+    metacurator's real MONDO grounding (see
+    docs/METACURATOR_METAHARMONIZER_ANALYSIS.md): a clinical modifier
     prefix like "diarrhea-predominant" or "early-onset" often precedes the
-    core condition name in extracted text, and OLS/MONDO search can miss the
-    full modifier-heavy phrase even though the bare condition name resolves
-    cleanly (e.g. "diarrhea-predominant irritable bowel syndrome" found
-    nothing, but "irritable bowel syndrome" resolved to MONDO:0005052).
-    Capped at a couple of extra attempts so a long, unrelated sentence can't
-    turn into an unbounded number of live lookups.
+    core condition name in extracted text, and OLS/MONDO search can miss
+    the full modifier-heavy phrase even though the bare condition name
+    resolves cleanly (e.g. "diarrhea-predominant irritable bowel syndrome"
+    found nothing, but "irritable bowel syndrome" resolved to
+    MONDO:0005052).
+
+    Trailing-word-dropping added after a real bug found in a 2026-08-09
+    adversarial review: leading-word-dropping *alone* degrades a phrase
+    like "parkinsons disease cohort" (a generic descriptor trailing the
+    actual condition name - "cohort"/"patients"/"study" are common in
+    extracted text) down to just "cohort", which found a real but
+    completely wrong EFO term (EFO:0004445, literally "cohort") - the
+    condition name itself was discarded first because it happened to be at
+    the front. Trying trailing-drops first fixes this common case cheaply
+    ("parkinsons disease cohort" -> "parkinsons disease" on the very next
+    attempt) while leaving the original leading-drop behavior intact as a
+    fallback for the modifier-prefix case it was built for.
+
+    Capped at a couple of extra attempts *per direction* so a long,
+    unrelated sentence can't turn into an unbounded number of live lookups
+    - `mapping_confidence` for anything found this way is already capped
+    at 0.9 (never "auto"), so a wrong guess here costs a curator's review
+    attention, not a silent bad mapping.
     """
     yield query
     words = query.split()
+    if len(words) <= 2:
+        return
+
+    yielded = {query}
+    suffix_words = list(words)
+    prefix_words = list(words)
     for _ in range(max_extra):
-        if len(words) <= 2:
-            break
-        words = words[1:]
-        yield " ".join(words)
+        if len(suffix_words) > 2:
+            suffix_words = suffix_words[:-1]
+            candidate = " ".join(suffix_words)
+            if candidate not in yielded:
+                yielded.add(candidate)
+                yield candidate
+        if len(prefix_words) > 2:
+            prefix_words = prefix_words[1:]
+            candidate = " ".join(prefix_words)
+            if candidate not in yielded:
+                yielded.add(candidate)
+                yield candidate
 
 
 def normalize_condition(raw_text: str) -> NormalizedTerm:
@@ -157,30 +175,19 @@ def normalize_condition(raw_text: str) -> NormalizedTerm:
         return NormalizedTerm.absent()
 
     lowered = normalize_spelling(raw_text.lower())
-    match: Tuple[str, str] | None = None
-    match_key = ""
-    match_len = 0
-    healthy_match: Tuple[str, str] | None = None
-    for key, pair in CONDITION_LOOKUP.items():
-        if key not in lowered:
-            continue
-        if key in _HEALTHY_KEYS:
-            healthy_match = pair
-            continue
-        if len(key) > match_len:
-            match = pair
-            match_key = key
-            match_len = len(key)
-    if match:
-        label, efo_id = match
-        candidates = _other_condition_candidates(lowered, match_key, match)
+    hit = _MATCHER.match_longest(lowered)
+    if hit:
+        matched_key, (label, efo_id) = hit
+        if matched_key in _HEALTHY_KEYS:
+            # A comparator-arm/exposure key only ever wins when nothing
+            # else matched (LookupMatcher's deferred-key rule) - no
+            # candidates in that case, matching the original behavior.
+            return NormalizedTerm(label, efo_id, "PRESENT", 1.0)
+        candidates = _MATCHER.candidates(lowered, matched_key, (label, efo_id))
         if candidates:
             return NormalizedTerm(
                 label, efo_id, "PARTIALLY_PRESENT", 0.9, candidates=candidates
             )
-        return NormalizedTerm(label, efo_id, "PRESENT", 1.0)
-    if healthy_match:
-        label, efo_id = healthy_match
         return NormalizedTerm(label, efo_id, "PRESENT", 1.0)
 
     # Live fallback for anything not in the static lookup above: try EFO

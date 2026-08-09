@@ -9,7 +9,7 @@ from typing import Dict, Tuple
 import requests
 
 from app.normalization.ontology_cache import get_cached_term, store_cached_term
-from app.normalization.types import NormalizedTerm
+from app.normalization.types import LookupMatcher, NormalizedTerm
 
 # keyword -> (scientific name, NCBITaxon ID)
 #
@@ -73,29 +73,7 @@ def _rate_limit_delay() -> None:
     time.sleep(0.11 if api_key else 0.34)
 
 
-def _lookup_species(lowered: str) -> Tuple[str, str] | None:
-    best_key = ""
-    best: Tuple[str, str] | None = None
-    for key, pair in SPECIES_LOOKUP.items():
-        if key in lowered and len(key) > len(best_key):
-            best_key = key
-            best = pair
-    return best
-
-
-def _lookup_species_candidates(
-    lowered: str, exclude: Tuple[str, str] | None, limit: int = 2
-) -> Tuple[Tuple[str, str], ...]:
-    """Other distinct SPECIES_LOOKUP matches besides the winning one, for
-    curators to choose from when the mapping isn't auto-applied. Doesn't
-    affect which match wins (see _lookup_species's longest-match rule)."""
-    found: list[Tuple[str, str]] = []
-    for key, pair in SPECIES_LOOKUP.items():
-        if key in lowered and pair != exclude and pair not in found:
-            found.append(pair)
-        if len(found) >= limit:
-            break
-    return tuple(found)
+_MATCHER = LookupMatcher(SPECIES_LOOKUP)
 
 
 def normalize_host_species(raw_text: str) -> NormalizedTerm:
@@ -104,21 +82,37 @@ def normalize_host_species(raw_text: str) -> NormalizedTerm:
         return NormalizedTerm.absent()
 
     lowered = raw_text.lower()
-    multi_indicators = [" and ", " & ", "/", " or "]
-    if any(ind in lowered for ind in multi_indicators):
-        hit = _lookup_species(lowered)
-        if hit:
-            label, tax_id = hit
-            candidates = _lookup_species_candidates(lowered, hit)
+    hit = _MATCHER.match_longest(lowered)
+    if hit:
+        matched_key, (label, tax_id) = hit
+        # Real, severe false-AUTO bug found in a 2026-08-09 adversarial
+        # review: candidate/ambiguity detection used to run *only* when a
+        # literal "and"/"&"/"/"/"or" substring was present anywhere in the
+        # text - so "Germ-free C57BL 6 mice were colonized with fecal
+        # microbiota from IBD patients" (no such substring) matched
+        # "patients" (8 chars, -> Homo sapiens) over "mice" (4 chars, the
+        # actual study animal - "patients" here refers to the human FMT
+        # donor, not the host species) via plain longest-match, with the
+        # second, real candidate ("mice") never even computed - confidence
+        # 1.0, "auto" tier, completely wrong species, zero indication
+        # anything was ambiguous. Fixed by *always* checking for other real
+        # distinct candidates (not gating that check behind an indicator-
+        # substring heuristic, which also both missed cases without one of
+        # those four substrings and falsely triggered on unrelated slashes
+        # in strain names like "C57BL/6"/"BALB/c" even with zero real
+        # ambiguity) - genuine ambiguity is now determined by whether a
+        # second, real, distinct species match exists, not by incidental
+        # punctuation.
+        candidates = _MATCHER.candidates(lowered, matched_key, (label, tax_id))
+        if candidates:
             return NormalizedTerm(
                 label, tax_id, "PARTIALLY_PRESENT", 0.9, candidates=candidates
             )
-        return NormalizedTerm(raw_text.strip(), "", "PARTIALLY_PRESENT", 0.5)
-
-    hit = _lookup_species(lowered)
-    if hit:
-        label, tax_id = hit
         return NormalizedTerm(label, tax_id, "PRESENT", 1.0)
+
+    multi_indicators = [" and ", " & ", "/", " or "]
+    if any(ind in lowered for ind in multi_indicators):
+        return NormalizedTerm(raw_text.strip(), "", "PARTIALLY_PRESENT", 0.5)
 
     cached = get_cached_term("ncbitaxon", raw_text)
     if cached is not None:

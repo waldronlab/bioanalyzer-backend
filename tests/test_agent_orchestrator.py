@@ -58,6 +58,7 @@ def test_field_result_from_raw_normalizer_present():
             status="PRESENT",
             ontology_id="NCBITaxon:9606",
             mapping_confidence=0.9,
+            candidates=(),
         )
 
     result = _field_result_from_raw("human", fake_normalizer)
@@ -70,7 +71,11 @@ def test_field_result_from_raw_normalizer_present():
 def test_field_result_from_raw_normalizer_absent():
     def fake_normalizer(value):
         return SimpleNamespace(
-            label="", status="ABSENT", ontology_id="", mapping_confidence=0.0
+            label="",
+            status="ABSENT",
+            ontology_id="",
+            mapping_confidence=0.0,
+            candidates=(),
         )
 
     result = _field_result_from_raw("nonsense", fake_normalizer)

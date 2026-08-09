@@ -9,7 +9,11 @@ from app.normalization import host_species as host_species_module
 from app.normalization import ols as ols_module
 from app.normalization import sample_size as sample_size_module
 from app.normalization.body_site import normalize_body_site
-from app.normalization.condition import normalize_condition, _extract_clean_disease_name
+from app.normalization.condition import (
+    normalize_condition,
+    _extract_clean_disease_name,
+    _progressive_queries,
+)
 from app.normalization.host_species import normalize_host_species
 from app.normalization.ols import format_ontology_id, ols_search
 from app.normalization.sample_size import normalize_sample_size, _simple_word_to_num
@@ -102,6 +106,95 @@ def test_host_species_animal_wins_over_life_stage_descriptor():
     assert t.ontology_id != ""
 
 
+def test_host_species_word_boundary_prevents_substring_false_positive():
+    """Real, severe bug found in a 2026-08-09 adversarial review:
+    LookupMatcher used raw substring matching (`key in lowered`), so the
+    dict key "rat" (-> Rattus norvegicus, confidence 1.0, "auto" tier - no
+    curator review) matched inside completely unrelated words like
+    "laboratory" ("labo-RAT-ory"). Confirmed reproducible before the fix:
+    every sentence below returned Rattus norvegicus at "auto" tier despite
+    having nothing to do with rats. "laboratory" is one of the most common
+    words in scientific writing - this was not a contrived edge case."""
+    for text in [
+        "laboratory conditions were controlled",
+        "samples were processed in the laboratory",
+        "operator error was ruled out",
+        "separate cohorts were analyzed",
+        "the demonstration used calibrated equipment",
+        "generated using standard protocols",
+    ]:
+        t = normalize_host_species(text)
+        assert not (t.status == "PRESENT" and t.mapping_confidence == 1.0), (
+            f"false-positive species match for {text!r}: "
+            f"label={t.label!r} id={t.ontology_id!r}"
+        )
+
+    # The fix must not regress genuine matches, including when the dict key
+    # is a short word embedded in a longer *sentence* (not a longer word).
+    assert normalize_host_species("rat").label == "Rattus norvegicus"
+    assert normalize_host_species("rats").label == "Rattus norvegicus"
+    assert normalize_host_species("the rat model showed").label == "Rattus norvegicus"
+
+
+def test_host_species_ambiguity_detected_regardless_of_punctuation():
+    """Real, severe false-AUTO bug found in a 2026-08-09 adversarial
+    review: candidate/ambiguity detection used to run only when a literal
+    "and"/"&"/"/"/"or" substring appeared anywhere in the text. A sentence
+    like "Germ-free C57BL 6 mice were colonized with fecal microbiota from
+    IBD patients" (no such substring - the slash was spelled out as a
+    space) matched "patients" (8 chars, -> Homo sapiens) over "mice" (4
+    chars, the actual study animal - "patients" refers to the human FMT
+    donor) via plain longest-match, with the real second candidate ("mice")
+    never computed at all - confidence 1.0, "auto" tier, completely wrong
+    species, zero indication of ambiguity. Separately, the opposite failure
+    also existed: a stray "/" in a strain name like "C57BL/6" triggered a
+    needless confidence downgrade even with zero real ambiguity (only one
+    real species matched). Both are fixed by determining ambiguity from
+    whether a second, real, distinct species candidate exists - not from
+    incidental punctuation."""
+    donor_text_no_slash = (
+        "Germ-free C57BL 6 mice were colonized with fecal microbiota "
+        "from IBD patients"
+    )
+    donor_text_with_slash = (
+        "Germ-free C57BL/6 mice were colonized with fecal microbiota "
+        "from IBD patients"
+    )
+    for text in (donor_text_no_slash, donor_text_with_slash):
+        t = normalize_host_species(text)
+        assert not (
+            t.status == "PRESENT" and t.mapping_confidence == 1.0
+        ), f"false-AUTO for {text!r}: label={t.label!r} id={t.ontology_id!r}"
+        assert any(
+            label == "Mus musculus" for label, _ in t.candidates
+        ), f"real 'Mus musculus' candidate missing for {text!r}: {t.candidates!r}"
+
+    # A stray "/" with zero real ambiguity must NOT be needlessly downgraded.
+    t = normalize_host_species("C57BL/6 mice were used for this experiment")
+    assert t.label == "Mus musculus"
+    assert t.status == "PRESENT"
+    assert t.mapping_confidence == 1.0
+
+    # Genuine ambiguity (two real species, no punctuation trigger at all)
+    # must still be caught - this is the property the old code accidentally
+    # got right only when a trigger substring happened to be present too.
+    t = normalize_host_species("mice and rats")
+    assert t.status == "PARTIALLY_PRESENT"
+
+
+def test_body_site_word_boundary_prevents_substring_false_positive():
+    """Same bug class as
+    test_host_species_word_boundary_prevents_substring_false_positive:
+    "colon" (-> UBERON:0001155, confidence 1.0) matched inside "semicolon"
+    before the fix."""
+    t = normalize_body_site("semicolon-separated values")
+    assert not (t.status == "PRESENT" and t.mapping_confidence == 1.0)
+
+    # Genuine matches must still work.
+    assert normalize_body_site("colon biopsy").label == "colon"
+    assert normalize_body_site("colonic tissue").label == "colon"
+
+
 def test_body_site_normalization_variants():
     t = normalize_body_site("stool samples")
     assert t.label == "feces"
@@ -154,6 +247,30 @@ def test_condition_normalization_variants():
 
     t = normalize_condition("")
     assert t.status == "ABSENT"
+
+
+def test_progressive_queries_tries_trailing_word_drop_before_degrading_too_far():
+    """Real bug found in a 2026-08-09 adversarial review: leading-word-
+    dropping alone degrades "parkinsons disease cohort" down to just
+    "cohort" (a real but completely wrong EFO term - EFO:0004445, literally
+    "cohort") because the actual condition name happened to be at the
+    front of the phrase. Fixed by also trying trailing-word drops,
+    interleaved with the original leading-word drops so neither phrase
+    shape (modifier-prefix vs. generic-descriptor-suffix) is penalized
+    more attempts than the other. This test only checks the query
+    sequence (no network) - see the live end-to-end confirmation in
+    scripts/eval/grounding_adversarial_benchmark.py's module docstring."""
+    queries = list(_progressive_queries("parkinsons disease cohort"))
+    assert "parkinsons disease" in queries
+    assert queries.index("parkinsons disease") < queries.index("disease cohort")
+
+    # Original leading-word-drop behavior (the modifier-prefix case) must
+    # still work - "diarrhea-predominant" is one hyphenated token, so
+    # dropping it in one step must still reach "irritable bowel syndrome".
+    queries = list(
+        _progressive_queries("diarrhea-predominant irritable bowel syndrome")
+    )
+    assert "irritable bowel syndrome" in queries
 
 
 def test_condition_disease_wins_over_comparator_arm_wording():

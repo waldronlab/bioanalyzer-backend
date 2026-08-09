@@ -626,3 +626,76 @@ class TestErrorHandlingBranches:
         )
         db_path = os.path.join(temp_cache_dir, "broken.db")
         CacheManager(cache_dir=temp_cache_dir, db_path=db_path)  # should not raise
+
+    def test_store_grounding_check_returns_false_on_db_error(
+        self, cache_manager, monkeypatch
+    ):
+        monkeypatch.setattr(
+            cache_manager,
+            "_get_connection",
+            lambda: (_ for _ in ()).throw(RuntimeError("readonly database")),
+        )
+        assert (
+            cache_manager.store_grounding_check(
+                "MONDO:1", True, "x", False, "", True, "MONDO:0000001"
+            )
+            is False
+        )
+
+    def test_get_grounding_check_returns_none_on_db_error(
+        self, cache_manager, monkeypatch
+    ):
+        monkeypatch.setattr(
+            cache_manager,
+            "_get_connection",
+            lambda: (_ for _ in ()).throw(RuntimeError("readonly database")),
+        )
+        assert cache_manager.get_grounding_check("MONDO:1", 720) is None
+
+    def test_grounding_cache_write_failures_log_once_not_per_call(
+        self, cache_manager, monkeypatch, caplog
+    ):
+        """Real production issue found in a 2026-08-09 adversarial review: a
+        read-only cache directory made every single grounding check log an
+        identical warning - hundreds of near-duplicate lines per run,
+        drowning out real log signal without being any more actionable the
+        10th time than the 1st. Only the first occurrence should log at
+        WARNING (with an actionable hint); the rest degrade to DEBUG."""
+        monkeypatch.setattr(
+            cache_manager,
+            "_get_connection",
+            lambda: (_ for _ in ()).throw(RuntimeError("readonly database")),
+        )
+        import logging
+
+        with caplog.at_level(logging.WARNING, logger="app.services.cache_manager"):
+            for i in range(5):
+                cache_manager.store_grounding_check(
+                    f"MONDO:{i}", True, "x", False, "", True, "MONDO:0000001"
+                )
+        warning_records = [
+            r
+            for r in caplog.records
+            if "Grounding cache writes are failing" in r.message
+        ]
+        assert len(warning_records) == 1
+
+    def test_grounding_cache_read_failures_log_once_not_per_call(
+        self, cache_manager, monkeypatch, caplog
+    ):
+        monkeypatch.setattr(
+            cache_manager,
+            "_get_connection",
+            lambda: (_ for _ in ()).throw(RuntimeError("readonly database")),
+        )
+        import logging
+
+        with caplog.at_level(logging.WARNING, logger="app.services.cache_manager"):
+            for i in range(5):
+                cache_manager.get_grounding_check(f"MONDO:{i}", 720)
+        warning_records = [
+            r
+            for r in caplog.records
+            if "Grounding cache reads are failing" in r.message
+        ]
+        assert len(warning_records) == 1

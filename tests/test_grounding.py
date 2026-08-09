@@ -3,8 +3,24 @@ import pytest
 from app.normalization import grounding as grounding_module
 from app.normalization import ols as ols_module
 from app.normalization.grounding import TIER_AUTO, TIER_NONE, TIER_REVIEW, tier_for
+from app.normalization.grounding import tiering as tiering_module
+from app.normalization.grounding.ols_backend import OLSBackend
 from app.normalization.ols import TermVerification
 from app.normalization.types import NormalizedTerm
+
+
+@pytest.fixture(autouse=True)
+def _force_ols_only_backend(monkeypatch):
+    """This suite tests the OLS-backed round-trip/obsolete/branch discipline
+    in isolation via ols_module.fetch_term/is_in_branch monkeypatches below.
+    The production default (GROUNDING_BACKEND_MODE=chain) checks a real,
+    fully-synced local ontology store first - which would answer these
+    well-known CURIEs (MONDO:0005180, NCBITaxon:9606, ...) from real data
+    before the OLS mocks below are ever consulted, making this suite flaky
+    against whatever the local store currently contains. Force tier_for()'s
+    default backend to a fresh OLSBackend() for this file only; the local/
+    chain paths are covered directly in test_grounding_backends.py."""
+    monkeypatch.setattr(tiering_module, "_DEFAULT_BACKEND", OLSBackend())
 
 
 @pytest.fixture(autouse=True)
@@ -19,6 +35,20 @@ def _no_grounding_cache(monkeypatch):
     )
 
 
+# ontology_id -> the real-world label this file's tests claim for it, used
+# by the default _stub_live_ols fixture below. Must match what callers
+# actually claim (see _static_match() and the individual tests that
+# construct a NormalizedTerm directly) - tiering.py's label-consistency
+# check (added in the 2026-08-09 adversarial review, see its module
+# docstring) compares a term's claimed label against the grounding check's
+# real one, so a stub returning an unrelated placeholder label would now
+# correctly get flagged as a mismatch rather than reaching "auto".
+_STUB_LABELS = {
+    "MONDO:0005180": "Parkinson disease",
+    "NCBITaxon:9606": "Homo sapiens",
+}
+
+
 @pytest.fixture(autouse=True)
 def _stub_live_ols(monkeypatch):
     """By default, make the round-trip/branch checks behave as if OLS
@@ -29,7 +59,8 @@ def _stub_live_ols(monkeypatch):
     candidate test, which is exactly what CLAUDE.md says this suite avoids."""
 
     def _fake_fetch_term(ontology_id, default_prefix=""):
-        return TermVerification(exists=True, label="stub label", is_obsolete=False)
+        label = _STUB_LABELS.get(ontology_id, "stub label")
+        return TermVerification(exists=True, label=label, is_obsolete=False)
 
     monkeypatch.setattr(ols_module, "fetch_term", _fake_fetch_term)
     monkeypatch.setattr(ols_module, "is_in_branch", lambda *a: True)
