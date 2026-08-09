@@ -8,6 +8,7 @@ from typing import Dict, Tuple
 
 import requests
 
+from app.normalization.local_lookup import local_lookup
 from app.normalization.ontology_cache import get_cached_term, store_cached_term
 from app.normalization.types import LookupMatcher, NormalizedTerm
 
@@ -109,6 +110,20 @@ def normalize_host_species(raw_text: str) -> NormalizedTerm:
                 label, tax_id, "PARTIALLY_PRESENT", 0.9, candidates=candidates
             )
         return NormalizedTerm(label, tax_id, "PRESENT", 1.0)
+
+    # Nothing in the static dict matched. Before checking for compound-
+    # text ambiguity indicators or falling to the live NCBI API: try the
+    # local ontology store - real, complete NCBITaxon data (2026-08
+    # adversarial review found this had no production caller at all; see
+    # app.normalization.local_lookup's module docstring). Offline,
+    # sub-millisecond even against NCBITaxon's 2.7M real terms, and covers
+    # real species far beyond this module's ~31-entry static dict (a
+    # single species name like "Acrocephalus sechellensis" - a real
+    # BugSigDB-curated host species - has no chance of being in that
+    # dict, but resolves instantly from the real synced data).
+    local_hit = local_lookup(raw_text.strip(), ("ncbitaxon",))
+    if local_hit:
+        return local_hit
 
     multi_indicators = [" and ", " & ", "/", " or "]
     if any(ind in lowered for ind in multi_indicators):

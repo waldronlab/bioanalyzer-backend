@@ -220,6 +220,32 @@ def test_body_site_normalization_variants():
     assert t.status == "ABSENT"
 
 
+def test_body_site_precise_anatomical_terms_outrank_specimen_type_alias():
+    """Real bug found in a 2026-08 independent BugSigDB evaluation:
+    "intestine"/"oral" are kept as specimen-type aliases (-> feces/saliva)
+    for casual paper text ("gut microbiome" usually means a fecal sample),
+    but a precise anatomical term like "Small intestine"/"Oral cavity" is a
+    real, different UBERON concept - BugSigDB's own curation confirmed
+    dozens of real cases where these were silently mismatched to feces/
+    saliva at "auto" tier. Fixed by adding the specific terms as their own,
+    earlier-ordered dict keys so LookupMatcher.match_all() correctly
+    surfaces the right concept (not just downgrades to review - the
+    specific term must win outright, matching real UBERON labels)."""
+    for text, expected_label, expected_id in [
+        ("Small intestine", "small intestine", "UBERON:0002108"),
+        ("Large intestine", "large intestine", "UBERON:0000059"),
+        ("Oral cavity", "oral cavity", "UBERON:0000167"),
+    ]:
+        t = normalize_body_site(text)
+        assert t.label == expected_label
+        assert t.ontology_id == expected_id
+
+    # The original casual-text behavior must be completely unaffected.
+    assert normalize_body_site("intestinal samples").label == "feces"
+    assert normalize_body_site("gut microbiome").label == "feces"
+    assert normalize_body_site("oral swab").label == "saliva"
+
+
 def test_condition_normalization_variants():
     t = normalize_condition("Parkinson's disease patients")
     assert t.label == "Parkinson disease"
@@ -229,6 +255,15 @@ def test_condition_normalization_variants():
     t = normalize_condition("type 2 diabetes cohort")
     assert t.label == "type 2 diabetes mellitus"
     assert t.ontology_id == "MONDO:0005148"
+
+    t = normalize_condition("Type II diabetes mellitus")
+    assert t.label == "type 2 diabetes mellitus"
+    assert t.ontology_id == "MONDO:0005148"
+    assert t.mapping_confidence == 1.0
+
+    t = normalize_condition("Type I diabetes mellitus")
+    assert t.label == "type 1 diabetes mellitus"
+    assert t.ontology_id == "MONDO:0005147"
 
     t = normalize_condition("obese adults")
     assert t.label == "obesity disorder"
@@ -391,6 +426,11 @@ def test_sample_size_ambiguous_multi_number_resolution():
 
 
 def test_host_species_ncbi_fallback_success(monkeypatch):
+    # "domestic cat"/"Felis catus" is itself real data in the local
+    # ontology store (see app.normalization.local_lookup), which now runs
+    # before this NCBI-API fallback - force a local-store miss so this
+    # test isolates the live-fallback layer it's actually about.
+    monkeypatch.setattr(host_species_module, "local_lookup", lambda *a, **k: None)
     monkeypatch.setattr(time, "sleep", lambda s: None)
 
     def fake_get(url, params=None, timeout=None):
@@ -734,6 +774,12 @@ def test_extract_clean_disease_name_passes_through_when_no_phrase_matches():
 
 
 def test_condition_ols_fallback_success(monkeypatch):
+    # Force a local-ontology-store miss so this test isolates the live
+    # OLS-fallback layer it's actually about, unaffected by whether the
+    # fake "rare metabolic disorder" query happens to resolve locally -
+    # see app.normalization.local_lookup, tried before this fallback.
+    monkeypatch.setattr(condition_module, "local_lookup", lambda *a, **k: None)
+
     def fake_get(url, params=None, timeout=None):
         assert url == ols_module.OLS_SEARCH_URL
         return _DummyResponse(

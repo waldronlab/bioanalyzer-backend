@@ -211,7 +211,12 @@ def test_parse_experiments_multiple_blocks(orchestrator):
     assert experiments[0].fields.host_species.value == "Mus musculus"
     assert experiments[0].fields.body_site.value == "skin"
     assert experiments[1].fields.host_species.value == "Homo sapiens"
-    assert experiments[1].fields.body_site.value == "saliva"
+    # "oral cavity" -> "oral cavity" (UBERON:0000167), not "saliva": a real
+    # bug found in a 2026-08 independent BugSigDB evaluation - "oral" was a
+    # specimen-type alias for saliva (correct for casual text like "oral
+    # samples"), but wrongly won over the precise anatomical term "oral
+    # cavity" itself. See body_site.py's BODY_SITE_LOOKUP docstring.
+    assert experiments[1].fields.body_site.value == "oral cavity"
 
 
 def test_parse_experiments_empty_answer_produces_no_experiments(orchestrator):

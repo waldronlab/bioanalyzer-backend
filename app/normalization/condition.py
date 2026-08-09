@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Dict, Tuple
 
+from app.normalization.local_lookup import local_lookup
 from app.normalization.ols import ols_search
 from app.normalization.types import LookupMatcher, NormalizedTerm, normalize_spelling
 
@@ -41,6 +42,17 @@ CONDITION_LOOKUP: Dict[str, Tuple[str, str]] = {
     "t2d": ("type 2 diabetes mellitus", "MONDO:0005148"),
     "type 1 diabetes": ("type 1 diabetes mellitus", "MONDO:0005147"),
     "t1d": ("type 1 diabetes mellitus", "MONDO:0005147"),
+    # Real gap found in a 2026-08 independent BugSigDB evaluation: "type 2"/
+    # "type 1" above only match the digit spelling, so real curated text
+    # using roman numerals ("Type II diabetes mellitus", 5 real occurrences
+    # in BugSigDB's dump) missed these keys entirely and fell through to
+    # the much shorter, generic "diabetes" key instead, confidently
+    # returning the wrong (too-generic) MONDO:0005015 "diabetes mellitus"
+    # rather than the correct type-specific term - not dangerous (still a
+    # real, non-obsolete, branch-valid MONDO term, so it round-tripped
+    # clean and graded "auto"), but a real, avoidable accuracy loss.
+    "type ii diabetes": ("type 2 diabetes mellitus", "MONDO:0005148"),
+    "type i diabetes": ("type 1 diabetes mellitus", "MONDO:0005147"),
     # EFO:0000400 was the original mapping here; the 2026-08-09 grounding
     # benchmark (scripts/eval/grounding_benchmark.py) caught it as a real
     # stale ID - it's obsolete in EFO's current release with no recorded
@@ -190,15 +202,29 @@ def normalize_condition(raw_text: str) -> NormalizedTerm:
             )
         return NormalizedTerm(label, efo_id, "PRESENT", 1.0)
 
-    # Live fallback for anything not in the static lookup above: try EFO
-    # first (matches this module's documented convention), then MONDO -
-    # EFO has retired most disease terms in favor of MONDO (see the dict's
-    # docstring), so a term absent from EFO is often still live in MONDO.
-    # Both providers go through ols_search()'s persistent cache (see
-    # app.normalization.ontology_cache), so a term only needs a live lookup
-    # once - subsequent calls for the same term are served from that cache.
+    # Nothing in the static dict matched. Before any network call: try the
+    # local ontology store - real, complete EFO/MONDO data (2026-08
+    # adversarial review found this had no production caller at all; see
+    # app.normalization.local_lookup's module docstring for why and what
+    # changed). Same EFO-then-MONDO precedence as the live fallback below,
+    # same progressive-query shortening, but offline and sub-millisecond -
+    # for any term the complete local ontology already covers, this now
+    # answers instead of ever reaching the network.
     clean_term = _extract_clean_disease_name(normalize_spelling(raw_text))
     query = clean_term or raw_text.strip()
+    for candidate in _progressive_queries(query):
+        local_hit = local_lookup(candidate, ("efo", "mondo"))
+        if local_hit:
+            return local_hit
+
+    # Live fallback for anything the local store also doesn't have: try
+    # EFO first (matches this module's documented convention), then
+    # MONDO - EFO has retired most disease terms in favor of MONDO (see
+    # the dict's docstring), so a term absent from EFO is often still live
+    # in MONDO. Both providers go through ols_search()'s persistent cache
+    # (see app.normalization.ontology_cache), so a term only needs a live
+    # lookup once - subsequent calls for the same term are served from
+    # that cache.
     for candidate in _progressive_queries(query):
         hit = ols_search(candidate, "efo", "EFO", mapping_confidence=0.9)
         if not hit:
