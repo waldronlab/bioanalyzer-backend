@@ -124,5 +124,6 @@ NO_SINGLE_ROOT: dict[str, str] = {
     "mesh": "MESH",
 }
 
+
 def prefix_of(ontology_id: str) -> str:
     return ontology_id.split(":", 1)[0] if ":" in ontology_id else ""

@@ -212,9 +212,15 @@ def test_body_site_normalization_variants():
     t = normalize_body_site("nasal cavity swab")
     assert t.label == "nasal cavity"
 
+    # "blood plasma" is itself a real, more specific UBERON term
+    # (UBERON:0001969, distinct from generic "blood") that real BugSigDB
+    # ground truth confirms is the correct answer here - see the 2026-08-09
+    # specificity-hardening pass's `_resolve_structure_override()` (this
+    # file's `test_body_site_specificity_override_prefers_specific_
+    # descendant_when_input_supports_it` has the full battery).
     t = normalize_body_site("blood plasma")
-    assert t.label == "blood"
-    assert t.ontology_id == "UBERON:0000178"
+    assert t.label == "blood plasma"
+    assert t.ontology_id == "UBERON:0001969"
 
     t = normalize_body_site("")
     assert t.status == "ABSENT"
@@ -266,7 +272,11 @@ def test_body_site_local_store_override_catches_phrasings_beyond_the_static_dict
     for text, expected_label, expected_id in [
         ("Dental plaque", "dental plaque", "UBERON:0016482"),
         ("Subgingival dental plaque", "subgingival dental plaque", "UBERON:0016484"),
-        ("Supragingival dental plaque", "supragingival dental plaque", "UBERON:0016485"),
+        (
+            "Supragingival dental plaque",
+            "supragingival dental plaque",
+            "UBERON:0016485",
+        ),
         ("Intestinal mucosa", "intestinal mucosa", "UBERON:0001242"),
         ("Mucosa of oral region", "mucosa of oral region", "UBERON:0003343"),
         ("Oral epithelium", "oral epithelium", "UBERON:0002424"),
@@ -315,6 +325,76 @@ def test_body_site_local_store_override_catches_phrasings_beyond_the_static_dict
     # unaffected.
     assert normalize_body_site("oral").label == "saliva"
     assert normalize_body_site("dental").label == "saliva"
+
+
+def test_body_site_specificity_override_prefers_specific_descendant_when_input_supports_it():
+    """Final Anatomical Specificity pass (2026-08-09, later same day):
+    `_resolve_structure_override()` was generalized from a hand-picked
+    allowlist of "eligible" keys to running on *every* single static
+    match, after tracing the real execution path for "Ascending colon"
+    and confirming the root cause was identical in shape to the earlier
+    specimen-vs-structure bug (a shorter, more generic dict key winning
+    over a real, more specific term for the complete input text) but for
+    a key ("colon") that had never been added to the old allowlist.
+
+    Every (specific input -> specific answer) pair below is a real UBERON
+    term confirmed against the local store, and several are real
+    coarser-but-valid mismatches this codebase's own independent BugSigDB
+    evaluation found (see docs/GROUNDING_ARCHITECTURE.md)."""
+    specific_cases = [
+        ("Ascending colon", "ascending colon", "UBERON:0001156"),
+        ("Descending colon", "descending colon", "UBERON:0001158"),
+        ("Sigmoid colon", "sigmoid colon", "UBERON:0001159"),
+        ("Left lung", "left lung", "UBERON:0002168"),
+        ("Right lung", "right lung", "UBERON:0002167"),
+        ("Skin of forehead", "skin of forehead", "UBERON:0016475"),
+        ("Skin of forearm", "skin of forearm", "UBERON:0003403"),
+        ("Skin of back", "skin of back", "UBERON:0001068"),
+        ("Blood plasma", "blood plasma", "UBERON:0001969"),
+        ("Blood serum", "blood serum", "UBERON:0001977"),
+        ("Middle nasal meatus", "middle nasal meatus", "UBERON:0015219"),
+    ]
+    for text, expected_label, expected_id in specific_cases:
+        t = normalize_body_site(text)
+        assert t.label == expected_label, text
+        assert t.ontology_id == expected_id, text
+        # A full-text override is a fallback match, not a pre-audited
+        # static-dict entry - stays below "auto" even though it's correct.
+        assert t.mapping_confidence < 1.0, text
+
+    # The critical safety direction: a *generic* input must never be
+    # pushed toward a more specific descendant just because one exists -
+    # "deepest node always wins" is explicitly not this mechanism's
+    # behavior. Each of these must resolve to its own, unchanged, generic
+    # term, at full "auto" confidence (1.0) - not silently downgraded to
+    # "review" either, which was a real, separate bug found by tracing
+    # this exact code path (a plain, already-correct exact match being
+    # needlessly re-wrapped through local_lookup's confidence cap).
+    generic_cases = [
+        ("Colon", "colon", "UBERON:0001155"),
+        ("Lung", "lung", "UBERON:0002048"),
+        ("Skin", "skin", "UBERON:0002097"),
+        ("Nasal cavity", "nasal cavity", "UBERON:0001707"),
+        ("Tongue", "tongue", "UBERON:0001723"),
+    ]
+    for text, expected_label, expected_id in generic_cases:
+        t = normalize_body_site(text)
+        assert t.label == expected_label, text
+        assert t.ontology_id == expected_id, text
+        assert t.mapping_confidence == 1.0, text
+        assert t.status == "PRESENT", text
+
+    # Terms with no static-dict key at all were already correctly handled
+    # by the pre-existing local_lookup miss-fallback (a different code
+    # path than the override above) - confirmed unaffected.
+    for text, expected_id in [
+        ("Duodenum", "UBERON:0002114"),
+        ("Jejunum", "UBERON:0002115"),
+        ("Ileum", "UBERON:0002116"),
+        ("Nasopharynx", "UBERON:0001728"),
+        ("Pharynx", "UBERON:0006562"),
+    ]:
+        assert normalize_body_site(text).ontology_id == expected_id, text
 
 
 def test_condition_normalization_variants():
@@ -404,8 +484,7 @@ def test_condition_disease_subtype_specificity_against_real_mondo_data():
     # No real EFO or MONDO term exists for "metastatic colorectal cancer"
     # as a MONDO id, but EFO:1001480 does - resolved the same way.
     assert (
-        normalize_condition("metastatic colorectal cancer").ontology_id
-        == "EFO:1001480"
+        normalize_condition("metastatic colorectal cancer").ontology_id == "EFO:1001480"
     )
 
 

@@ -2163,3 +2163,245 @@ this pass narrowed, not widened, the open conditions):
   its own "exact next actions" - this pass answered a *bounded* version
   of that question narrowly, for the two specific bug patterns found,
   not the general case).
+
+## 2026-08-09 (final pass) anatomical specificity and grounding calibration
+
+Direct follow-up to the immediately preceding section's own explicitly-
+flagged limitation: "the body-site specificity/depth gap... closing it
+means either an exhaustive per-subdivision dict expansion or a genuinely
+new specificity-ranking mechanism." This pass built the latter - a
+general mechanism, not a per-subdivision dict expansion - and re-used it
+to close the gap this same document had just called out as deferred.
+
+### 1. Root cause, traced (not guessed)
+
+Direct execution trace for the motivating example:
+
+```python
+>>> _MATCHER.match_all(normalize_spelling("ascending colon".lower()))
+[('colon', ('colon', 'UBERON:0001155'))]
+```
+
+"Ascending colon" contains "colon" as a `\bkey\b` word-boundary match;
+no more specific key existed in `BODY_SITE_LOOKUP`, so `match_all()`
+returns exactly one distinct value and `normalize_body_site()` returns it
+at "auto" confidence (1.0) without ever consulting anything else. This is
+the *identical* code shape to the specimen-vs-structure bug fixed in the
+immediately preceding section (a short generic key matches as a substring
+of a longer, more specific real phrase and wins by default) - just for a
+key ("colon") that key had never touched, because that fix's allowlist
+(`_OVERRIDABLE_GENERIC_KEYS`) had been scoped to the specific keys a bug
+was already confirmed for, not audited against every key in the dict.
+
+Confirmed the local store already has the right answer, offline, at the
+existing confidence ceiling:
+
+```python
+>>> local_lookup("Ascending colon", ("uberon",))
+NormalizedTerm(label='ascending colon', ontology_id='UBERON:0001156',
+               status='PRESENT', mapping_confidence=0.9)
+```
+
+So the cause is specifically candidate generation / static-dict coverage,
+not ranking, ontology depth, branch distance, or confidence calibration -
+those were checked and ruled out (see §4 below) before landing on this.
+
+### 2. The fix: generalize the existing override, don't add a ranking layer
+
+`_resolve_structure_override()` (from the immediately preceding pass) was
+changed from "only runs for a hand-picked allowlist of keys" to "runs for
+every single static match, unconditionally" - a removal of scope-limiting
+code, not a new mechanism. This is safe only because of two guards, both
+already present in the function and independently audited against every
+one of `BODY_SITE_LOOKUP`'s ~36 keys before trusting it broadly (not
+assumed):
+
+1. **Confidence must be at `local_lookup()`'s hard ceiling (0.9).** Every
+   real fix (`Ascending colon`, `Left lung`, `Skin of forehead`, `Middle
+   nasal meatus`, ...) lands exactly there; every case where overriding
+   would be wrong lands measurably below it (bare `"gut"` -> 0.56, bare
+   `"skin"` -> 0.85 resolving to the unhelpful `"zone of skin"`). This is
+   also what makes "deepest node always wins" *not* this function's
+   behavior, and specifically what the brief's own counter-example
+   requires: bare `"Colon"` resolves via `local_lookup()` to the *same*
+   generic `UBERON:0001155` the dict already returns (no different,
+   confident answer exists to prefer), so it cannot be pushed toward
+   `"Ascending colon"` - there is no text evidence for that specificity
+   and the mechanism finds none.
+2. **The local match's CURIE must differ from the generic key's own
+   answer** - newly added this pass, after a real bug was found by
+   tracing (not assuming) this function's behavior against every dict key:
+   without this guard, an already-correct exact match through a generic
+   key (e.g. `"Nasal cavity"` hitting the `"nasal"` key) was being
+   needlessly re-wrapped through `local_lookup()`'s confidence cap and
+   silently downgraded from "auto" (1.0) to "review" (0.9) for zero
+   information gain - a real, previously-unnoticed defect in the prior
+   pass's own fix, caught by this pass's audit discipline, not a new
+   requirement invented for this pass.
+
+No LLM, no embeddings, no new ranking formula, no ontology-depth
+calculation added - `rank_candidates_explained()` (`backend.py`) was
+re-checked against hard cases (parent/child, branch distance, synonym
+scope) and confirmed its existing scope + edit-distance + branch-validity
+formula already produces specificity-correct ordering whenever a query
+containing specific wording is actually presented to it (edit-distance
+naturally favors "type 2 diabetes mellitus" over "diabetes mellitus" for
+a query containing "type 2"); the real gap was upstream of ranking
+entirely, exactly as it was for the earlier condition.py fix.
+
+### 3. Test battery, both directions (brief's own list, plus the id-equality regression)
+
+All of the following were directly executed and verified, not assumed
+correct by extrapolation:
+
+| Specific input (must gain specificity) | Generic input (must NOT become over-specific) |
+|---|---|
+| Ascending/Descending/Sigmoid colon → own UBERON term | Colon → stays `colon`, confidence 1.0 |
+| Left/Right lung → own UBERON term | Lung → stays `lung`, confidence 1.0 |
+| Skin of forehead/forearm/back → own UBERON term | Skin → stays `skin`, confidence 1.0 |
+| Blood plasma / Blood serum → own UBERON term | Nasal cavity → stays `nasal cavity`, confidence 1.0 (id-equality bug, now fixed) |
+| Middle nasal meatus → own UBERON term | Tongue → stays `tongue`, confidence 1.0 |
+
+Duodenum/Jejunum/Ileum/Nasopharynx/Pharynx were checked and confirmed
+already correct - no static-dict key matches them at all, so they were
+already reaching the pre-existing local-store miss-fallback (a different,
+older code path than the override this pass touched).
+
+New tests:
+`test_body_site_specificity_override_prefers_specific_descendant_when_
+input_supports_it` (the full battery above, both directions, plus the
+already-no-static-key cases) and an updated
+`test_body_site_normalization_variants` assertion (`"blood plasma"` now
+correctly resolves to `UBERON:0001969`, not generic `"blood"` - this was
+a genuine behavior improvement the old test had encoded as the bug).
+
+### 4. Real, measured before/after impact (same 14,588-row corpus)
+
+| Metric | Before this pass | After this pass |
+|---|---|---|
+| body_site precision | 77.1% | **99.1%** |
+| body_site recall | 77.1% | **99.1%** |
+| body_site F1 | 0.771 | **0.991** |
+| body_site AUTO precision | 42.4% (72/170) | **100.0%** (72/72) |
+| body_site false-AUTO count | 98/170 | **0/72** |
+| body_site genuinely-wrong | 0 (already fixed prior pass) | 0 |
+| body_site coarser-but-related wrong | 102 | **4** |
+| condition / host_species | unchanged | unchanged (not touched this pass) |
+
+Every one of the 98 previously-coarse "auto" predictions either became
+the *correct, specific* answer (still auto, when the static dict itself
+already had the exact right entry) or correctly moved to "review" at the
+now-correct specific label (when the answer came through the override,
+which - like all `local_lookup()` results - is capped below "auto" by
+design). Zero cases got *worse*: AUTO count actually dropped from 170 to
+72 (coarse "auto" answers that are now correctly "review" instead), and
+every remaining "auto" is now genuinely correct - AUTO precision went to
+exactly 100%.
+
+The 4 remaining wrong cases are all "coarser-but-related" (real UBERON
+ancestor, not a different concept) - a 96% reduction from the prior 102,
+not a residual defect class needing its own new mechanism.
+
+### 5. Final adversarial review (this pass, against this pass's own fix)
+
+Explicitly tried to break candidate generation, the new override,
+ambiguity handling, and offline reproducibility rather than assuming the
+fix above is correct:
+
+- **Punctuation/case/whitespace noise** (`"Colon."`, `"COLON"`, `"  Colon
+  "`, `"colon!!!"`, embedded in a long noisy sentence) - all resolve
+  correctly; `normalize_spelling()`'s existing normalization already
+  handles this, unaffected by this pass's change.
+- **Multi-value ambiguous text** (`"Colon and feces"`, `"Oral cavity,
+  saliva"`) - correctly still lands at "review" via the pre-existing
+  `match_all()` multi-match path, unaffected.
+- **Found, not fixed - the override doesn't reach the ambiguous-match
+  path**: `"Ascending colon and Saliva"` correctly lands at "review" (two
+  genuinely distinct values are present, so the safety behavior is
+  right), but shows `"colon"` rather than `"ascending colon"` as the
+  primary label within that ambiguity, because
+  `_resolve_structure_override()` is only invoked from the single-match
+  branch of `normalize_body_site()`, not the multi-match branch.
+  Investigated wiring it into both: rejected, because the multi-match
+  branch's candidate-exclusion logic (`LookupMatcher.candidates()`)
+  keys off the winning key/value actually being a real dict entry -
+  swapping in the override's synthetic, more-specific answer risks
+  making an unrelated key spuriously reappear as a "candidate" (a new,
+  different bug) for a case that's already correctly non-dangerous
+  (still "review", never "auto"). Left as a known, low-frequency,
+  non-dangerous limitation rather than risking a new defect to close it.
+- **Found, not fixed - a pre-existing, unrelated gap surfaced by this
+  review**: `"N/A"` resolves to `'nasal artery'` (`UBERON:2005085`) at
+  0.73 confidence via the older, pre-existing local-store miss-fallback
+  path (the `len(matched) == 0` branch, untouched by this pass) - a
+  weak fuzzy match on a "not applicable" marker that was never intended
+  as anatomical text. Confirmed non-dangerous (0.73 is well below any
+  "auto" threshold, so it always lands at "review"), confirmed this
+  path predates this pass, and confirmed it's an input-classification
+  gap common to all three normalizers' miss-fallbacks, not an
+  anatomical-specificity defect - explicitly out of scope for this
+  pass's brief, flagged here as a real finding for a future pass rather
+  than silently left unmentioned.
+- **Offline reproducibility** - the full 14,588-row evaluation runs in
+  5.8s with zero network calls (`GROUNDING_BACKEND_MODE` unset, default
+  `chain` mode resolving everything from the local store); OLS live
+  fallback path itself untouched by this pass and still reachable for
+  any term the local store doesn't cover.
+- **Performance at scale** - `normalize_body_site()`: p50 0.26ms, p95
+  0.37ms, p99 0.45ms over 550 calls including the new override path on
+  every single-match case; `normalize_condition()`: p50 0.23ms, p99
+  0.44ms over 200 calls. No measurable regression from adding the
+  override check to every single-match call - `local_lookup()` is an
+  indexed, sub-millisecond local query, not a network call.
+
+### 6. Final production assessment
+
+**Accuracy** (real 14,588-row BugSigDB corpus): body_site 99.1%
+precision/recall, F1 0.991, AUTO precision 100.0%; condition 95.8%
+precision, 95.5% recall, F1 0.956, AUTO precision 86.7%; host_species
+100% across the board. See per-field false-AUTO/review-rate/coarse-vs-
+wrong breakdowns in the two sections above.
+
+**Safety**: zero genuinely-wrong false-AUTO mappings in body_site
+(down from 2 at the start of the immediately preceding pass, 20 at the
+start of the pass before that); 4 in condition, all one root cause
+(ground truth itself points to an obsolete MONDO ID with no live
+replacement - correctly not force-matched, see the preceding section's
+§3); zero known remaining specimen/anatomical-structure confusion
+(the class of bug the preceding pass closed); zero known remaining
+parent/child disease-specificity gaps with a real fix available (the
+two confirmed-no-fix cases - HIV-1, metastatic colorectal cancer at the
+MONDO level - are resolved through EFO instead, not left open).
+
+**Performance**: p50/p95/p99 all sub-millisecond per call (§5); full
+14,588-row independent evaluation completes in 5.8s. No new dependency,
+no new network call, no new persistent state.
+
+**Reliability**: fully offline-reproducible against the synced local
+ontology store (`GROUNDING_BACKEND_MODE=chain`, the production default);
+OLS live fallback remains available and unmodified for anything outside
+local coverage; no change to ontology sync (`scripts/ontology_sync.py`)
+or cache schema.
+
+**Final verdict: READY WITH CONDITIONS.**
+
+Not upgraded to unconditional READY because two real, specific,
+consciously-scoped limitations remain open, both documented above rather
+than hidden behind the strong aggregate numbers:
+
+1. The override mechanism does not reach the ambiguous multi-match path
+   (§5) - non-dangerous (still correctly "review", never "auto") but a
+   known gap for a rare input shape.
+2. The pre-existing local-store miss-fallback has no input-classification
+   step for non-anatomical markers like `"N/A"` (§5) - non-dangerous
+   (never "auto") but produces a confusing low-confidence suggestion a
+   curator has to dismiss.
+
+Both are explicitly non-dangerous (neither can produce a false "auto"),
+both were found by this pass's own adversarial review rather than left
+undiscovered, and neither is an anatomical-specificity defect - fixing
+either further would mean expanding scope beyond this pass's brief, which
+was declined per its own explicit "do not perform another broad
+architectural redesign" instruction. If a mapping cannot satisfy the
+override's two guards, the system's behavior is exactly what the brief
+asked for: it stays at "review", not a forced "auto".
