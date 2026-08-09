@@ -57,6 +57,7 @@ from app.normalization.body_site import normalize_body_site  # noqa: E402
 from app.normalization.condition import normalize_condition  # noqa: E402
 from app.normalization.grounding.local_backend import LocalOntologyBackend  # noqa: E402
 from app.normalization.host_species import normalize_host_species  # noqa: E402
+from app.normalization.types import is_null_like  # noqa: E402
 
 _backend = LocalOntologyBackend()
 
@@ -186,10 +187,28 @@ def distinct_condition_pairs(rows: List[Dict[str, str]]):
 
 
 def distinct_species(rows: List[Dict[str, str]]):
+    """Real methodology fix, 2026-08-09 final safety-closure pass: this
+    used to hardcode a single excluded value (`sp != "NA"`) - too narrow.
+    BugSigDB's real dump also curates "Not specified" (and presumably the
+    same family of placeholders `is_null_like()` now recognizes centrally
+    in the normalizers themselves) for "the paper didn't report a host
+    species" - there is no real species for BioAnalyzer to be scored
+    against for these, so including them was scoring a well-defined "no
+    data" case as if it were a normalization target. Confirmed via a real,
+    traced false "correct" this was previously producing: "Not specified"
+    reached `local_lookup()`'s NCBITaxon fallback and fuzzy-matched
+    "unidentified" (NCBITaxon:32644) at 0.012 confidence - a near-zero,
+    meaningless match that still passed this script's own 0.4 text-
+    similarity self-consistency check purely by surface-level word
+    resemblance ("not specified" vs "unidentified", 0.56 similarity) - not
+    because it was a real, correct grounding. Reusing `is_null_like()`
+    (not a second, separately-maintained placeholder list) keeps this
+    filter in sync with whatever the normalizers themselves treat as
+    non-groundable."""
     seen = set()
     for r in rows:
         sp = r.get("Host species", "")
-        if sp and sp != "NA":
+        if sp and not is_null_like(sp):
             seen.add(sp)
     return sorted(seen)
 

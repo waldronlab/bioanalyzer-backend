@@ -18,6 +18,7 @@ from app.normalization.host_species import normalize_host_species
 from app.normalization.ols import format_ontology_id, ols_search
 from app.normalization.sample_size import normalize_sample_size, _simple_word_to_num
 from app.normalization.sequencing_type import normalize_sequencing_type
+from app.normalization.types import is_null_like
 
 
 @pytest.fixture(autouse=True)
@@ -325,6 +326,42 @@ def test_body_site_local_store_override_catches_phrasings_beyond_the_static_dict
     # unaffected.
     assert normalize_body_site("oral").label == "saliva"
     assert normalize_body_site("dental").label == "saliva"
+
+
+def test_body_site_structure_override_also_applies_in_the_ambiguous_multi_match_branch():
+    """Final maintainer sign-off pass (2026-08-09): the override above was
+    previously wired only into the single-static-match branch of
+    normalize_body_site(). Two real, remaining coarser-wrong cases from
+    this codebase's own independent BugSigDB evaluation - "Mucosa of small
+    intestine" and "Wall of small intestine" - turned out to hit the
+    *ambiguous* branch instead ("small intestine" and "intestine" both
+    match as distinct static-dict values for this text), so the override
+    never got a chance to notice the complete phrase is itself a real,
+    more specific UBERON term. Extended to this branch too, verified safe
+    against spurious-candidate reappearance (winning_key, not the
+    override's answer, is what the candidate-exclusion check uses) before
+    being applied - see body_site.py's comment at the call site."""
+    for text, expected_label, expected_id in [
+        ("Mucosa of small intestine", "mucosa of small intestine", "UBERON:0001204"),
+        ("Wall of small intestine", "wall of small intestine", "UBERON:0001168"),
+    ]:
+        t = normalize_body_site(text)
+        assert t.label == expected_label, text
+        assert t.ontology_id == expected_id, text
+        assert t.status == "PARTIALLY_PRESENT", text
+        assert t.mapping_confidence == 0.9, text
+        # The override must not leave a spurious, wrong-specificity
+        # candidate behind for the same underlying mention.
+        assert t.candidates == (), text
+
+    # A genuinely different second concept in an ambiguous match must
+    # still surface as a real candidate, unaffected by this change.
+    multi_concept = normalize_body_site("Ascending colon and Saliva")
+    assert multi_concept.status == "PARTIALLY_PRESENT"
+    assert ("saliva", "UBERON:0001836") in multi_concept.candidates
+    already_covered = normalize_body_site("Colon and feces")
+    assert already_covered.status == "PARTIALLY_PRESENT"
+    assert ("colon", "UBERON:0001155") in already_covered.candidates
 
 
 def test_body_site_specificity_override_prefers_specific_descendant_when_input_supports_it():
@@ -800,6 +837,52 @@ def test_ols_search_handles_malformed_json(monkeypatch):
     assert ols_search("some term", "efo", "EFO") is None
 
 
+def test_ols_search_rejects_cross_ontology_result(monkeypatch):
+    """Final maintainer sign-off pass (2026-08-09): a real, live-observed
+    gap - EBI OLS4's `ontology=` search parameter is a hint, not a hard
+    filter, for fuzzy (`exact=false`) search. Reproduced live:
+    `ols_search("sample", "uberon", "UBERON")` returned a real CHEBI term
+    (human urinary metabolite, CHEBI:84087) formatted and cached as if it
+    were a UBERON result, purely because the query text fuzzy-matched a
+    chemical entity better than any real body-site term.
+    `format_ontology_id()` only uses `id_prefix` as a fallback for a bare
+    numeric obo_id - it does not validate a *real* embedded prefix against
+    what the caller requested, so nothing else in the code path catches
+    this. Fixed by rejecting any result whose own CURIE prefix doesn't
+    match `id_prefix`, mocked here (not depending on live OLS's actual
+    current behavior, which could change) to keep this a real regression
+    guard."""
+
+    def fake_get(url, params=None, timeout=None):
+        assert params["ontology"] == "uberon"
+        return _DummyResponse(
+            {
+                "response": {
+                    "docs": [
+                        {"label": "human urinary metabolite", "obo_id": "CHEBI_84087"}
+                    ]
+                }
+            }
+        )
+
+    monkeypatch.setattr(requests, "get", fake_get)
+    assert ols_search("sample", "uberon", "UBERON") is None
+
+
+def test_ols_search_accepts_matching_ontology_result(monkeypatch):
+    """Sanity check for the fix above: a real, same-ontology result must
+    still be accepted - this isn't a blanket rejection of anything, only
+    a genuine ontology mismatch."""
+    monkeypatch.setattr(
+        requests,
+        "get",
+        lambda *a, **k: _DummyResponse(
+            {"response": {"docs": [{"label": "colon", "obo_id": "UBERON_0001155"}]}}
+        ),
+    )
+    assert ols_search("colon", "uberon", "UBERON") == ("colon", "UBERON:0001155", 0.9)
+
+
 # ---------------------------------------------------------------------------
 # ols.py: fetch_term() / is_in_branch() - the round-trip, obsolete-detection,
 # and branch-check steps of the four-step grounding discipline consumed by
@@ -1117,3 +1200,90 @@ def test_normalize_sample_size_simple_fallback_miss_falls_through_to_regex(
     t = normalize_sample_size("approximately 42 mice")
     assert t.label == "42"
     assert t.mapping_confidence == 0.9
+
+
+def test_is_null_like_recognizes_common_data_entry_placeholders():
+    """2026-08-09 final safety-closure pass: `is_null_like()` is the single,
+    shared fix for a real adversarial finding - "N/A" resolving to
+    'nasal artery' (UBERON:2005085) via body_site.py's local-store
+    miss-fallback, a data-entry placeholder being fuzzy-matched as real
+    anatomical text."""
+    for text in [
+        "N/A",
+        "NA",
+        "N.A.",
+        "n/a",
+        "#N/A",
+        "not applicable",
+        "Not Available",
+        "not reported",
+        "NOT SPECIFIED",
+        "unknown",
+        "Unspecified",
+        "missing",
+        "none",
+        "null",
+        "nil",
+        "TBD",
+        "-",
+        "--",
+        "?",
+        "",
+        "   ",
+        "(unknown)",
+        "N/A.",
+        "  n/a  ",
+        # Combined edge punctuation (bracket immediately followed by a
+        # period, no space) - a real gap found by this pass's own code
+        # review: a naive `.strip("()[]{}").strip().rstrip(".")` chain
+        # left "unknown)" behind for this exact case, since each strip
+        # call only inspects what's currently at the edge and never
+        # re-checks after the other one runs.
+        "(unknown).",
+        "(N/A)",
+        "[missing]",
+    ]:
+        assert is_null_like(text), f"{text!r} should be recognized as null-like"
+
+    # Real, meaningful text must never be misclassified - including text
+    # that merely *contains* one of the placeholder words as part of a
+    # genuine, specific value (not a substring/fuzzy check).
+    for text in [
+        "Homo sapiens",
+        "Ascending colon",
+        "unknown primary carcinoma",  # a real, specific MONDO-mappable disease
+        "nonspecific colitis",
+        "N/A protein deficiency",
+        "not applicable-associated disorder",
+    ]:
+        assert not is_null_like(text), f"{text!r} should NOT be null-like"
+
+
+def test_null_like_input_resolves_to_absent_across_all_three_ontology_fields():
+    """Applied centrally (types.is_null_like), not as three separate
+    field-specific dictionaries - see is_null_like's docstring. Every
+    field must independently short-circuit to ABSENT before any static
+    dict, local-store, or live-network lookup is attempted."""
+    null_like_inputs = ["N/A", "unknown", "not applicable", "", "  ", "none", "null"]
+    for text in null_like_inputs:
+        for normalize in (
+            normalize_body_site,
+            normalize_condition,
+            normalize_host_species,
+        ):
+            t = normalize(text)
+            assert t.status == "ABSENT", f"{normalize.__name__}({text!r})"
+            assert t.ontology_id == ""
+            assert t.mapping_confidence == 0.0
+
+    # The exact original adversarial finding must be closed.
+    assert normalize_body_site("N/A").label != "nasal artery"
+
+    # Meaningful comparator-arm condition values (which happen to share a
+    # word with common NA placeholders in other datasets, e.g. "normal")
+    # must remain unaffected - "none"/"null"/"missing" are not the same
+    # dict keys as "healthy"/"control"/"normal".
+    assert normalize_condition("healthy controls").status == "PRESENT"
+    assert normalize_condition("control").ontology_id == ""
+    assert normalize_condition("control").label == "healthy"
+    assert normalize_condition("normal").label == "healthy"

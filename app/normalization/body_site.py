@@ -6,7 +6,12 @@ from typing import Dict, Optional, Tuple
 
 from app.normalization.local_lookup import local_lookup
 from app.normalization.ols import ols_search
-from app.normalization.types import LookupMatcher, NormalizedTerm, normalize_spelling
+from app.normalization.types import (
+    LookupMatcher,
+    NormalizedTerm,
+    is_null_like,
+    normalize_spelling,
+)
 
 # keyword -> (canonical label, UBERON ID)
 #
@@ -201,7 +206,7 @@ def _resolve_structure_override(
 
 def normalize_body_site(raw_text: str) -> NormalizedTerm:
     """Return normalized body site label, UBERON ID, status, and mapping confidence."""
-    if not raw_text or raw_text.strip() == "":
+    if is_null_like(raw_text):
         return NormalizedTerm.absent()
 
     lowered = normalize_spelling(raw_text.lower())
@@ -215,6 +220,24 @@ def normalize_body_site(raw_text: str) -> NormalizedTerm:
         return NormalizedTerm(label, uberon_id, "PRESENT", 1.0)
     if len(matched) > 1:
         winning_key, (label, uberon_id) = matched[0]
+        # Same override as the single-match branch above, extended here
+        # after a real, confirmed case (2026-08-09 final maintainer sign-
+        # off pass): "Mucosa of small intestine" contains both "small
+        # intestine" (-> UBERON:0002108) and, as a real word-boundary
+        # substring of "small intestine" itself, "intestine" (-> the
+        # casual specimen alias "feces") - two distinct static-dict
+        # values, so this branch (not the single-match one) was always
+        # the one handling it, and previously never got a chance to
+        # notice that the *complete* text is itself a real, more specific
+        # UBERON term (UBERON:0001204) neither matched key represents.
+        # `winning_key` is passed to `candidates()` unchanged (not the
+        # override's own key) specifically so the substring/superstring
+        # exclusion still correctly drops "intestine" as "the same
+        # mention at a different specificity" - verified this doesn't
+        # let it reappear as a spurious candidate before relying on it.
+        override = _resolve_structure_override(raw_text, uberon_id)
+        if override is not None:
+            label, uberon_id = override.label, override.ontology_id
         candidates = _MATCHER.candidates(lowered, winning_key, (label, uberon_id))
         return NormalizedTerm(
             label, uberon_id, "PARTIALLY_PRESENT", 0.9, candidates=candidates

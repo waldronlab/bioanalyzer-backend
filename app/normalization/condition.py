@@ -6,7 +6,12 @@ from typing import Dict, Optional, Tuple
 
 from app.normalization.local_lookup import local_lookup
 from app.normalization.ols import ols_search
-from app.normalization.types import LookupMatcher, NormalizedTerm, normalize_spelling
+from app.normalization.types import (
+    LookupMatcher,
+    NormalizedTerm,
+    is_null_like,
+    normalize_spelling,
+)
 
 # keyword -> (canonical label, ontology ID)
 #
@@ -256,7 +261,7 @@ def _resolve_more_specific_override(
 
 def normalize_condition(raw_text: str) -> NormalizedTerm:
     """Return normalized condition label, EFO ID, status, and mapping confidence."""
-    if not raw_text or raw_text.strip() == "":
+    if is_null_like(raw_text):
         return NormalizedTerm.absent()
 
     lowered = normalize_spelling(raw_text.lower())

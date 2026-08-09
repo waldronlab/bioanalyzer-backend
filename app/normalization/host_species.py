@@ -10,7 +10,7 @@ import requests
 
 from app.normalization.local_lookup import local_lookup
 from app.normalization.ontology_cache import get_cached_term, store_cached_term
-from app.normalization.types import LookupMatcher, NormalizedTerm
+from app.normalization.types import LookupMatcher, NormalizedTerm, is_null_like
 
 # keyword -> (scientific name, NCBITaxon ID)
 #
@@ -79,7 +79,7 @@ _MATCHER = LookupMatcher(SPECIES_LOOKUP)
 
 def normalize_host_species(raw_text: str) -> NormalizedTerm:
     """Return normalized host species label, NCBITaxon ID, status, and mapping confidence."""
-    if not raw_text or raw_text.strip() == "":
+    if is_null_like(raw_text):
         return NormalizedTerm.absent()
 
     lowered = raw_text.lower()

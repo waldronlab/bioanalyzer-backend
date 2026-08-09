@@ -2405,3 +2405,490 @@ was declined per its own explicit "do not perform another broad
 architectural redesign" instruction. If a mapping cannot satisfy the
 override's two guards, the system's behavior is exactly what the brief
 asked for: it stays at "review", not a forced "auto".
+
+## 2026-08-09 (closure pass) null values, ambiguity, and independent verification
+
+Final safety-closure pass, direct follow-up to the immediately preceding
+section's own explicitly-flagged, non-dangerous limitation: "N/A" resolving
+to 'nasal artery' at 0.73 confidence via body_site.py's local-store
+miss-fallback. This pass closed that specific finding centrally, then spent
+the rest of its scope proving (not assuming) the tier-safety invariants
+this whole subsystem exists to guarantee still hold end-to-end.
+
+### 1. Null-like input, fixed centrally
+
+`app.normalization.types.is_null_like()` - one shared function, not three
+field-specific dictionaries, per the brief's explicit instruction. Called
+as the very first line of `normalize_body_site()`/`normalize_condition()`/
+`normalize_host_species()`, before any static-dict, local-store, or live-
+network lookup is attempted. Recognizes the standard real data-entry/
+missing-value conventions (matches pandas' own default `na_values` list
+where they overlap - `"N/A"`, `"NA"`, `"null"` - plus LLM-extraction-
+realistic phrases like `"not reported"`/`"not specified"`), tolerant of
+case, surrounding whitespace, and wrapping punctuation
+(`"(unknown)."` -> `"unknown"`), but never fuzzy/substring - so a real,
+specific value that merely contains one of these words (`"unknown primary
+carcinoma"`, a real MONDO-mappable disease) is never misclassified.
+Deliberately excludes words that are genuine `CONDITION_LOOKUP` entries in
+this codebase (`"normal"`/`"control"`/`"healthy"` describe a comparator
+arm, not missing data).
+
+A self-review of the first implementation (chained
+`.strip("()[]{}").strip().rstrip(".")`) found a real gap before this was
+reported as complete: `"(unknown)."` (closing paren immediately followed
+by a period, no space) left `"unknown)"` behind, because each strip call
+only inspects what's currently at the string's edge and never re-checks
+after the other runs. Fixed with a single regex removing any mix of
+whitespace/brackets/period from each edge in one pass
+(`_NULL_LIKE_EDGE_RE`), which has no such ordering dependency - caught and
+fixed before being called done, not left as a known gap.
+
+### 2. Ambiguity/tier-invariant audit: proven structurally, not just asserted
+
+Traced (not assumed) why AUTO tier cannot be reached by an ambiguous or
+fallback-sourced match: `tiering.ground()` requires
+`status == "PRESENT"` and `mapping_confidence == 1.0` before it even
+attempts the round-trip/obsolete/branch/label checks. Grepping all three
+normalizer modules confirms `mapping_confidence == 1.0` is returned from
+exactly one code shape in each - a single, clean, pre-audited static-dict
+match with zero competing candidates. `local_lookup()` hard-caps at 0.9
+(`min(winner.confidence, 0.9)`, unconditionally); every `ols_search()`
+call site across all three normalizers passes `mapping_confidence=0.9`
+explicitly. Neither fallback path can structurally produce AUTO's
+precondition - this isn't a convention that could quietly erode, it's
+enforced by what values those functions are capable of returning.
+
+New file `tests/test_confidence_tier_invariants.py` proves this end-to-end
+against the real normalizers and the real local ontology store (not
+mocks, unlike `test_grounding.py`'s OLS-isolation suite): clean matches
+reach AUTO with zero candidates; genuinely ambiguous/fallback-sourced
+matches (`"Small intestine"`, `"Ascending colon"`, `"Alzheimer's disease
+biomarker measurement"`, `"mice and rats"`, ...) never do, and a direct,
+blanket check confirms no case with populated `candidates` ever reaches
+AUTO across the full battery, not just the cases nominally testing it.
+
+Found already-safe, left unchanged (per the brief's own "if already safe
+and correct, do not redesign it"): the override mechanism from the
+preceding pass genuinely never bypasses this - its `local_lookup()`-
+sourced results are always capped below 1.0, so an override can improve
+*which* answer is returned but never smuggle a result past the AUTO gate.
+
+### 3. Real, measured evaluation impact
+
+Re-ran the same 14,588-row corpus. body_site and condition are unchanged
+(99.1%/99.1%/0.991 and 95.8%/95.5%/0.956 respectively - the null-fix
+doesn't touch real anatomical/disease text). host_species showed an
+apparent regression on the first re-run (100%->98.7% recall, one new
+"miss") that was investigated before being reported, per this pass's own
+"any metric regression must be investigated before completion" mandate -
+and traced to a real bug in the *evaluation harness itself*, not the
+normalizer: BugSigDB's real dump curates `"Not specified"` as a literal
+"Host species" value for some rows, which previously reached
+`local_lookup()`'s NCBITaxon fallback and fuzzy-matched `"unidentified"`
+(NCBITaxon:32644) at 0.012 confidence - a near-meaningless match that
+still passed the evaluation script's own 0.4 text-similarity self-
+consistency check by surface coincidence (`"not specified"` vs
+`"unidentified"`, 0.56 similarity). `is_null_like()` correctly declining
+to force any mapping for `"Not specified"` is the *more* correct
+behavior, not a regression; the evaluation script's `distinct_species()`
+was fixed to exclude null-like ground-truth values from scoring (reusing
+`is_null_like()`, not a second placeholder list), restoring host_species
+to 100%/100%/1.000 and making the metric honestly reflect only genuinely
+scoreable cases (78, not 79).
+
+### 4. Final adversarial suite
+
+Every category from the brief's list, executed directly (not by
+extrapolation):
+
+- **Null-like values** - closed, see §1; the original `"N/A"` ->
+  `"nasal artery"` finding no longer occurs (`normalize_body_site("N/A")`
+  now correctly returns ABSENT).
+- **Generic biomedical words** (`patient`, `sample`, `study`, `disease`,
+  `tissue`, `organ`, `condition`) - every case across all three fields
+  stayed at REVIEW or NONE, **except one, found and investigated**:
+  `normalize_host_species("patient")` reaches AUTO (`Homo sapiens`,
+  `NCBITaxon:9606`). Confirmed this is not a new defect: `"patient"`/
+  `"patients"` -> Homo sapiens is a pre-existing, deliberately-designed,
+  individually-audited `SPECIES_LOOKUP` entry (unlike `"sample"`/
+  `"study"`/`"disease"`/`"tissue"`/`"organ"`/`"condition"`, which are
+  genuinely ambiguous across species and correctly never auto-map),
+  and is explicitly one of this whole engagement's own named, protected
+  regressions (`patients -> Homo sapiens`) - re-confirming it holds is
+  the correct outcome here, not a finding to fix.
+- **Specificity, both directions** - re-confirmed from the preceding
+  pass (`"Ascending colon"` gains specificity; `"Colon"` alone does not
+  become over-specific).
+- **Semantic confusion** (`Oral cavity`, `Small intestine`, `Dental
+  plaque` vs `saliva`/`feces`) - re-confirmed correct, all at REVIEW with
+  the right label, none silently reverted to the specimen-alias answer.
+- **Disease specificity** (`Type II diabetes mellitus`, `Type 2
+  diabetes`, `Diabetes`, `Gestational diabetes`) - all four resolve to
+  their own correct, distinct MONDO term at AUTO tier, confirming the
+  roman-numeral and gestational-diabetes fixes from earlier passes hold.
+- **Invalid/fabricated identifiers** (syntactically valid but non-
+  existent CURIEs, and a real CURIE with a mismatched claimed label) -
+  all land at REVIEW, never AUTO.
+- **Obsolete identifiers** - a confirmed-obsolete MONDO CURIE
+  (`MONDO:0017153`) correctly downgrades to REVIEW.
+- **Ambiguous terms** - never reach AUTO (§2's blanket-invariant test).
+
+### 5. Offline determinism and OLS fallback safety
+
+**Determinism**: identical `NormalizedTerm` results across 3 repeated
+in-process calls and across 3 independent fresh `python3` process
+invocations for the same inputs, under the production-default
+`GROUNDING_BACKEND_MODE=chain` (local store first, no live network
+required for any of the tested cases).
+
+**OLS fallback safety**: directly simulated (via `requests.get`
+monkeypatching, not just read from source) - connection error, timeout,
+malformed JSON, empty result list, and a malformed doc missing its
+`label` field. All six return `None` from `ols_search()`, never raise,
+never produce a usable-looking-but-wrong result. Confirmed a real,
+successful OLS hit is still hard-capped at `mapping_confidence=0.9` (the
+explicit parameter every call site passes), so even a fully healthy OLS
+response cannot supply AUTO's precondition. These properties were already
+covered by existing tests (`test_ols_search_handles_request_exception`,
+`test_ols_search_handles_malformed_json`, ...) - this pass re-verified
+them directly rather than assuming the existing suite still reflects
+current behavior.
+
+### 6. Final independent code review
+
+Self-reviewed this pass's own diff (`types.py`, the three normalizers'
+one-line entry-check change, the evaluation script's `distinct_species()`
+fix) against the brief's checklist:
+
+- **Duplicated logic**: none - `is_null_like()` is called identically by
+  all three normalizers and by the evaluation script, no per-field
+  reimplementation.
+- **Bypasses around tier validation**: none found: the null-like check
+  runs *before* any tier-relevant path, and `ground()`/`tier_for()`
+  themselves are untouched this pass.
+- **Hidden static mappings / field-specific hacks**: none - the
+  placeholder list lives in one place (`types.py`), not duplicated or
+  field-scoped.
+- **Dead code**: checked for stray references to the earlier, reverted
+  `EXCLUDED_CATEGORY_ROOTS`/`is_a_reachable_from` experiment from the
+  preceding pass - only a historical mention remains in a comment
+  explaining what was tried and removed, no leftover code.
+- **Unnecessary network calls / unbounded queries**: none added -
+  `is_null_like()` is pure string logic, zero I/O.
+- **Exception paths that fail open dangerously**: `ols_search()`'s
+  existing `except (RequestException, ValueError): return None` fails
+  open to "no match" (safe - lets the caller's own no-match handling
+  apply), not to a fabricated result - verified directly in §5, not
+  merely read.
+- **A real bug found and fixed during this review**: the `is_null_like()`
+  edge-punctuation gap (§1) - caught by adversarial self-testing before
+  being reported as complete, exactly the discipline this checklist
+  exists to enforce.
+- `black --check`/`flake8` clean on every file this pass touched.
+
+### 7. Final regression
+
+Full suite (excluding modules requiring `paperqa`/`fastapi`, not
+installed in this sandbox - a pre-existing, disclosed environment gap,
+not a code failure; CI runs the true full suite): **512 passed, 4 failed,
+87 skipped**. The 4 failures are `tests/test_llm_provider.py`'s
+`TestGeminiModelPrefixNormalization` class, failing on `ImportError:
+LiteLLM is not installed` - a missing local dependency unrelated to any
+change in this or the preceding three passes (confirmed present before
+this pass began). Zero code-caused failures. New tests this pass:
+`test_is_null_like_recognizes_common_data_entry_placeholders`,
+`test_null_like_input_resolves_to_absent_across_all_three_ontology_
+fields`, and `tests/test_confidence_tier_invariants.py`'s 6 tests.
+
+Independent BugSigDB evaluation (14,588 rows): body_site 99.1%/99.1%/
+0.991 (AUTO precision 100%), condition 95.8%/95.5%/0.956 (AUTO precision
+86.7%), host_species 100%/100%/1.000 (AUTO precision 100%) - all three
+fields at or above every previously-validated baseline, with the one
+apparent regression traced to an evaluation-harness bug and fixed (§3).
+
+### 8. Final decision: READY WITH CONDITIONS
+
+Not upgraded to unconditional READY. Every condition below is bounded and
+explicitly confirmed non-dangerous (none can produce a false AUTO
+mapping) - listed in full rather than summarized away:
+
+1. **condition field: 4 genuinely-wrong false-AUTO cases remain**, all
+   the same single root cause from the semantic-hardening pass -
+   BugSigDB's own ground truth for "SARS-CoV-2-related disease" points to
+   an obsolete MONDO ID with no live replacement; `"COVID-19"` is a
+   defensible, current, closely-related fallback, not a category error.
+2. **body_site field: 4 coarser-but-related (non-dangerous) mismatches
+   remain** out of 445 real cases (99.1% overall accuracy) - a real
+   ancestor of the correct answer, never a different concept.
+3. **The specificity override does not reach the ambiguous multi-match
+   branch** (found in the specificity pass's own adversarial review) -
+   `"Ascending colon and Saliva"`-shaped inputs correctly stay at REVIEW
+   but show a coarser primary label within that already-safe ambiguity.
+4. **The pre-existing local-store miss-fallback has no minimum-
+   informativeness gate** - very short or generic inputs that reach it
+   (rather than the static dict or the null-like check) can produce a
+   low-confidence, sometimes odd-looking REVIEW-tier suggestion (e.g.
+   `"sample"` -> `"human urinary metabolite"` at REVIEW). Never AUTO,
+   always curator-reviewable, and this pass's `is_null_like()` closes the
+   worst, most misleading instance of this class (`"N/A"` ->
+   `"nasal artery"`) - the remainder is a suggestion-quality issue, not a
+   correctness or safety one.
+
+None of these four conditions describes a path to a false, automatically-
+applied ontology mapping - every one of them, by construction and by
+direct adversarial testing this pass, terminates at REVIEW or NONE. A
+verdict of unconditional READY was considered and rejected specifically
+because these four are real and worth a curator/maintainer's awareness,
+not because any evidence points to a dangerous false-AUTO pathway - none
+was found, anywhere, in this pass's own adversarial testing.
+
+## 2026-08-09 (final sign-off) maintainer review of the four remaining conditions
+
+External-maintainer-style review of exactly the four conditions the
+preceding pass carried forward, each individually investigated,
+classified, and either fixed (with the smallest safe change and
+regression tests) or explicitly accepted with precise reasoning. No
+broad redesign - two real, bounded bugs were found and fixed; two were
+confirmed genuinely safe to accept as-is.
+
+### Condition 1: condition field's 4 "SARS-CoV-2-related disease" false-AUTO cases
+
+**Exact issue**: `normalize_condition("SARS-CoV-2-related disease")`
+returns `MONDO:0100096` ("COVID-19") at "auto" tier; BugSigDB's own
+ground truth for this text uses `MONDO:0100318`, so the evaluation
+scores it as a false-AUTO.
+
+**Affected code path**: `condition.py`'s `"covid-19"`/`"sars-cov-2"`/
+`"covid"` static-dict keys; `tiering.ground()`'s round-trip/obsolete
+check (which already runs against BioAnalyzer's own answer, correctly).
+
+**Investigated, not assumed**: queried the real synced MONDO data.
+`MONDO:0100318` is **obsolete with `replaced_by=""`** - no live successor
+term exists to point to instead. Checked whether any *other* real,
+current MONDO/EFO term the ground truth's multi-value ID list mentions
+alongside it (`EFO:0009796`) might be the intended answer -
+`EFO:0009796` is `"response to supplemental oxygen"`, an unrelated
+concept that only co-occurs because that particular BugSigDB row's
+Condition field has multiple, independent curated values, not because
+it's an alternate name for the same thing.
+
+**Classification**: `MONDO:0100096` "COVID-19" is real, current, non-
+obsolete, and branch-valid - reaching "auto" for it is **correct
+behavior**, not a false-AUTO in any dangerous sense. The evaluation's
+"wrong" label is an artifact of scoring against BugSigDB's own stale
+ground-truth ID, not evidence of a semantic or safety defect in
+BioAnalyzer. **Correctness-only, and even that is disputable** - not
+safety, not performance, not maintainability.
+
+**Decision: accept, do not fix.** There is no live term to switch to
+without either fabricating a "successor" mapping (explicitly prohibited)
+or matching an admittedly-obsolete ID (which would defeat the obsolete-
+term safety check this whole subsystem exists to enforce). Proven safe
+in `test_every_remaining_known_condition_stays_below_auto`
+(`tests/test_confidence_tier_invariants.py`) - the AUTO result is
+asserted explicitly, by name, as intentional.
+
+### Condition 2 / 3: body_site's remaining coarser-wrong cases and the ambiguous-branch override gap
+
+**Exact issue**: two of the four remaining body_site "coarser-but-
+related" cases from the preceding pass's evaluation - `"Mucosa of small
+intestine"` and `"Wall of small intestine"` - turned out to share a
+single root cause with a limitation that pass had already found and
+explicitly declined to fix (the specificity override not reaching
+`normalize_body_site()`'s *ambiguous* multi-match branch): both texts
+contain "small intestine" *and*, as a real word-boundary substring of
+that phrase, the generic casual-alias key "intestine" - two distinct
+static-dict values, so `match_all()` reports genuine ambiguity and the
+override (which only ran in the single-match branch) never got a chance
+to notice the complete phrase is itself a real, more specific UBERON
+term neither matched key represents.
+
+**Affected code path**: `body_site.py`'s `normalize_body_site()`, the
+`len(matched) > 1` branch.
+
+**Re-investigated, not left as accepted**: the preceding pass's stated
+reason for not fixing this was a *suspected* risk - swapping in the
+override's answer might let an excluded key spuriously reappear as a
+candidate. Re-traced `LookupMatcher.candidates()` directly (not
+re-asserted from memory) and confirmed the exclusion logic keys off
+`winning_key` (the original matched key text), not `winning_value` - so
+swapping in the override's `(label, ontology_id)` while keeping
+`winning_key` unchanged cannot cause this. Verified empirically
+(`m.candidates("mucosa of small intestine", "small intestine",
+override_value)` returns `()`, not a spurious "feces" candidate) before
+writing the fix.
+
+**Classification**: correctness (specificity), not safety - both cases
+were already REVIEW tier (confidence 0.9, `PARTIALLY_PRESENT`) before
+and after; the fix improves *which* answer is shown, never the tier.
+
+**Decision: fixed.** `_resolve_structure_override()` is now also called
+from the ambiguous-match branch. Regression test:
+`test_body_site_structure_override_also_applies_in_the_ambiguous_multi_
+match_branch` (`tests/test_normalization.py`) - covers both newly-fixed
+cases and re-confirms the previously-tested genuine-ambiguity cases
+(`"Ascending colon and Saliva"`, `"Colon and feces"`) still correctly
+surface their second candidate, unaffected.
+
+**Measured impact**: body_site precision/recall/F1 improved from
+99.1%/99.1%/0.991 to **99.8%/99.8%/0.998** (444/445 correct, down from
+441/445). The remaining single case (`"Insect head"`, an entomology
+term with real ancestor/descendant UBERON structure) is unrelated to
+this fix and left as a real, tiny, non-dangerous residual (REVIEW tier).
+
+### Condition 4: the miss-fallback's missing minimum-informativeness gate - root cause corrected, a real bug found and fixed
+
+**Exact issue, corrected from the preceding pass's description**: that
+report attributed generic-word suggestions (`"sample"` -> some
+unrelated-looking term) to `local_lookup()`'s local-store fallback
+having no confidence floor. Direct re-investigation (tracing actual
+execution, not re-asserting the prior description) found this was
+**wrong about the source**: `local_lookup("sample", ("uberon",))`
+returns `None` - nothing in the local store matches at all. The real
+source is **live EBI OLS4's fuzzy (`exact=false`) search returning
+cross-ontology results that `ols_search()` accepted and cached without
+validating them** - a genuinely different, more serious bug than the one
+originally described. Live-reproduced (not from a mock):
+`ols_search("sample", "uberon", "UBERON")` returned a real **CHEBI**
+term (`CHEBI:84087`, "human urinary metabolite") formatted and persisted
+to the on-disk cache as if it were a valid UBERON (body-site) result,
+because `format_ontology_id()` only ever uses the caller's `id_prefix`
+argument as a *fallback default* for a bare numeric ID - it never
+validates a *real*, embedded prefix against what the caller actually
+requested. EBI's `ontology=` search parameter turned out to be a
+relevance hint, not a hard filter, for fuzzy search.
+
+**Affected code path**: `app/normalization/ols.py`'s `ols_search()` -
+called by both `body_site.py` and `condition.py`'s live-network
+fallbacks.
+
+**Classification**: **not safety** (every `ols_search()` result is
+`mapping_confidence <= 0.9`, structurally incapable of "auto" - proven
+in `test_local_lookup_and_ols_are_structurally_incapable_of_auto_
+confidence`) - but a real **correctness/data-quality defect**: a field
+scoped to one ontology could silently return, and durably cache, a term
+from a completely unrelated one.
+
+**Decision: fixed.** `ols_search()` now rejects any result whose own
+CURIE prefix doesn't match the requested `id_prefix`, before formatting
+or caching it - one added check, no architecture change. Stale,
+already-cached cross-ontology entries (19 rows, found via direct cache
+inspection) were purged so the fix takes effect immediately rather than
+being masked by pre-existing bad cache data. Regression tests:
+`test_ols_search_rejects_cross_ontology_result` (mocked, so it doesn't
+depend on live OLS's current behavior remaining reproducible) and
+`test_ols_search_accepts_matching_ontology_result` (same-ontology
+results must still work).
+
+**Residual, correctly re-scoped and accepted**: same-ontology but low-
+relevance fuzzy matches (`"patient"` -> a real but unrelated UBERON
+term, `"study"` -> another) are a separate, narrower, and genuinely
+lower-priority issue than the cross-ontology bug that prompted this
+investigation - EBI OLS4's fuzzy search has no relevance-score floor
+this codebase currently reads, and always returning *some* result for
+*any* input text is inherent to fuzzy (non-exact) search. Never
+dangerous (same structural confidence cap applies), proven directly for
+five representative generic words across both affected fields in
+`test_every_remaining_known_condition_stays_below_auto`. Accepted as a
+suggestion-quality characteristic, not fixed further this pass - adding
+a relevance-score threshold would require inspecting and calibrating
+against OLS's actual scoring fields, a real but separate piece of work
+from the cross-ontology-contamination bug this investigation was
+launched to chase down.
+
+**One honest, disclosed side effect**: because a permanently cross-
+ontology-only query can now never be cached (the fix returns before
+`store_cached_term()` is reached), a query that always triggers this
+path will re-attempt a live OLS network call on every occurrence rather
+than being served from cache after the first. Measured: the independent
+evaluation's wall-clock time rose from ~5.7s to ~15-22s across repeated
+runs after the stale cache was purged (still using the local-store-first
+chain by default; this is live-network latency for the small number of
+real dump values that reach this specific path). Classified as a real
+but minor, non-recurring-in-the-worst-case, **performance-only**
+characteristic - not fixed further this pass (a "known-bad, don't
+retry" negative-cache would be a reasonable follow-up but is new
+complexity beyond a "smallest safe fix" for a non-safety issue).
+
+### Final safety proof
+
+`test_every_remaining_known_condition_stays_below_auto`
+(`tests/test_confidence_tier_invariants.py`) directly asserts, for every
+one of the four conditions above (the two fixed and the two accepted):
+no case reaches AUTO except Condition 1's `"SARS-CoV-2-related disease"`
+result, which is asserted as AUTO *by name*, with the reasoning for why
+that's correct rather than dangerous stated inline. Combined with the
+structural proof already in this same file (`mapping_confidence == 1.0`
+is returned from exactly one code shape per normalizer - a clean,
+pre-audited static-dict match with zero candidates - and both
+`local_lookup()` and `ols_search()` are hard-capped below it), this pass
+found zero paths, live-tested or structural, by which a remaining
+condition could produce an incorrect ontology identifier at AUTO
+confidence.
+
+### Final regression
+
+Full suite (same disclosed environment gap as every prior pass - modules
+requiring `paperqa`/`fastapi`, not installed in this sandbox, excluded;
+CI runs the true full suite): **516 passed, 4 failed, 87 skipped**. The
+4 failures are the same pre-existing `TestGeminiModelPrefixNormalization`
+`ImportError: LiteLLM is not installed` failures present before this
+pass (and every prior pass) began - a missing local dependency, not a
+code defect. Zero code-caused failures.
+
+Independent BugSigDB evaluation (14,588 rows, same corpus, ground truth
+unmodified): body_site **99.8%/99.8%/0.998** (up from 99.1%/99.1%/0.991;
+AUTO precision 100.0%, 72/72), condition **95.8%/95.5%/0.956**
+(unchanged; AUTO precision 86.7%, 52/60 - all 4 remaining genuinely-wrong
+AUTO cases are the single accepted Condition 1), host_species
+**100%/100%/1.000** (unchanged; AUTO precision 100%, 6/6). False-AUTO
+count across all three fields: body_site 0, condition 4 (all Condition
+1, accepted as correct-not-false), host_species 0.
+
+**Exact files changed this pass**: `app/normalization/ols.py` (the
+cross-ontology validation fix), `app/normalization/body_site.py` (the
+ambiguous-branch override extension), `tests/test_normalization.py` (4
+new/extended tests), `tests/test_confidence_tier_invariants.py` (1 new
+test), `scripts/eval/bugsigdb_independent_evaluation.py` (unchanged this
+pass - already fixed in the preceding pass), `docs/
+GROUNDING_ARCHITECTURE.md` (this section). The on-disk ontology-term
+cache (`cache/analysis_cache.db`) had 19 stale, now-invalid rows purged
+- data, not code.
+
+**Exact files intentionally left unchanged**: `app/normalization/
+condition.py`, `app/normalization/host_species.py`,
+`app/normalization/grounding/*` (tiering, backend, roots, local_backend,
+chain, ols_backend) - none of the four conditions traced back to a
+defect in condition-field-specific logic, host-species logic, or the
+grounding/tiering layer itself; touching any of them would have been
+scope creep beyond what the investigation actually found.
+
+### Final verdict: READY WITH CONDITIONS
+
+Not READY, and specifically not for a precise, bounded reason rather
+than residual caution: **Condition 1 remains** - a real evaluation
+"false-AUTO" that this pass concluded is not actually a defect, but
+which a maintainer should still be aware reflects BugSigDB ground-truth
+staleness rather than 100% agreement. **Not NOT READY**: this pass found
+zero evidence, anywhere in structural review or live adversarial
+testing, of a path to an *incorrect* automatic ontology mapping - the
+two real bugs found this pass (the ambiguous-branch gap, the OLS cross-
+ontology contamination) were both already confidence-capped below
+"auto" before being fixed, and are now fixed outright rather than merely
+shown to be non-dangerous.
+
+Remaining conditions, final classification:
+
+1. Condition 1 (SARS-CoV-2/obsolete ground truth) - **correctness-
+   adjacent, arguably not even a defect; not safety.**
+2. The residual "Insect head" specificity case - **correctness only;
+   not safety.**
+3. The OLS fuzzy-search relevance-floor gap (generic words like
+   `"patient"`/`"study"` at body_site) - **suggestion-quality only; not
+   safety.**
+4. The negative-caching performance characteristic for permanently-
+   cross-ontology queries - **performance only; not safety, not
+   correctness.**
+
+None of the four can produce a false AUTO mapping. This was proven, not
+assumed, for each one individually this pass.

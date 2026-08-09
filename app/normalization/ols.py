@@ -46,6 +46,26 @@ def ols_search(
     Successful resolutions are cached by (ontology, term) — see
     app.normalization.ontology_cache — since the same disease/body-site term
     recurs often and a confirmed mapping doesn't go stale.
+
+    Validates that the returned term's own CURIE prefix actually matches
+    *id_prefix* before accepting it - a real, live-observed gap found in
+    the 2026-08-09 final maintainer sign-off pass: `format_ontology_id()`
+    only ever uses *id_prefix* as a fallback default for a bare numeric
+    obo_id with no embedded prefix - it does not validate a *real*
+    embedded prefix against what the caller asked for. EBI OLS4's
+    `ontology=` search parameter is a hint, not a hard filter, for fuzzy
+    (`exact=false`) search - confirmed reproducible against the live API,
+    not a hypothetical: `ols_search("sample", "uberon", "UBERON")`
+    returned a real CHEBI term (`CHEBI:84087` "human urinary metabolite")
+    formatted and cached as if it were a body-site-relevant result, purely
+    because the query text happened to fuzzy-match a chemical entity
+    better than any real UBERON term. Never reachable at "auto" tier
+    either way (`mapping_confidence` here is always < 1.0), but a cross-
+    ontology result is never a trustworthy answer for a field that only
+    targets one ontology - rejecting it here means the caller's own
+    further fallback (a different ontology, or the final untyped
+    fallback) gets a chance instead of a confusing wrong-ontology
+    "review" suggestion.
     """
     if not query or not query.strip():
         return None
@@ -69,7 +89,9 @@ def ols_search(
             return None
         label = (docs[0].get("label") or "").strip()
         obo_id = format_ontology_id(docs[0].get("obo_id", ""), id_prefix)
-        if not label:
+        if not label or not obo_id:
+            return None
+        if obo_id.split(":", 1)[0].upper() != id_prefix.upper():
             return None
         store_cached_term(ontology, query, label, obo_id, mapping_confidence)
         return label, obo_id, mapping_confidence
