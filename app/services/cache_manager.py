@@ -23,6 +23,21 @@ class CacheManager:
         self.db_path = Path(db_path)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
 
+        # Real production issue found in a 2026-08-09 adversarial review:
+        # a read-only cache directory (e.g. root-owned from an earlier
+        # `docker run` without --user, as documented in
+        # docs/GROUNDING_ARCHITECTURE.md) makes every single grounding
+        # check log an identical "Failed to store grounding cache"
+        # warning - correctness is fine (grounding still works, just
+        # without the cache's latency benefit), but hundreds of identical
+        # warnings per run drown out real log signal and give no actionable
+        # hint about the cause. Track whether the first-occurrence,
+        # actionable warning has already been logged for grounding cache
+        # reads/writes this process's lifetime; log every occurrence after
+        # that at DEBUG (still inspectable, not spamming WARNING).
+        self._grounding_cache_write_failure_logged = False
+        self._grounding_cache_read_failure_logged = False
+
         self._init_database()
 
     def _get_connection(self):
@@ -517,9 +532,25 @@ class CacheManager:
                 "root_id": root_id or "",
             }
         except Exception as e:
-            logger.warning(
-                f"Failed to read grounding cache for {ontology_id}: {mask_exception_message(e)}"
-            )
+            if not self._grounding_cache_read_failure_logged:
+                self._grounding_cache_read_failure_logged = True
+                logger.warning(
+                    "Grounding cache reads are failing (first occurrence this "
+                    "run) - grounding will still work correctly, just without "
+                    "the cache's latency benefit, and every check will fall "
+                    "through to a live lookup. If the error below mentions a "
+                    "permission/readonly issue, the cache directory is likely "
+                    "owned by a different user (e.g. root, from a prior "
+                    "`docker run` without --user) - see "
+                    "docs/GROUNDING_ARCHITECTURE.md's cache-permission section "
+                    "for the one-time fix. Further occurrences this run are "
+                    "logged at DEBUG, not repeated here, to avoid log spam. "
+                    f"ontology_id={ontology_id}: {mask_exception_message(e)}"
+                )
+            else:
+                logger.debug(
+                    f"Grounding cache read failed for {ontology_id}: {mask_exception_message(e)}"
+                )
             return None
         finally:
             if conn:
@@ -561,9 +592,25 @@ class CacheManager:
             conn.commit()
             return True
         except Exception as e:
-            logger.warning(
-                f"Failed to store grounding cache for {ontology_id}: {mask_exception_message(e)}"
-            )
+            if not self._grounding_cache_write_failure_logged:
+                self._grounding_cache_write_failure_logged = True
+                logger.warning(
+                    "Grounding cache writes are failing (first occurrence this "
+                    "run) - grounding will still work correctly, just without "
+                    "the cache's latency benefit, and every check will be "
+                    "recomputed instead of reused. If the error below mentions "
+                    "a permission/readonly issue, the cache directory is "
+                    "likely owned by a different user (e.g. root, from a "
+                    "prior `docker run` without --user) - see "
+                    "docs/GROUNDING_ARCHITECTURE.md's cache-permission section "
+                    "for the one-time fix. Further occurrences this run are "
+                    "logged at DEBUG, not repeated here, to avoid log spam. "
+                    f"ontology_id={ontology_id}: {mask_exception_message(e)}"
+                )
+            else:
+                logger.debug(
+                    f"Grounding cache write failed for {ontology_id}: {mask_exception_message(e)}"
+                )
             return False
         finally:
             if conn:

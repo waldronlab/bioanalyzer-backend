@@ -99,6 +99,7 @@ Thumbs.db
 
 # App specific
 cache/
+ontology_store/
 results/
 # BioAnalyzer
 results.txt

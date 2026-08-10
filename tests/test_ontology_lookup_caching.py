@@ -83,6 +83,15 @@ class TestHostSpeciesNcbiCaching:
         return resp
 
     def test_cache_hit_skips_network_call(self, monkeypatch):
+        # This suite tests the NCBI-cache-then-live-API layer specifically,
+        # which only runs after the local ontology store (real, complete
+        # NCBITaxon data - see app.normalization.local_lookup) has already
+        # been tried and missed. "Oryzias latipes" is itself a real species
+        # in that store, so without this, local_lookup() would answer
+        # before get_cached_term()/requests.get are ever reached, making
+        # this test exercise the wrong layer. Force a local-store miss so
+        # this test isolates the cache/live-API layer it's actually about.
+        monkeypatch.setattr(host_species, "local_lookup", lambda *a, **k: None)
         monkeypatch.setattr(
             host_species,
             "get_cached_term",
@@ -104,6 +113,8 @@ class TestHostSpeciesNcbiCaching:
         assert result.status == "PRESENT"
 
     def test_cache_miss_calls_network_and_stores_result(self, monkeypatch):
+        # See test_cache_hit_skips_network_call's comment - same reasoning.
+        monkeypatch.setattr(host_species, "local_lookup", lambda *a, **k: None)
         monkeypatch.setattr(
             host_species, "get_cached_term", lambda provider, term: None
         )
