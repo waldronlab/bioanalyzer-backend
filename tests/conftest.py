@@ -237,6 +237,65 @@ def client():
     return TestClient(fastapi_app, raise_server_exceptions=False)
 
 
+# ---------------------------------------------------------------------
+# Shared "real local ontology store" skip guard
+# ---------------------------------------------------------------------
+#
+# Real, severe CI gap found 2026-08-10 (PR #120): several tests
+# (test_local_lookup.py, parts of test_confidence_tier_invariants.py,
+# test_grounding_backends.py's NCBITaxon performance test) assert
+# specific answers from LocalOntologyBackend against the *real*, fully
+# synced local ontology store (ontology_store/ontology_store.db, built
+# by scripts/ontology_sync.py - ~4.6M terms across 10 ontologies). That
+# file is gitignored (1.6GB+) and CI has no step that builds it, so in
+# CI - and in any fresh clone that hasn't run a real sync - the local
+# store has no data at all, and every one of those tests fails.
+#
+# This is not a production bug: app.normalization.grounding.tiering's
+# module docstring already documents this exact degraded mode as
+# intentional and safe - "an empty local store just means every check
+# falls through to OLS, identical to the old ols-only default." Only
+# tests asserting a *specific* real-data answer need to skip; nothing
+# about production correctness or safety depends on this.
+#
+# A prior version of this guard (in test_grounding_backends.py) checked
+# `os.path.exists(DEFAULT_DB_PATH)` only - insufficient, and confirmed
+# wrong in CI: sqlite3 lazily creates an empty file at the connection
+# path on first use, so "the file exists" became true as soon as
+# *anything* in the same test session opened a LocalOntologyBackend at
+# the default path, even with zero rows inside. Checking a real
+# ontology's `is_complete()` flag (only ever set by a real sync) is what
+# actually distinguishes "no data" from "a lazily-created empty file."
+def _real_ontology_store_available() -> bool:
+    try:
+        from app.normalization.grounding.local_backend import (
+            DEFAULT_DB_PATH,
+            LocalOntologyBackend,
+        )
+    except ImportError:
+        return False
+
+    db_path = os.getenv("LOCAL_ONTOLOGY_DB_PATH", DEFAULT_DB_PATH)
+    if not Path(db_path).exists():
+        return False
+    try:
+        backend = LocalOntologyBackend(db_path=db_path)
+        try:
+            return backend.is_complete("ncbitaxon")
+        finally:
+            backend.close()
+    except Exception:
+        return False
+
+
+requires_real_ontology_store = pytest.mark.skipif(
+    not _real_ontology_store_available(),
+    reason="requires a real, fully-synced local ontology store "
+    "(scripts/ontology_sync.py) - not present in this environment "
+    "(e.g. CI, or a fresh clone that hasn't run a sync)",
+)
+
+
 @pytest.fixture
 def override_deps():
     """

@@ -165,7 +165,11 @@ def _bfs_edges_from(db: "_Connection", ontology: str, start: str, target: str) -
             chunk = frontier_list[i : i + _EDGE_QUERY_CHUNK]
             placeholders = ", ".join("?" for _ in chunk)
             rows = db.execute(
-                f"SELECT object FROM edges WHERE ontology = ? AND subject IN ({placeholders})",
+                # nosec B608 - `placeholders` is just a `?`-per-chunk-item
+                # count string (see the line above), never a value; every
+                # real value (`ontology`, each `chunk` item) is passed
+                # through the parameterized tuple below, not interpolated.
+                f"SELECT object FROM edges WHERE ontology = ? AND subject IN ({placeholders})",  # nosec B608
                 (ontology, *chunk),
             )
             for (obj,) in rows:
@@ -458,7 +462,11 @@ class LocalOntologyBackend:
         synonyms/edges. Does not touch `ontology_meta` - `mark_complete()`
         overwrites that row directly via `INSERT OR REPLACE`."""
         for table in ("terms", "synonyms", "edges", "xrefs"):
-            self._db.execute(f"DELETE FROM {table} WHERE ontology = ?", (ontology,))
+            # `table` iterates a fixed, hardcoded literal tuple immediately
+            # above, never external/user input; the real value (`ontology`)
+            # is parameterized.
+            query = f"DELETE FROM {table} WHERE ontology = ?"  # nosec B608
+            self._db.execute(query, (ontology,))
         self.commit()
 
     def mark_complete(
@@ -532,7 +540,11 @@ class LocalOntologyBackend:
         if scopes:
             placeholders = ",".join("?" for _ in scopes)
             rows = self._db.execute(
-                f"SELECT s.curie, s.synonym, s.scope, t.label, t.version "
+                # nosec B608 - `placeholders` is a `?`-per-scope-count
+                # string only (see the line above); every real value
+                # (`ontology`, each `scopes` entry, `normalized`) is passed
+                # through the parameterized tuple below, not interpolated.
+                f"SELECT s.curie, s.synonym, s.scope, t.label, t.version "  # nosec B608
                 f"FROM synonyms s JOIN terms t "
                 f"ON t.ontology = s.ontology AND t.curie = s.curie "
                 f"WHERE s.ontology = ? AND s.scope IN ({placeholders}) "

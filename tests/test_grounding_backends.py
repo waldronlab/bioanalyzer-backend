@@ -14,9 +14,8 @@ isn't importable.
 
 from __future__ import annotations
 
-import os
-
 import pytest
+from conftest import requires_real_ontology_store
 
 from app.normalization import grounding as grounding_module
 from app.normalization import ols as ols_module
@@ -998,10 +997,7 @@ def test_ground_with_explicit_backend_overrides_default(monkeypatch):
     assert decision.check.exists is False
 
 
-@pytest.mark.skipif(
-    not os.path.exists(DEFAULT_DB_PATH),
-    reason="real synced local ontology store not present in this environment",
-)
+@requires_real_ontology_store
 def test_local_backend_reachable_from_stays_fast_against_real_ncbitaxon_data():
     """Permanent regression guard for a real, severe performance bug fixed
     2026-08: a single `WITH RECURSIVE` SQL query for `reachable_from()`

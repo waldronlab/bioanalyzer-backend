@@ -2,6 +2,7 @@ import time
 
 import pytest
 import requests
+from conftest import requires_real_ontology_store
 
 from app.normalization import body_site as body_site_module
 from app.normalization import condition as condition_module
@@ -213,18 +214,24 @@ def test_body_site_normalization_variants():
     t = normalize_body_site("nasal cavity swab")
     assert t.label == "nasal cavity"
 
+    t = normalize_body_site("")
+    assert t.status == "ABSENT"
+
+
+@requires_real_ontology_store
+def test_body_site_normalization_blood_plasma_specificity():
     # "blood plasma" is itself a real, more specific UBERON term
     # (UBERON:0001969, distinct from generic "blood") that real BugSigDB
     # ground truth confirms is the correct answer here - see the 2026-08-09
     # specificity-hardening pass's `_resolve_structure_override()` (this
     # file's `test_body_site_specificity_override_prefers_specific_
-    # descendant_when_input_supports_it` has the full battery).
+    # descendant_when_input_supports_it` has the full battery). Split out
+    # from test_body_site_normalization_variants() (2026-08-10) since this
+    # is the only assertion in that test needing the real local ontology
+    # store - see tests/conftest.py's requires_real_ontology_store.
     t = normalize_body_site("blood plasma")
     assert t.label == "blood plasma"
     assert t.ontology_id == "UBERON:0001969"
-
-    t = normalize_body_site("")
-    assert t.status == "ABSENT"
 
 
 def test_body_site_precise_anatomical_terms_outrank_specimen_type_alias():
@@ -253,6 +260,7 @@ def test_body_site_precise_anatomical_terms_outrank_specimen_type_alias():
     assert normalize_body_site("oral swab").label == "saliva"
 
 
+@requires_real_ontology_store
 def test_body_site_local_store_override_catches_phrasings_beyond_the_static_dict():
     """2026-08-09 semantic-hardening follow-up: the fix above (adding
     "Small intestine"/"Oral cavity" as their own dict keys) only ever
@@ -328,6 +336,7 @@ def test_body_site_local_store_override_catches_phrasings_beyond_the_static_dict
     assert normalize_body_site("dental").label == "saliva"
 
 
+@requires_real_ontology_store
 def test_body_site_structure_override_also_applies_in_the_ambiguous_multi_match_branch():
     """Final maintainer sign-off pass (2026-08-09): the override above was
     previously wired only into the single-static-match branch of
@@ -364,6 +373,7 @@ def test_body_site_structure_override_also_applies_in_the_ambiguous_multi_match_
     assert ("colon", "UBERON:0001155") in already_covered.candidates
 
 
+@requires_real_ontology_store
 def test_body_site_specificity_override_prefers_specific_descendant_when_input_supports_it():
     """Final Anatomical Specificity pass (2026-08-09, later same day):
     `_resolve_structure_override()` was generalized from a hand-picked
@@ -469,6 +479,7 @@ def test_condition_normalization_variants():
     assert t.ontology_id == "MONDO:0100096"
 
 
+@requires_real_ontology_store
 def test_condition_disease_subtype_specificity_against_real_mondo_data():
     """2026-08-09 semantic-hardening pass, disease-specificity section: a
     generic key ("diabetes"/"allergy") must not silently swallow a more
@@ -525,6 +536,7 @@ def test_condition_disease_subtype_specificity_against_real_mondo_data():
     )
 
 
+@requires_real_ontology_store
 def test_condition_full_text_override_catches_measurement_and_subtype_terms():
     """2026-08-09 semantic-hardening pass, EFO semantic-type validation
     section: a static-dict key can match only because it's a *substring* of

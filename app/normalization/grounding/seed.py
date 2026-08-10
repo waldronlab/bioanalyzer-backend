@@ -123,7 +123,14 @@ def ensure_ontology(
         with tempfile.TemporaryDirectory() as tmp:
             gz_path = os.path.join(tmp, f"{ontology_slug}.db.gz")
             db_path = os.path.join(tmp, f"{ontology_slug}.db")
-            urllib.request.urlretrieve(url, gz_path)  # noqa: S310 - fixed https URL
+            # nosec B310 - `url` is built above from the hardcoded
+            # `SEMANTIC_SQL_BASE_URL` (a fixed "https://..." string
+            # literal) plus `ontology_slug`, which only ever comes from
+            # this codebase's own hardcoded ontology registry
+            # (scripts/ontology_sync.py), never from a network request or
+            # other untrusted input - the scheme itself can never be
+            # "file://" or otherwise attacker-controlled.
+            urllib.request.urlretrieve(url, gz_path)  # nosec B310
             with gzip.open(gz_path, "rb") as src, open(db_path, "wb") as dst:
                 shutil.copyfileobj(src, dst)
             # Clear any prior copy of this ontology only after the fetch has
@@ -201,7 +208,11 @@ def _project_semantic_sql(
             syn_rows = [
                 (curie, synonym, scope)
                 for curie, synonym in src.execute(
-                    f"SELECT subject, value FROM {view} WHERE subject LIKE ?",
+                    # nosec B608 - `view` iterates the fixed, hardcoded
+                    # `_SYNONYM_VIEWS` dict above, never external/user
+                    # input; the real value (`like_pattern`) is
+                    # parameterized.
+                    f"SELECT subject, value FROM {view} WHERE subject LIKE ?",  # nosec B608
                     (like_pattern,),
                 )
                 if synonym

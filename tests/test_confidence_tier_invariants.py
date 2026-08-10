@@ -27,6 +27,8 @@ tier requires, structurally, not by convention.
 
 from __future__ import annotations
 
+from conftest import requires_real_ontology_store
+
 from app.normalization.body_site import normalize_body_site
 from app.normalization.condition import normalize_condition
 from app.normalization.grounding import TIER_AUTO, TIER_NONE, TIER_REVIEW, tier_for
@@ -92,7 +94,14 @@ def test_auto_tier_cases_are_clean_unambiguous_full_confidence_matches():
         assert tier_for(t) == TIER_AUTO, f"{normalize.__name__}({text!r}): {t}"
 
 
+@requires_real_ontology_store
 def test_review_tier_cases_never_reach_auto():
+    """Most of _REVIEW_CASES depends on the real local ontology store
+    specifically (the full-text override mechanisms in body_site.py/
+    condition.py check local_lookup() before any live fallback) - without
+    it, e.g. "Ascending colon" falls through to the generic static "colon"
+    match at AUTO instead of the override's more specific REVIEW-tier
+    answer. See tests/conftest.py's requires_real_ontology_store."""
     for normalize, text in _REVIEW_CASES:
         t = normalize(text)
         tier = tier_for(t)
@@ -131,6 +140,7 @@ def test_no_case_with_populated_candidates_ever_reaches_auto():
             )
 
 
+@requires_real_ontology_store
 def test_local_lookup_and_ols_are_structurally_incapable_of_auto_confidence():
     """`local_lookup()` and `ols_search()` are the two non-static-dict
     sources every normalizer's fallback chain can produce a match from.

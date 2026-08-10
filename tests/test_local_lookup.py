@@ -9,7 +9,18 @@ project's established convention for this subsystem.
 
 from __future__ import annotations
 
+from conftest import requires_real_ontology_store
+
 from app.normalization.local_lookup import local_lookup
+
+# Every test below (except the two trivial no-match cases right after
+# this line, which are true regardless of what data the store holds)
+# asserts a specific real answer from the real, fully-synced local
+# ontology store - see tests/conftest.py's requires_real_ontology_store
+# docstring for why this must skip, not fail, when that data isn't
+# present (e.g. CI, or a fresh clone that hasn't run
+# scripts/ontology_sync.py).
+pytestmark = requires_real_ontology_store
 
 
 def test_local_lookup_returns_none_for_empty_query():
