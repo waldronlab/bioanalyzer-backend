@@ -181,6 +181,21 @@ def _bfs_edges_from(db: "_Connection", ontology: str, start: str, target: str) -
     return False
 
 
+_SQLITE_MAGIC = b"SQLite format 3\x00"
+
+
+def _is_sqlite_file(db_path: str) -> bool:
+    """True if *db_path* exists and starts with SQLite's well-known 16-byte
+    file-format header. False for a missing file (nothing to detect yet -
+    callers fall through to the existing fresh-build engine selection) or
+    a genuine duckdb-native file (different, incompatible header)."""
+    try:
+        with open(db_path, "rb") as f:
+            return f.read(len(_SQLITE_MAGIC)) == _SQLITE_MAGIC
+    except OSError:
+        return False
+
+
 def normalize(value: str) -> str:
     """Casefold, trim, collapse whitespace/punctuation - the "normalize the
     value" half of the lookup step. Public (no
@@ -210,6 +225,33 @@ class _Connection:
             parent = os.path.dirname(db_path)
             if parent:
                 os.makedirs(parent, exist_ok=True)
+        # A real, severe perf bug found 2026-08 (post-release hardening
+        # audit): when the on-disk file is already in SQLite's format (the
+        # common case - ontology_sync.py falls back to sqlite3 whenever
+        # duckdb isn't installed at *sync* time, independent of whether
+        # it's installed now, at *read* time), duckdb.connect() doesn't
+        # open it natively - it transparently reads it through duckdb's
+        # sqlite_scanner compatibility layer instead. EXPLAIN confirmed
+        # that layer does a raw SQLITE_SCAN of the whole ~3.9M-row edges
+        # table and filters in memory afterward - idx_edges_subject exists
+        # and is intact, but the scanner never seeks it - turning a <1ms
+        # indexed lookup into ~1s per call (confirmed empirically) and the
+        # BFS branch-check's ~20-30 sequential hops into ~27s total, most
+        # of the way back to the exact "full scan instead of index seek"
+        # class of bug _bfs_edges_from's rewrite (above) already fixed
+        # once. Checking the well-known SQLite file-format magic header
+        # first and preferring the plain sqlite3 driver whenever it
+        # matches sidesteps the scanner entirely - same schema, same
+        # query strings, same results, just the driver proven fast for
+        # this exact indexed-point-lookup workload. Only applies when the
+        # file already exists in SQLite format; a fresh/absent file or a
+        # genuine duckdb-native file still prefer duckdb exactly as before.
+        if db_path != ":memory:" and _is_sqlite_file(db_path):
+            import sqlite3
+
+            conn = sqlite3.connect(db_path, check_same_thread=False)
+            conn.execute("SELECT name FROM sqlite_master LIMIT 1")
+            return "sqlite3", conn
         try:
             import duckdb  # optional, lazy - see module docstring
 

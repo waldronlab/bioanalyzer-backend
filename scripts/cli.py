@@ -1175,22 +1175,27 @@ def main() -> None:
     if not cmd or cmd == "help":
         cli.print_help()
     elif cmd == "build":
-        cli.build_containers()
+        if not cli.build_containers():
+            sys.exit(1)
     elif cmd == "start":
-        cli.start_application()
+        if not cli.start_application():
+            sys.exit(1)
         if getattr(args, "interactive", False):
             cli.ask_question("")
     elif cmd == "stop":
-        cli.stop_application()
+        if not cli.stop_application():
+            sys.exit(1)
     elif cmd == "restart":
-        cli.restart_application()
+        if not cli.restart_application():
+            sys.exit(1)
     elif cmd == "status":
         cli.get_system_status()
     elif cmd == "fields":
         cli.show_fields_info()
     elif cmd == "run":
         if getattr(args, "run_command", None) == "table":
-            cli.run_table(port=getattr(args, "port", 8501))
+            if not cli.run_table(port=getattr(args, "port", 8501)):
+                sys.exit(1)
         else:
             print("Usage: BioAnalyzer run table")
     elif cmd == "qa":
