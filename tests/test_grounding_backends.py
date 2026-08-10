@@ -492,8 +492,9 @@ def test_local_backend_reachable_from_incomplete_store_is_unknown_not_false(
 
 def test_local_backend_reachable_from_terminates_on_cycle(local_backend):
     # A -is_a-> B -is_a-> A: a real cycle. The UNION-based recursive CTE
-    # must still terminate (this is exactly the footgun SPEC 070 calls out
-    # UNION ALL for) and correctly report an unrelated root as unreachable.
+    # must still terminate (this is exactly the UNION-vs-UNION-ALL cycle
+    # footgun in recursive CTEs) and correctly report an unrelated root as
+    # unreachable.
     local_backend.insert_edge("mondo", "A", "is_a", "B")
     local_backend.insert_edge("mondo", "B", "is_a", "A")
     local_backend.mark_complete("mondo")

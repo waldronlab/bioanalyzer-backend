@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, NoReturn, Optional
 
 from fastapi import APIRouter, HTTPException, Query
 
@@ -96,8 +96,14 @@ def _build_rag_config_from_overrides(
     )
 
 
-def _log_and_raise_500(context: str, pmid: Optional[str], e: Exception) -> None:
-    """Consistent, credential-safe error logging + HTTP 500 translation."""
+def _log_and_raise_500(context: str, pmid: Optional[str], e: Exception) -> NoReturn:
+    """Consistent, credential-safe error logging + HTTP 500 translation.
+
+    Always raises - never returns - so every route's `except Exception:
+    _log_and_raise_500(...)` block is a real terminal statement, not a
+    fall-through. NoReturn (not None) lets mypy see that, instead of
+    flagging a spurious "missing return statement" on every call site.
+    """
     safe_error = mask_exception_message(e)
     if pmid:
         logger.error(f"{context} (PMID {pmid}): {safe_error}")

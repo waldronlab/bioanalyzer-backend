@@ -153,9 +153,8 @@ def _progressive_queries(query: str, max_extra: int = 2):
     """Yield ``query``, then progressively shorter variants: trailing-word-
     dropped first, then leading-word-dropped.
 
-    Leading-word-dropping found via a live cross-check against
-    metacurator's real MONDO grounding (see
-    docs/METACURATOR_METAHARMONIZER_ANALYSIS.md): a clinical modifier
+    Leading-word-dropping found via a live cross-check against real MONDO
+    grounding results: a clinical modifier
     prefix like "diarrhea-predominant" or "early-onset" often precedes the
     core condition name in extracted text, and OLS/MONDO search can miss
     the full modifier-heavy phrase even though the bare condition name

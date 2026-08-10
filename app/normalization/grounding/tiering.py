@@ -1,5 +1,5 @@
 """Confidence-tier classification for ontology-mapped fields - the
-orchestration layer that runs metacurator's four-step grounding discipline
+orchestration layer that runs BioAnalyzer's four-step grounding discipline
 against a `GroundingBackend` and reduces the result to `auto`/`review`/
 `none`.
 
@@ -23,11 +23,11 @@ fixed by a one-time manual re-verification of every static ID against live
 OLS - but a one-time fix doesn't stop it recurring: if an ontology
 deprecates a currently-correct static ID later, nothing would notice unless
 something re-checks a static match after the fact. `ground()` closes that
-gap by running the round-trip + branch + obsolete steps (SPEC 070) against
+gap by running the round-trip + branch + obsolete steps against
 any match that would otherwise earn "auto", downgrading to "review" if any
 step fails - and never touches live-lookup results (those are already
-"review" and stay there; loosening that to a match-quality-based tiering,
-the way metacurator itself does it, would reopen the original hole).
+"review" and stay there; loosening that to a match-quality-based tiering
+would reopen the original hole).
 
 Backend selection
 ------------------
@@ -81,8 +81,8 @@ TIER_NONE = "none"
 #   "chain" (default) - LocalOntologyBackend first (instant, deterministic,
 #       offline; real complete EFO/MONDO/UBERON/NCBITaxon/DOID/HP data as of
 #       the 2026-08 full sync), OLSBackend second (broader coverage / any
-#       ontology this store hasn't been synced for) - metacurator's own
-#       preferred shape, safe against the partial-coverage bug because
+#       ontology this store hasn't been synced for) - this local-first,
+#       OLS-fallback shape is safe against the partial-coverage bug because
 #       LocalOntologyBackend correctly reports "unknown" (None), not a false
 #       negative, for any ontology it hasn't been marked complete for (see
 #       local_backend.py's module docstring). Degrades gracefully to

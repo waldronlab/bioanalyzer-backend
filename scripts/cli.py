@@ -179,7 +179,15 @@ class BioAnalyzerCLI:
         )
 
     def _ensure_volume_directories(self) -> bool:
-        for name in ["cache", "logs", "results"]:
+        # Must match docker-compose.yml's bind-mounted host directories
+        # exactly. Any left off this list that don't already exist get
+        # auto-created by the Docker daemon on first `docker compose up` -
+        # as root, regardless of the "${UID:-1000}:${GID:-1000}" the
+        # container itself runs as - which then makes that same directory
+        # permission-denied for this (non-root) container from then on.
+        # Pre-creating them here, owned by whoever runs this CLI, avoids
+        # that entirely.
+        for name in ["cache", "logs", "results", "models", "ontology_store"]:
             path = project_root / name
             try:
                 path.mkdir(parents=True, exist_ok=True)
@@ -533,7 +541,7 @@ class BioAnalyzerCLI:
         while True:
             try:
                 r = self._session.get(
-                    f"http://localhost:8000/api/v1/analyze/{pmid}",
+                    self._build_api_url(f"/analyze/{pmid}"),
                     params={"refresh": "true"} if refresh else None,
                     timeout=request_timeout,
                 )
@@ -845,7 +853,7 @@ class BioAnalyzerCLI:
         try:
             print("🤔 Thinking...")
             r = self._session.post(
-                "http://localhost:8000/api/v1/qa",
+                self._build_api_url("/qa"),
                 json={"question": question},
                 timeout=60,
             )
@@ -1167,22 +1175,27 @@ def main() -> None:
     if not cmd or cmd == "help":
         cli.print_help()
     elif cmd == "build":
-        cli.build_containers()
+        if not cli.build_containers():
+            sys.exit(1)
     elif cmd == "start":
-        cli.start_application()
+        if not cli.start_application():
+            sys.exit(1)
         if getattr(args, "interactive", False):
             cli.ask_question("")
     elif cmd == "stop":
-        cli.stop_application()
+        if not cli.stop_application():
+            sys.exit(1)
     elif cmd == "restart":
-        cli.restart_application()
+        if not cli.restart_application():
+            sys.exit(1)
     elif cmd == "status":
         cli.get_system_status()
     elif cmd == "fields":
         cli.show_fields_info()
     elif cmd == "run":
         if getattr(args, "run_command", None) == "table":
-            cli.run_table(port=getattr(args, "port", 8501))
+            if not cli.run_table(port=getattr(args, "port", 8501)):
+                sys.exit(1)
         else:
             print("Usage: BioAnalyzer run table")
     elif cmd == "qa":

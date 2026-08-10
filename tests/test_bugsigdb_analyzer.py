@@ -753,6 +753,28 @@ class TestAnalyzePaperSimple:
         assert result is not None
         assert result["fields"]["host_species"]["status"] == "PRESENT"
 
+    @patch("app.services.bugsigdb_analyzer.is_in_bugsigdb", return_value=True)
+    @patch("app.services.bugsigdb_analyzer.get_unified_qa")
+    @patch("app.services.bugsigdb_analyzer.get_pubmed_retriever")
+    @patch("app.services.bugsigdb_analyzer.get_cache_manager")
+    async def test_in_bugsigdb_true_even_when_field_extraction_fails(
+        self, mock_get_cache, mock_get_retriever, mock_get_qa, mock_in_bugsigdb
+    ):
+        """A PMID present in BugSigDB must report in_bugsigdb=True regardless
+        of whether curation-field extraction itself succeeds - the two are
+        independent facts about the paper. Reuses the empty/invalid LLM
+        payload setup that forces the heuristic-fallback extraction path."""
+        mock_get_cache.return_value = _make_mock_cache_manager()
+        mock_get_retriever.return_value = _make_mock_retriever(
+            abstract="A study of 50 patients with diabetes using 16S rRNA sequencing."
+        )
+        mock_get_qa.return_value = _make_mock_unified_qa(json_text="not valid json")
+
+        result = await analyze_paper_simple("12345678")
+
+        assert result is not None
+        assert result["in_bugsigdb"] is True
+
     @patch("app.services.bugsigdb_analyzer.is_in_bugsigdb", return_value=False)
     @patch("app.services.bugsigdb_analyzer.get_unified_qa")
     @patch("app.services.bugsigdb_analyzer.get_pubmed_retriever")
@@ -817,6 +839,24 @@ class TestAnalyzePaperWithRag:
 
         assert result is not None
         assert result["rag_enabled"] is True
+
+    @patch("app.services.bugsigdb_analyzer.is_in_bugsigdb", return_value=True)
+    @patch("app.services.bugsigdb_analyzer.get_unified_qa")
+    @patch("app.services.bugsigdb_analyzer.get_pubmed_retriever")
+    @patch("app.services.bugsigdb_analyzer.get_cache_manager")
+    async def test_in_bugsigdb_true_even_when_field_extraction_fails(
+        self, mock_get_cache, mock_get_retriever, mock_get_qa, mock_in_bugsigdb
+    ):
+        """Same independence guarantee as the v1 pipeline: a PMID present in
+        BugSigDB reports in_bugsigdb=True regardless of extraction outcome."""
+        mock_get_cache.return_value = _make_mock_cache_manager()
+        mock_get_retriever.return_value = _make_mock_retriever(full_text="short")
+        mock_get_qa.return_value = _make_mock_unified_qa(json_text="not valid json")
+
+        result = await analyze_paper_with_rag("12345678", use_rag=True)
+
+        assert result is not None
+        assert result["in_bugsigdb"] is True
 
     @patch("app.services.bugsigdb_analyzer.get_pubmed_retriever", return_value=None)
     @patch("app.services.bugsigdb_analyzer.get_cache_manager")

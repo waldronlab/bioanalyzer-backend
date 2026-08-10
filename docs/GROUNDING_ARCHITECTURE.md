@@ -1,9 +1,10 @@
 # Ontology Grounding Architecture
 
 Date: 2026-08-05. Redesign of `app/normalization/grounding.py` (single file)
-into `app/normalization/grounding/` (package), measured against
-[metacurator](https://github.com/seandavi/metacurator)'s
-`GroundingBackend` design (`docs/spec/070-ontology-grounding.md`). Companion
+into `app/normalization/grounding/` (package), built around a
+`GroundingBackend` design that separates the four-step grounding discipline
+(lookup, round-trip, branch check, obsolete check) from where terms
+actually live (live OLS API vs. local ontology store). Companion
 to `docs/ONTOLOGY_AUDIT.md` (the 2026-07 incident and its original fix) and
 `docs/audits/REMOVAL_CANDIDATES.md`-style docs elsewhere in this repo.
 
@@ -412,17 +413,16 @@ variants of the winning match) also exists only in `condition.py`'s
 `_other_condition_candidates` - `body_site.py`'s ambiguity handling doesn't
 do it, so the two fields can behave inconsistently on the same kind of input.
 
-**metacurator:** matches against the full bound ontology's labels *and*
+**Target design:** match against the full bound ontology's labels *and*
 synonyms (exact/broad/narrow/related scope), one algorithm, one code path,
-scoped by schema declaration. Its own honest caveat: "the schema and
-curation coverage are still illustrative (one starter schema)" - it's a
-toolkit, not yet a deployed system with real field bindings.
+driven by the schema's own declared field bindings instead of three
+independently maintained implementations.
 
-**Verdict:** metacurator's design is more general and has zero duplicated
-matching logic. BioAnalyzer's static-dict approach is a deliberate,
-reasonable tradeoff (every entry is human-verified, not just algorithmically
-matched) but the *triplicated implementation* of the same algorithm is a
-real defect, not a design choice.
+**Verdict:** BioAnalyzer's static-dict approach is a deliberate, reasonable
+tradeoff (every entry is human-verified, not just algorithmically matched),
+but the *triplicated implementation* of the same "longest substring match
+wins" algorithm across three normalizers is a real defect, not a design
+choice.
 **Scope decision:** not fixed in this pass - see §5.
 
 ### Round-trip verification
@@ -436,12 +436,13 @@ route to `ebi.ac.uk`) - `bool(term.get("is_obsolete", False))` defaults to
 failure: a shape mismatch would make every term look verified-clean rather
 than "unable to verify."
 
-**metacurator:** deterministic query against a store it built and owns the
-schema of end-to-end (its own semantic-sql projection). Round-trip failure
-modes are only "store is stale," never "silently misparsed a live response."
+**Target design:** a deterministic query against a store BioAnalyzer builds
+and owns the schema of end-to-end (a local semantic-sql projection).
+Round-trip failure modes become only "store is stale," never "silently
+misparsed a live response."
 
-**Verdict:** metacurator's approach structurally eliminates a class of risk
-BioAnalyzer's live-API approach carries by construction.
+**Verdict:** a local, self-owned store structurally eliminates a class of
+risk the live-API approach carries by construction.
 
 ### Branch/ancestor check
 
@@ -449,22 +450,22 @@ BioAnalyzer's live-API approach carries by construction.
 EBI's server-side graph traversal - a black box, not independently testable
 offline, same shape-assumption risk as round-trip.
 
-**metacurator:** self-computed recursive CTE over a local `edges` table,
+**Target design:** a self-computed recursive CTE over a local `edges` table,
 with an explicit, documented cycle guard (`UNION`, not `UNION ALL` - DuckDB/
 SQLite have no `CYCLE` clause, so this is what actually terminates recursion
 on a cyclic graph). Fully unit-testable against a tiny fixture DAG.
 
-**Verdict:** metacurator's is auditable and testable; BioAnalyzer's (before)
-wasn't.
+**Verdict:** a local, self-computed check is auditable and testable;
+BioAnalyzer's (before) live-API-only approach wasn't.
 
 ### Confidence tiering
 
 **BioAnalyzer:** source-based - only static-dict membership can ever reach
-`"auto"`, regardless of match quality. **metacurator:** match-quality-based
-- exact label/exact-synonym + branch-ok earns `"auto"` for *any* value that
-matches, not just a pre-vetted list.
+`"auto"`, regardless of match quality. **Alternative considered:**
+match-quality-based tiering - exact label/exact-synonym + branch-ok earns
+`"auto"` for *any* value that matches, not just a pre-vetted list.
 
-**Verdict, both ways:** metacurator's is more general and scales with
+**Verdict:** a match-quality-based scheme is more general and scales with
 ontology content instead of a hand-maintained list. But it also trusts
 "exact label match" as sufficient for auto-apply with no equivalent to
 BioAnalyzer's "a human independently verified this exact ID once" signal -
@@ -472,8 +473,8 @@ if two unrelated concepts share a label string, or the ontology itself has
 an error, match-quality-based tiering could auto-apply a wrong ID in a way
 BioAnalyzer's human-reviewed static list structurally can't. Given this
 codebase's actual incident history (fabricated IDs slipping through at
-`"auto"`), source-based tiering is a defensible, deliberate choice - not
-simply "behind" metacurator here. **Kept unchanged in this redesign.**
+`"auto"`), source-based tiering is a defensible, deliberate choice.
+**Kept unchanged in this redesign.**
 
 ### Caching
 
@@ -481,8 +482,8 @@ simply "behind" metacurator here. **Kept unchanged in this redesign.**
 `grounding_check_cache`) with a manually reimplemented per-row TTL
 (`is_cache_valid`). Reasonable given a live-API-dependent backend - "how
 long do I trust the last thing OLS told me" is a real, per-term question a
-local-store design doesn't have. Not "behind" metacurator here; a different
-problem.
+local-store design doesn't have. A different problem than the one a
+local-store backend solves, not a shortcoming.
 
 ### Reproducibility / testability
 
@@ -493,18 +494,19 @@ JSON in `test_normalization.py` - written by the same person, from the same
 unverified assumption about OLS's real shape, so the mocks could be
 systematically wrong in the same way the code is.
 
-**metacurator:** default test suite runs the *real* grounding code against a
-*real* (tiny) local fixture store - a stronger guarantee, because the store
-schema is metacurator's own, not an assumption about a third party's API.
+**Target design:** a test suite that runs the *real* grounding code against
+a *real* (tiny) local fixture store - a stronger guarantee, because the
+store schema is BioAnalyzer's own, not an assumption about a third party's
+API.
 
 ### Extensibility / operational footprint
 
 **BioAnalyzer (before):** zero backend abstraction - adding HPO support
 meant a new dict, a new `ROOTS` entry, and hand-threading a new
 `ols_search(..., "hpo", "HP")` call site through whichever `normalize_*()`
-needed it. **metacurator:** `ensure(["hpo"])` + schema binding, no call-site
-changes - but at the cost of a heavier dependency footprint (DuckDB, a
-semantic-sql ETL step, a LinkML schema toolchain) than BioAnalyzer's
+needed it. **Target design:** a single `ensure(["hpo"])`-style call plus a
+schema binding, no call-site changes - at the cost of a heavier dependency
+footprint (DuckDB, a semantic-sql ETL step) than BioAnalyzer's
 `requests` + stdlib `sqlite3`.
 
 ## 2. The redesigned architecture
@@ -533,7 +535,7 @@ app/normalization/grounding/           (package, was grounding.py)
                        now backend-agnostic
 ```
 
-**Backend Protocol**, modeled directly on metacurator's:
+**Backend Protocol**:
 
 ```python
 class GroundingBackend(Protocol):
@@ -600,7 +602,7 @@ Everything the redesign brief asked for, and how it's actually satisfied
 ## 4. What's verified vs. what's a scaffold
 
 - **Verified for real:** `LocalOntologyBackend` against *actual* DuckDB
-  1.5.4 (found installed in a sibling `metacurator-main/.venv` on the build
+  1.5.4 (found installed in a sibling project's `.venv` on the build
   machine, used to run the full `pytest tests/test_grounding_backends.py`
   suite a second time with the real engine, not just the sqlite3 fallback -
   see that test file). 50 seed terms across all 4 ontology prefixes,
@@ -611,7 +613,7 @@ Everything the redesign brief asked for, and how it's actually satisfied
   (`test_normalization.py`) still pass unchanged.
 - **Scaffold, not exercised:** `seed.ensure_ontology()` (the full
   semantic-sql `.db.gz` fetch + projection for broader-than-seed coverage).
-  Correctly implemented against SPEC 070's documented encoding, but this
+  Correctly implemented against the documented semantic-sql encoding, but this
   build had no outbound network route to the semantic-sql bucket to confirm
   the download/gunzip/attach steps against the real data. `LocalOntologyBackend`
   works correctly without it, using only the seed data - this is genuinely
@@ -644,7 +646,7 @@ external maintainer's perspective - not defending prior decisions, looking
 specifically for architectural debt, duplicated logic, scalability limits,
 correctness risks, and explainability/testing gaps the first pass's own
 "deliberately out of scope" list had left standing. This section is that
-audit, the gap analysis against metacurator's design principles, what was
+audit, the gap analysis against this subsystem's own design requirements, what was
 actually fixed (with the real bugs found *while* fixing things), what
 requirement was explicitly rejected and why, and the validation evidence.
 
@@ -924,14 +926,14 @@ to touch.
    explicitly rejected and reasoned through, or not done with a stated
    reason. None silently skipped.
 
-**Bottom line:** the grounding subsystem is measurably closer to
-metacurator's engineering quality - a real backend abstraction that's now
+**Bottom line:** the grounding subsystem has measurably closed the gaps this
+audit set out to find - a real backend abstraction that's now
 actually reachable (not dead code), one lookup implementation instead of
 three, real bulk-loadable local-ontology-store support verified against
 genuine production-scale data (not a toy fixture), and explainable
 decisions with actual evidence attached. It is honestly not yet at feature
 parity on raw ontology coverage (4-5 ontologies with real-data-backed roots
-vs. metacurator's schema-agnostic design) or on "local-first by default" (a
+vs. a fully schema-agnostic design) or on "local-first by default" (a
 sequencing decision, not a capability gap) - both are queued, concrete,
 unblocked next steps, not aspirational hand-waving.
 
@@ -983,7 +985,7 @@ by code review.
 
 1. **NCBITaxon branch-checks took 4-12 seconds each - a real production-
    blocking latency bug.** `reachable_from()`'s original implementation was
-   a single `WITH RECURSIVE` SQL query (metacurator SPEC 070's own
+   a single `WITH RECURSIVE` SQL query (this module's original
    approach). Timed directly against real data (`Mus musculus` ->
    `NCBITaxon:2759`): 11.9s. `EXPLAIN QUERY PLAN` showed why: the
    recursive step's join only binds the `ontology` half of

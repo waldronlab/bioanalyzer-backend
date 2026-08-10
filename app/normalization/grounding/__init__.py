@@ -1,5 +1,5 @@
 """Ontology-grounding subsystem: classifies a NormalizedTerm's ontology
-mapping into auto/review/none by running metacurator's four-step grounding
+mapping into auto/review/none by running BioAnalyzer's four-step grounding
 discipline (lookup -> round-trip -> branch check -> obsolete check) against
 a pluggable `GroundingBackend`.
 

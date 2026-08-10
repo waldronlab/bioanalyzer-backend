@@ -158,9 +158,8 @@ doesn't stop the same failure mode recurring silently: if EFO deprecates a
 currently-correct static ID next year, `grounding.py::tier_for()` had no way
 to notice and would keep returning `"auto"` for it indefinitely.
 
-`app/normalization/grounding.py` now runs metacurator's four-step grounding
-discipline (see [metacurator SPEC 070](https://github.com/seandavi/metacurator/blob/506715cc/docs/spec/070-ontology-grounding.md))
-against any match that would otherwise earn `"auto"`, downgrading it to
+`app/normalization/grounding.py` now runs a four-step grounding
+discipline against any match that would otherwise earn `"auto"`, downgrading it to
 `"review"` if any step fails:
 
 1. **Lookup** — unchanged; still the existing static-dict substring match in
@@ -186,8 +185,8 @@ against any match that would otherwise earn `"auto"`, downgrading it to
 **Scope, deliberately narrow:** this only ever downgrades `auto → review`,
 never the reverse, and never touches live-OLS-lookup results (those were
 already `"review"` per the existing source-based tiering and stay there —
-loosening that to a match-quality-based tiering, the way metacurator itself
-does it, would reopen the hole this whole system exists to close).
+loosening that to a match-quality-based tiering
+would reopen the hole this whole system exists to close).
 
 **Cost:** the static dicts contain on the order of 50 unique `ontology_id`s
 total across all three modules. Results are cached
@@ -200,8 +199,8 @@ round-trip per unique ID per TTL window, not per request.
 the match keeps whatever tier it already had (fail open) rather than forcing
 every result to `"review"` during an OLS outage.
 
-**Not implemented — a local ontology store:** metacurator also supports a
-DuckDB/semantic-sql-derived local ontology backend as a faster, offline
+**Not implemented — a local ontology store:** a
+DuckDB/semantic-sql-derived local ontology backend was considered as a faster, offline
 alternative to live OLS. Given this codebase's static dicts only need to
 verify ~50 IDs (not run arbitrary free-text search against a full ontology),
 the cost/benefit didn't justify a new heavy dependency and a multi-GB

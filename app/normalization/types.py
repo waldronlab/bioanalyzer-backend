@@ -186,9 +186,8 @@ class LookupMatcher:
 # queries (e.g. a paper saying "faecal" scores as a mismatch against our
 # "feces" entries even though it's the same site) - ported from
 # MetaHarmonizer's _BRITISH_TO_AMERICAN list after a benchmark against
-# BugSigDB's real curated corpus found this exact gap (see
-# docs/METACURATOR_METAHARMONIZER_ANALYSIS.md). Applied before matching, not
-# as a lookup-dict key, so it benefits the normalizers that call it today
+# BugSigDB's real curated corpus found this exact gap. Applied before
+# matching, not as a lookup-dict key, so it benefits the normalizers that call it today
 # (body_site.py, condition.py — and their live search fallback) without
 # duplicating entries.
 _BRITISH_TO_AMERICAN = (

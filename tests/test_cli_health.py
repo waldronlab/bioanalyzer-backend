@@ -1,11 +1,16 @@
+import sys
 import types
 import pytest
-from scripts.cli import BioAnalyzerCLI
+from scripts.cli import BioAnalyzerCLI, main
 
 
 class DummyResponse:
-    def __init__(self, status_code: int):
+    def __init__(self, status_code: int, json_data=None):
         self.status_code = status_code
+        self._json_data = json_data or {}
+
+    def json(self):
+        return self._json_data
 
 
 def test_check_backend_health_success(monkeypatch):
@@ -45,3 +50,129 @@ def test_wait_for_backend_health_respects_timeout(monkeypatch):
         assert healthy is False
     else:
         assert cli.check_backend_health() is False
+
+
+# Regression coverage for a real bug: _fetch_analysis (the `analyze` command)
+# and ask_question (the `qa` command) hardcoded "http://localhost:8000/..."
+# directly instead of going through self._build_api_url()/self.api_base_url
+# like every other HTTP call site in this file (_start_url_job,
+# _poll_url_job) - silently ignoring BIOANALYZER_API_URL, contradicting
+# CLAUDE.md's documented contract ("no hardcoded localhost") for the CLI's
+# two most-used interactive commands.
+
+
+def test_fetch_analysis_uses_configured_api_base_url_by_default(monkeypatch):
+    captured = {}
+
+    def _fake_get(url, params=None, timeout=None):
+        captured["url"] = url
+        return DummyResponse(200, {"pmid": "12345678"})
+
+    cli = BioAnalyzerCLI()
+    monkeypatch.setattr(cli._session, "get", _fake_get)
+    result, error = cli._fetch_analysis("12345678", refresh=False, request_timeout=30)
+    assert error is None
+    assert captured["url"] == "http://localhost:8000/api/v1/analyze/12345678"
+
+
+def test_fetch_analysis_respects_bioanalyzer_api_url_override(monkeypatch):
+    """The actual regression: pointing the CLI at a non-default host must
+    change where _fetch_analysis sends its request, not silently stay on
+    localhost."""
+    monkeypatch.setenv("BIOANALYZER_API_URL", "http://remote-host:9000/api/v1")
+    captured = {}
+
+    def _fake_get(url, params=None, timeout=None):
+        captured["url"] = url
+        return DummyResponse(200, {"pmid": "12345678"})
+
+    cli = BioAnalyzerCLI()
+    monkeypatch.setattr(cli._session, "get", _fake_get)
+    result, error = cli._fetch_analysis("12345678", refresh=False, request_timeout=30)
+    assert error is None
+    assert captured["url"] == "http://remote-host:9000/api/v1/analyze/12345678"
+    assert "localhost" not in captured["url"]
+
+
+def test_ask_question_uses_configured_api_base_url_by_default(monkeypatch):
+    captured = {}
+
+    def _fake_post(url, json=None, timeout=None):
+        captured["url"] = url
+        return DummyResponse(200, {"answer": "42"})
+
+    cli = BioAnalyzerCLI()
+    monkeypatch.setattr(cli, "check_backend_health", lambda: True)
+    monkeypatch.setattr(cli._session, "post", _fake_post)
+    cli.ask_question("What is the meaning of life?")
+    assert captured["url"] == "http://localhost:8000/api/v1/qa"
+
+
+def test_ask_question_respects_bioanalyzer_api_url_override(monkeypatch):
+    monkeypatch.setenv("BIOANALYZER_API_URL", "http://remote-host:9000/api/v1")
+    captured = {}
+
+    def _fake_post(url, json=None, timeout=None):
+        captured["url"] = url
+        return DummyResponse(200, {"answer": "42"})
+
+    cli = BioAnalyzerCLI()
+    monkeypatch.setattr(cli, "check_backend_health", lambda: True)
+    monkeypatch.setattr(cli._session, "post", _fake_post)
+    cli.ask_question("What is the meaning of life?")
+    assert captured["url"] == "http://remote-host:9000/api/v1/qa"
+    assert "localhost" not in captured["url"]
+
+
+# Regression coverage for a real bug, reproduced by a live install.sh run:
+# main()'s dispatch for build/start/stop/restart/"run table" called
+# BioAnalyzerCLI's bool-returning methods but discarded the result, so the
+# process always exited 0 even when the command printed "❌ ... failed" and
+# genuinely failed (observed live: docker-compose's redis service failed to
+# bind its port, start_application() correctly returned False and printed
+# the failure, but `BioAnalyzer start` still exited 0 - fooling install.sh's
+# own `if "$RUN_CLI" start; then` check into reporting success).
+
+
+@pytest.mark.parametrize(
+    "command,method",
+    [
+        (["BioAnalyzer", "build"], "build_containers"),
+        (["BioAnalyzer", "start"], "start_application"),
+        (["BioAnalyzer", "stop"], "stop_application"),
+        (["BioAnalyzer", "restart"], "restart_application"),
+    ],
+)
+def test_main_exits_nonzero_when_lifecycle_command_fails(monkeypatch, command, method):
+    monkeypatch.setattr(sys, "argv", command)
+    monkeypatch.setattr(BioAnalyzerCLI, method, lambda self: False)
+    with pytest.raises(SystemExit) as exc_info:
+        main()
+    assert exc_info.value.code == 1
+
+
+@pytest.mark.parametrize(
+    "command,method",
+    [
+        (["BioAnalyzer", "build"], "build_containers"),
+        (["BioAnalyzer", "start"], "start_application"),
+        (["BioAnalyzer", "stop"], "stop_application"),
+        (["BioAnalyzer", "restart"], "restart_application"),
+    ],
+)
+def test_main_does_not_exit_nonzero_when_lifecycle_command_succeeds(
+    monkeypatch, command, method
+):
+    monkeypatch.setattr(sys, "argv", command)
+    monkeypatch.setattr(BioAnalyzerCLI, method, lambda self: True)
+    # A successful command must not raise SystemExit at all (falling off the
+    # end of main() exits 0 implicitly).
+    main()
+
+
+def test_main_exits_nonzero_when_run_table_fails(monkeypatch):
+    monkeypatch.setattr(sys, "argv", ["BioAnalyzer", "run", "table"])
+    monkeypatch.setattr(BioAnalyzerCLI, "run_table", lambda self, port=8501: False)
+    with pytest.raises(SystemExit) as exc_info:
+        main()
+    assert exc_info.value.code == 1

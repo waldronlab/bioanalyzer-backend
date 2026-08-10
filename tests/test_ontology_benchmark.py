@@ -17,7 +17,18 @@ def test_ontology_benchmark_meets_target():
     # home directory via the user database directly, bypassing whatever
     # os.environ["HOME"] currently holds, so this test doesn't depend on
     # import order elsewhere in the suite.
-    real_home = pwd.getpwuid(os.getuid()).pw_dir
+    try:
+        real_home = pwd.getpwuid(os.getuid()).pw_dir
+    except KeyError:
+        # Running as a UID with no /etc/passwd entry (e.g. a container
+        # started with --user "$(id -u):$(id -g)", which docker-compose.yml
+        # and run_tests.sh both do to avoid leaving root-owned files in the
+        # bind-mounted repo) - getpwuid() has nothing to look up. Whatever
+        # HOME the environment already provides is the best available
+        # fallback; the corrupted-HOME scenario this test guards against
+        # only matters when a passwd entry (a "real" answer to bypass to)
+        # exists in the first place.
+        real_home = os.environ.get("HOME", "/tmp")
     env = {**os.environ, "HOME": real_home}
 
     result = subprocess.run(

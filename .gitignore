@@ -106,7 +106,9 @@ results.txt
 
 # Local scratch data (PMID lists, BugSigDB dumps, generated reports) - not
 # source code, shouldn't be committed. Kept locally for re-running
-# scripts/eval/bugsigdb_ground_truth_benchmark.py.
+# scripts/eval/bugsigdb_ground_truth_benchmark.py and as the local source of
+# truth for app/services/bugsigdb_check.py's "in BugSigDB" PMID lookup
+# (falls back to downloading the same export when this file isn't present).
 /full_dump.csv
 /pmids.xls
 *.zip

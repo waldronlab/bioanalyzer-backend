@@ -16,7 +16,7 @@ All project documentation is organized in this folder.
 |----------|-------------|
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Package architecture and system overview |
 | [ARCHITECTURE_FLOW.md](ARCHITECTURE_FLOW.md) | Complete architecture, flows, and CLI/API reference |
-| [GROUNDING_ARCHITECTURE.md](GROUNDING_ARCHITECTURE.md) | Ontology-grounding subsystem design: gap analysis vs. metacurator, the `GroundingBackend` architecture, what's verified vs. scaffold |
+| [GROUNDING_ARCHITECTURE.md](GROUNDING_ARCHITECTURE.md) | Ontology-grounding subsystem design: the `GroundingBackend` architecture, design rationale, what's verified vs. scaffold |
 | [CURATOR_DESK_ALIGNMENT.md](CURATOR_DESK_ALIGNMENT.md) | Agreed implementation sequence across BioAnalyzer and curator-desk (from PR #13 discussion) |
 | Curator desk system spec | End-to-end curator-desk + BioAnalyzer specification: [`docs/SPEC.md`](https://github.com/waldronlab/curator-desk/blob/main/docs/SPEC.md) in [waldronlab/curator-desk](https://github.com/waldronlab/curator-desk) |
 

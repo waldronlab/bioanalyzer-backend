@@ -229,11 +229,26 @@ def client():
     assert on), instead of re-raising into the test process — Starlette
     always re-raises past a bare-Exception handler for debugging,
     regardless of whether one is registered.
+
+    RateLimitMiddleware's request-timestamp store is a module-level
+    global (see app/api/middleware/rate_limit.py), not per-app-instance -
+    every test file sharing this fixture hits the same `fastapi_app` and
+    therefore the same counter, keyed by TestClient's fixed "testclient"
+    IP. Left unswept, enough HTTP-call-heavy tests across the full suite
+    accumulate past the 60/minute limit well within the suite's actual
+    run time, and later tests start getting real 429s instead of the
+    status codes they're asserting on - a test-isolation gap, not a
+    production bug. test_rate_limit_middleware.py's own fixture already
+    clears this same store before its (separate, isolated) app instance;
+    doing it here too keeps that isolation for every other consumer of
+    this shared client.
     """
     if not FASTAPI_AVAILABLE:
         pytest.skip("FastAPI not available")
     from fastapi.testclient import TestClient
+    from app.api.middleware.rate_limit import _rate_limit_store
 
+    _rate_limit_store.clear()
     return TestClient(fastapi_app, raise_server_exceptions=False)
 
 
