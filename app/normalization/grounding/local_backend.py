@@ -1,13 +1,12 @@
 """GroundingBackend backed by a local, offline ontology store.
 
-Same table shape metacurator's `GroundingBackend` implementations project
-semantic-sql data into (docs/spec/070-ontology-grounding.md):
+Projects semantic-sql data into this table shape:
 
     terms(ontology, curie, label, definition, obsolete, replaced_by, version)
     synonyms(ontology, curie, synonym, scope)      # scope: exact|broad|narrow|related
     edges(ontology, subject, predicate, object)    # asserted direct edges (is_a, part_of, ...)
 
-plus one table metacurator's spec doesn't need but this backend does:
+plus one table this backend needs beyond that shape:
 
     ontology_meta(ontology, complete, term_count, source, version, updated_at)
 
@@ -28,7 +27,7 @@ Branch-check ancestry is computed on demand - not a materialized closure
 table - via an application-level BFS (`_bfs_edges_from`) issuing one
 indexed `subject IN (...)` query per frontier level, with an explicit
 `visited` set as the cycle guard/dedup. This replaced a single `WITH
-RECURSIVE` SQL query (metacurator SPEC 070's approach) after a 2026-08 perf
+RECURSIVE` SQL query (this module's original approach) after a 2026-08 perf
 audit found it took 4-12 seconds per check against NCBITaxon's real
 2.7M-edge table: `EXPLAIN QUERY PLAN` showed the recursive step's join only
 binds the `ontology` half of `idx_edges_subject`, not `subject` too, so
@@ -48,7 +47,7 @@ module did the latter - fine at 50 seed rows, a full O(n) table scan per
 lookup at the scale a real ontology import (`ensure_ontology()`) actually
 produces (EFO/MONDO/UBERON are ~20k-200k rows each; NCBITaxon is ~2M).
 
-Storage engine: DuckDB if installed (metacurator's own choice - a real
+Storage engine: DuckDB if installed - a real
 embedded analytical database, better suited to scanning a multi-thousand-row
 ontology projection), transparently falling back to Python's stdlib
 `sqlite3` if it isn't. Both are queried through the exact same plain SQL
@@ -126,7 +125,7 @@ CREATE INDEX IF NOT EXISTS idx_xrefs_xref ON xrefs(xref);
 """
 
 # Ancestors were originally computed with a single `WITH RECURSIVE` query
-# (per metacurator SPEC 070) - correct, but a real 2026-08 perf audit found
+# (this module's original approach) - correct, but a real 2026-08 perf audit found
 # it takes 4-12 SECONDS per branch-check against NCBITaxon's real 2.7M-edge
 # table (verified: EXPLAIN QUERY PLAN shows the recursive step's join only
 # binds the `ontology` half of idx_edges_subject - `SEARCH e USING INDEX
@@ -184,7 +183,7 @@ def _bfs_edges_from(db: "_Connection", ontology: str, start: str, target: str) -
 
 def normalize(value: str) -> str:
     """Casefold, trim, collapse whitespace/punctuation - the "normalize the
-    value" half of metacurator's lookup step (SPEC 070 step 1). Public (no
+    value" half of the lookup step. Public (no
     leading underscore) because callers writing into this store (`seed.py`)
     need to precompute the same normalization the query side matches
     against - keeping it as one function used by both sides is what makes
@@ -283,8 +282,8 @@ class LocalOntologyBackend:
 
     Deterministic and reproducible by construction: given the same database
     file, every query returns the same answer every time, with no network
-    call and no dependency on a third-party service's uptime - the property
-    metacurator's design centers on and the live-OLS-only `OLSBackend`
+    call and no dependency on a third-party service's uptime - a property
+    this design centers on and the live-OLS-only `OLSBackend`
     cannot offer. See `seed.py` for how this store gets populated.
 
     Write methods (`upsert_term`/`insert_synonym`/`insert_edge`/

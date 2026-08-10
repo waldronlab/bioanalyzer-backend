@@ -122,14 +122,78 @@ EOF
     print_success "Desktop entry created"
 fi
 
-# Test the installation
-print_status "Testing installation..."
-if "$INSTALL_DIR/BioAnalyzer" fields > /dev/null 2>&1; then
+# From here on this script drives the actual running application (not just
+# the CLI shim above), so a single failure shouldn't silently abort with a
+# raw `set -e` bash error - each step below is explicitly checked and
+# reports its own success/failure, letting the script reach the summary
+# either way.
+export BIOANALYZER_PATH="$CURRENT_DIR"
+RUN_CLI="$INSTALL_DIR/BioAnalyzer"
+
+# .env: never overwrite an existing one (it may hold real API keys already).
+if [[ ! -f "$CURRENT_DIR/.env" ]]; then
+    if [[ -f "$CURRENT_DIR/.env.example" ]]; then
+        print_status "No .env found - creating one from .env.example."
+        cp "$CURRENT_DIR/.env.example" "$CURRENT_DIR/.env"
+        print_warning "Edit $CURRENT_DIR/.env and set at least NCBI_API_KEY, EMAIL,"
+        print_warning "and one LLM key (GEMINI_API_KEY is cheapest/default) before continuing."
+        print_warning "Re-run this script (or 'BioAnalyzer start') once .env is filled in."
+        ENV_READY=false
+    else
+        print_warning "No .env or .env.example found - skipping Docker build/start."
+        print_warning "Create $CURRENT_DIR/.env (see docs/SETUP_GUIDE.md) and re-run."
+        ENV_READY=false
+    fi
+else
+    print_status "Found existing .env - leaving it untouched."
+    ENV_READY=true
+fi
+
+if [[ "${ENV_READY:-false}" == true ]]; then
+    if command -v docker &> /dev/null; then
+        print_status "Building BioAnalyzer containers (this can take a few minutes)..."
+        if "$RUN_CLI" build; then
+            print_status "Starting BioAnalyzer (API + Redis)..."
+            if "$RUN_CLI" start; then
+                print_success "BioAnalyzer is up at http://localhost:8000"
+            else
+                print_warning "Build succeeded but start failed - see the container logs above."
+                print_warning "Retry any time with: BioAnalyzer start"
+            fi
+        else
+            print_warning "Docker build failed - see the output above."
+            print_warning "Retry any time with: BioAnalyzer build"
+        fi
+    else
+        print_warning "Docker not found - skipping build/start."
+        print_warning "Install Docker, then run: BioAnalyzer build && BioAnalyzer start"
+    fi
+fi
+
+# Local ontology store: optional (grounding degrades gracefully to live OLS
+# lookups without it - see app/normalization/grounding/tiering.py's module
+# docstring) but a real sync is a one-time, multi-hour download for the
+# largest ontologies, so this only reports status and points at the sync
+# script rather than running it automatically.
+ONTOLOGY_DB="$CURRENT_DIR/ontology_store/ontology_store.db"
+if [[ -s "$ONTOLOGY_DB" ]]; then
+    print_success "Local ontology store found: $ONTOLOGY_DB"
+else
+    print_warning "No local ontology store at $ONTOLOGY_DB yet."
+    print_warning "BioAnalyzer works without it (falls back to live OLS lookups per-term),"
+    print_warning "but a synced local store is faster and works fully offline. To sync:"
+    print_warning "  python scripts/ontology_sync.py --all --db-path ontology_store/ontology_store.db"
+    print_warning "(this downloads and projects several real ontologies; expect it to take"
+    print_warning "a while the first time, longest for NCBITaxon)."
+fi
+
+echo ""
+print_status "Verifying the BioAnalyzer command itself..."
+if "$RUN_CLI" fields > /dev/null 2>&1; then
     print_success "BioAnalyzer command installed successfully!"
 else
-    print_warning "Installation completed but command test failed"
-    print_warning "You may need to install Python dependencies:"
-    print_warning "pip install -r $CURRENT_DIR/requirements.txt"
+    print_warning "Installation completed but the 'fields' command needs a running API."
+    print_warning "Once BioAnalyzer is started, verify with: BioAnalyzer status"
 fi
 
 echo ""

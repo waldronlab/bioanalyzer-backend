@@ -2,8 +2,8 @@
 
 Keyed by the CURIE prefix found on `NormalizedTerm.ontology_id` (see
 condition.py/body_site.py/host_species.py's lookup dicts for which prefixes
-are in play). metacurator's spec calls this "the schema's declared root for
-that field" (SPEC 060) - configured per-schema/per-deployment rather than
+are in play). This is the schema's declared root for that field -
+configured per-schema/per-deployment rather than
 hardcoded. BioAnalyzer has exactly one deployment shape (5 fixed curation
 fields), so a module-level dict is the right amount of configurability for
 what actually varies today; if that ever needs to be per-request/per-tenant,

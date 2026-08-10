@@ -113,3 +113,12 @@ include-package-data = true
 [tool.setuptools.package-data]
 "*" = ["*.md", "*.txt", "*.yml", "*.yaml"]
 
+[tool.mypy]
+# Without this, mypy falls back to plain-class introspection for Pydantic
+# BaseModel subclasses and can't see that Field(None, ...)/Field(default=...)
+# make a constructor argument optional - producing spurious "Missing named
+# argument" [call-arg] errors for fields that are genuinely optional at
+# runtime (confirmed against real construction calls in
+# app/services/agent_orchestrator.py during a mypy error audit).
+plugins = ["pydantic.mypy"]
+

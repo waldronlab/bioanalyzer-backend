@@ -273,8 +273,6 @@ prominence in `CLAUDE.md`'s description of the product.
 
 **Removed from:**
 - `app/normalization/taxa_level.py` — deleted entirely (the module).
-- `app/models/extraction_schemas.py` — `ExperimentFields.taxa_level`,
-  `ExperimentMetadata.taxa_level`, and their serialization paths.
 - `app/api/utils/constants.py`, `app/api/utils/api_utils.py` — the
   `/api/v1/fields` essential-fields listing and default-field-structure
   fallback.
@@ -301,6 +299,24 @@ prominence in `CLAUDE.md`'s description of the product.
   `docs/ARCHITECTURE_FLOW.md`, `docs/CURATOR_DESK_ALIGNMENT.md`,
   `docs/ARCHITECTURE.md`, `docs/QUICK_REFERENCE.md`,
   `docs/CURATOR_TABLE_DESIGN.md`.
+
+**Correction (found during a later hardening audit, verified against git
+history):** this section originally also listed `app/models/
+extraction_schemas.py` — `ExperimentFields.taxa_level`,
+`ExperimentMetadata.taxa_level` — as removed. `git show <the Phase 6
+commit> -- app/models/extraction_schemas.py` produces no diff: that file
+was never actually touched. `taxa_level` remains a live field on
+`ExperimentFields`/`ExperimentMetadata` today, used only by the separate
+URL-analysis pipeline (`app/services/agent_orchestrator.py`,
+`app/api/routers/study_analysis.py`) — never by the PMID-based v1/v2
+pipelines this Phase 6 pass targeted. It's functionally inert there:
+`agent_orchestrator.py`'s `_flush()` never populates it, so it always
+serializes as `status="ABSENT", value=""` in `StudyAnalysisResult`
+responses - not fabricated data, just a vestigial always-empty field. Left
+unremoved rather than fixed here, since removing a live field is a
+separate, deliberate decision (the same kind Phase 6 itself required
+"direct instruction" and requester confirmation for above), not a
+documentation fix.
 
 **Deliberately NOT touched** (different concept, same surface vocabulary):
 - `has_differential_abundance`/`MicrobialSignature.taxon_name` and all

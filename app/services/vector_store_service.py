@@ -11,7 +11,7 @@ try:
     # Optional in some paper-qa versions; tests patch this symbol directly.
     from paperqa.llms import QdrantVectorStore  # type: ignore[attr-defined]
 except Exception:  # pragma: no cover - handled via runtime fallback
-    QdrantVectorStore = None  # type: ignore[assignment]
+    QdrantVectorStore = None  # type: ignore[misc]
 
 from paperqa.types import Text
 

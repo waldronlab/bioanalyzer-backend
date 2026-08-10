@@ -16,8 +16,7 @@ Two independent data sources, deliberately not conflated:
    that distinction matters for correctness, not just bookkeeping).
 
 2. `ensure_ontology()` - fetches and projects a full ontology from
-   semantic-sql's public `.db.gz` dumps (the same source metacurator's
-   `LocalDuckDBBackend.ensure()` uses) for real, complete coverage beyond
+   semantic-sql's public `.db.gz` dumps for real, complete coverage beyond
    the ~50-entry seed. **Verified against real data in this pass** for DOID
    (23MB compressed, 14,638 terms, 26,373 edges - see
    `docs/GROUNDING_ARCHITECTURE.md` §4 for the exact projection queries and
@@ -51,9 +50,8 @@ from app.utils.credential_masking import mask_exception_message
 logger = logging.getLogger(__name__)
 
 # semantic-sql publishes one gzipped SQLite-projectable file per ontology
-# under a public bucket, named `<ontology>.db.gz` - the same source
-# metacurator's LocalDuckDBBackend.ensure() fetches from (SPEC 070,
-# "Backends" section). Confirmed live in this pass via a direct HEAD request
+# under a public bucket, named `<ontology>.db.gz`. Confirmed live in this
+# pass via a direct HEAD request
 # (HTTP 200, `Content-Type: application/gzip`) for every ontology slug in
 # ROOTS/EXTENDED_ONTOLOGY_ROOTS.
 SEMANTIC_SQL_BASE_URL = "https://s3.amazonaws.com/bbop-sqlite"

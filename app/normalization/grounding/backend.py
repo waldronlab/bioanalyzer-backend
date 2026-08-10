@@ -1,7 +1,6 @@
 """The `GroundingBackend` protocol and the value objects every backend speaks.
 
-Modeled directly on metacurator's `GroundingBackend` interface
-(docs/spec/070-ontology-grounding.md in github.com/seandavi/metacurator): a
+BioAnalyzer's ontology-grounding requirement: a
 backend answers exactly four questions about a CURIE within an ontology -
 does it exist (round-trip), is it reachable from a declared root (branch
 check), is it obsolete, and what's it a synonym/label match for (lookup).
@@ -19,8 +18,8 @@ from dataclasses import dataclass, field
 from typing import List, Optional, Protocol, Tuple, runtime_checkable
 
 # Synonym-match specificity, mirroring OBO's own synonym-scope vocabulary
-# (oio:hasExactSynonym/hasBroadSynonym/hasNarrowSynonym/hasRelatedSynonym) and
-# metacurator's tiering rule: exact label/exact-synonym + branch-ok is the
+# (oio:hasExactSynonym/hasBroadSynonym/hasNarrowSynonym/hasRelatedSynonym).
+# BioAnalyzer's tiering rule: exact label/exact-synonym + branch-ok is the
 # only scope that can ever earn "auto" tier; anything else is "review".
 SCOPE_EXACT = "exact"
 SCOPE_BROAD = "broad"
@@ -120,7 +119,7 @@ class GroundingBackend(Protocol):
 
 def rank_candidates(candidates: List[GroundedTerm]) -> List[GroundedTerm]:
     """Order candidates by match specificity (exact > broad > narrow >
-    related), the same precedence metacurator's spec uses to decide which
+    related) - the precedence used to decide which
     candidate(s) are even eligible for "auto" tier. Stable sort - candidates
     with the same scope keep whatever order the backend returned them in.
 

@@ -18,7 +18,8 @@ services:
       - ./cache:/app/cache
       - ./logs:/app/logs
       - ./results:/app/results
-      - ./models:/app/models 
+      - ./models:/app/models
+      - ./ontology_store:/app/ontology_store
       - ./tests:/app/tests
       - ./app:/app/app
     healthcheck:

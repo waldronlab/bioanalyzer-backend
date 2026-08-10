@@ -12,7 +12,7 @@ try:
     from .llm_provider import LLMProviderManager, LITELLM_AVAILABLE
 except ImportError:
     LITELLM_AVAILABLE = False
-    LLMProviderManager = None
+    LLMProviderManager = None  # type: ignore[assignment,misc]
 
 # Try to import Paper-QA first, fallback to GeminiQA if not available
 try:
