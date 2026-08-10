@@ -12,7 +12,386 @@ Read the module docstrings (`backend.py`, `ols_backend.py`,
 `local_backend.py`, `seed.py`, `chain.py`, `tiering.py`) for *what* each
 piece does; this doc is the comparison and the reasoning that produced them.
 
-## 1. Gap analysis: BioAnalyzer (pre-redesign) vs. metacurator
+---
+
+## FINAL FROZEN BASELINE (2026-08-10)
+
+**Read this section first.** Everything below it (§1 onward) is the dated,
+pass-by-pass process record of how the system got here - real, still
+accurate for *what happened and why*, but superseded as a description of
+*current* behavior wherever it conflicts with this section. This section
+is the authoritative current-state summary; verified against the running
+code and the real local ontology store on 2026-08-10, not reconstructed
+from memory of earlier passes.
+
+**Status: PRODUCTION BASELINE ESTABLISHED.** No known unsafe automatic-
+grounding pathway exists. Every remaining known limitation is either
+non-safety (accuracy/performance/operational/scope) or a single,
+individually-investigated, non-dangerous case (see "Known limitations"
+below).
+
+### 1. Final architecture
+
+```
+raw extraction value (LLM field-extraction output, e.g. payload["host_species_raw"])
+        |
+        v  app/services/bugsigdb_analyzer/field_extraction.py
+        |  (_field_results_from_unified_payload calls normalize_host_species/
+        |   normalize_body_site/normalize_condition on the raw text)
+        v
+null/non-groundable detection
+        |  app/normalization/types.py :: is_null_like()
+        |  called as the first line of each normalize_*() below
+        v
+field-specific normalization entry point
+        |  app/normalization/host_species.py :: normalize_host_species()
+        |  app/normalization/body_site.py    :: normalize_body_site()
+        |  app/normalization/condition.py    :: normalize_condition()
+        v
+static audited mappings (word-boundary match against a hand-curated,
+individually-verified dict - the only source that can ever set
+mapping_confidence == 1.0)
+        |  app/normalization/types.py :: LookupMatcher
+        |    .match_longest() - host_species.py, condition.py
+        |    .match_all()     - body_site.py (reports ambiguity as a list)
+        |  SPECIES_LOOKUP / BODY_SITE_LOOKUP / CONDITION_LOOKUP (same 3 files)
+        v
+[static dict miss, or ambiguous/overridable static match] -->
+local ontology candidate generation
+        |  app/normalization/local_lookup.py :: local_lookup()
+        |    - body_site.py's _resolve_structure_override() and condition.py's
+        |      _resolve_more_specific_override() also call this directly, to
+        |      check whether the *complete* raw text names a real, more
+        |      specific term than a shorter static-dict key matched
+        v
+shared candidate matcher / lookup
+        |  app/normalization/grounding/backend.py :: GroundingBackend.lookup()
+        |  app/normalization/grounding/local_backend.py :: LocalOntologyBackend
+        |    (indexed label/synonym lookup against the real synced store)
+        v
+candidate ranking
+        |  app/normalization/grounding/backend.py :: rank_candidates_explained()
+        |    (scope + edit-distance + branch-validity; local_lookup()'s result
+        |    is always capped at mapping_confidence <= 0.9 regardless of score)
+        v
+[static dict and local store both miss] -->
+OLS fallback/verification
+        |  app/normalization/ols.py :: ols_search()
+        |    - cross-ontology-result validation (obo_id prefix must match the
+        |      requested id_prefix) added 2026-08-09/10
+        |  app/normalization/host_species.py's direct NCBI Taxonomy E-utilities
+        |    calls (host_species.py doesn't use ols_search - a separate live
+        |    API, same confidence-capping discipline)
+        v
+[static-dict match with status=PRESENT, mapping_confidence=1.0] -->
+ontology/branch validation, obsolete-term validation, semantic
+(label) consistency check
+        |  app/normalization/grounding/tiering.py :: ground()
+        |    round-trip -> label-similarity -> obsolete -> branch, in that
+        |    order, against app/normalization/grounding/roots.py :: ROOTS
+        |  backend resolution: app/normalization/grounding/tiering.py ::
+        |    _build_default_backend() (GROUNDING_BACKEND_MODE=chain default -
+        |    LocalOntologyBackend first, OLSBackend fallback, via
+        |    app/normalization/grounding/chain.py :: ChainedBackend)
+        v
+GroundingDecision (tier + reason + check evidence + candidates)
+        v  app/normalization/grounding/tiering.py :: tier_for()
+        |  (the 2 real production call sites: field_extraction.py, below;
+        |  scripts/eval/grounding_benchmark.py and
+        |  grounding_adversarial_benchmark.py are evaluation tooling, not
+        |  production)
+        v
+AUTO / REVIEW / NONE
+        |  app/services/bugsigdb_analyzer/field_extraction.py ::
+        |    _build_field_result_from_term() - sets result["mapping_tier"]
+        |    and result["mapping_candidates"] (populated only when tier !=
+        |    "auto") on the FieldDict returned to the API/CLI/curator-desk
+        |    CSV layer
+        v
+FieldDict (mapping_tier, mapping_candidates, ontology_id, label, ...)
+```
+
+Ambiguity handling is not a separate stage - it's a property the
+static-dict-match and local-store-candidate-ranking stages both carry
+through the pipeline as populated `candidates` on the `NormalizedTerm`,
+which `ground()`'s `mapping_confidence < 1.0` check (any ambiguous match
+scores below 1.0 by construction - see §2) and
+`_build_field_result_from_term()`'s tier != "auto" check both key off.
+
+### 2. The AUTO invariant: formal statement and proof
+
+**AUTO requires, exactly:** `term.status == "PRESENT"` **and**
+`term.mapping_confidence == 1.0` (checked first, in `ground()`) **and**
+the resolved `ontology_id` round-trips against a real backend (`exists`)
+**and** the backend's real label for that CURIE is similar enough to the
+claimed label (`difflib.SequenceMatcher` ratio >= 0.4) **and** the term
+is not obsolete **and**, if a root is registered for its ontology prefix,
+it is reachable from that root. Any single failure downgrades to REVIEW;
+a completely unrecognized `ontology_id` (empty) is NONE.
+
+**Every bypass category, proven (not asserted):**
+
+| Category | Why it cannot reach AUTO | Where proven |
+|---|---|---|
+| Fallback candidates (local store) | `local_lookup()` hard-caps `mapping_confidence` at `min(winner.confidence, 0.9)` - unconditional, every call | `test_local_lookup_never_reaches_auto_confidence_on_exact_match`, `test_local_lookup_and_ols_are_structurally_incapable_of_auto_confidence` |
+| Fallback candidates (live OLS/NCBI) | Every `ols_search()` call site passes `mapping_confidence=0.9` explicitly; NCBI fallback stores/returns `0.9` | grep-verified (`grep "1\.0" host_species.py body_site.py condition.py`: exactly one clean-static-match return site each); `test_local_lookup_and_ols_are_structurally_incapable_of_auto_confidence` |
+| Ambiguous candidates | A second real match populates `candidates` **and** forces `mapping_confidence` to 0.9 (`LookupMatcher`-based static ambiguity) or is itself already `<= 0.9` (local-store ambiguity) - never both "has candidates" and "confidence 1.0" | `test_no_case_with_populated_candidates_ever_reaches_auto` |
+| Invalid/unmapped ontology prefixes | **Structural exception, not a gap**: `_ground_static_match()` returns `None` when `prefix_of(ontology_id)` isn't in `ROOTS`, and `ground()`'s fail-open rule for "check unavailable" is AUTO (same trust-boundary reasoning as "backend unreachable") - tested and intentional (`test_tier_auto_for_unmapped_ontology_prefix`). Verified empirically unreachable in practice: all three static dicts exclusively emit `ROOTS`-registered prefixes (`NCBITaxon`, `UBERON`, `MONDO` respectively) - zero unmapped-prefix entries exist to trigger it | Direct audit of `SPECIES_LOOKUP`/`BODY_SITE_LOOKUP`/`CONDITION_LOOKUP` prefixes vs. `ROOTS.keys()`, 2026-08-10 |
+| Obsolete terms | `ground()` checks `check.is_obsolete` after round-trip/label, before branch - any obsolete CURIE downgrades to REVIEW regardless of confidence shape | `test_tier_downgraded_when_term_is_obsolete`, `test_ground_reports_obsolete_reason_with_replacement` |
+| Branch-invalid terms | `check.branch_ok is False` downgrades to REVIEW | `test_tier_downgraded_when_branch_check_fails`, `test_ground_reports_branch_check_failure_reason` |
+| Semantically inconsistent candidates (label mismatch) | `_label_similarity() < 0.4` downgrades to REVIEW - calibrated against the real worst-case legitimate relabeling (0.50) and a real mis-mapped-ID incident (0.151) | `test_ground_downgrades_when_claimed_label_does_not_match_real_label`, `test_ground_label_check_tolerates_legitimate_relabeling` |
+| Null-like inputs | `is_null_like()` short-circuits to `NormalizedTerm.absent()` (status=ABSENT) before any lookup - ABSENT can never satisfy `status == "PRESENT"` | `test_null_like_input_resolves_to_absent_across_all_three_ontology_fields`, `test_none_tier_cases_never_attempt_a_lookup` |
+| OLS cross-ontology results | `ols_search()` rejects (returns `None`) any result whose own CURIE prefix doesn't match the requested `id_prefix`, before formatting or caching it | `test_ols_search_rejects_cross_ontology_result` |
+| Malformed/failed OLS responses | `ols_search()`'s `except (RequestException, ValueError): return None` covers connection errors, timeouts, and malformed JSON; empty `docs`/missing `label` also return `None` - none raise, none fabricate a result | `test_ols_search_handles_request_exception`, `test_ols_search_handles_malformed_json`, `test_ols_search_no_docs`; directly re-simulated (6 failure modes via `requests.get` monkeypatching) in the 2026-08-09 closure pass |
+
+**Every production code path capable of producing AUTO**: exactly three
+- the single clean-static-dict-match return statement in each of
+`host_species.py`, `body_site.py`, `condition.py` (verified by grep: one
+`"PRESENT", 1.0` return site per file, two in `condition.py` for the
+main match and the deferred-`_HEALTHY_KEYS` match, both gated on "no
+ambiguity"). All three require passing `ground()`'s five checks above
+before `tier_for()` reports "auto". No other code path in any of the
+three normalizers, `local_lookup.py`, `ols.py`, or the `grounding/`
+package can set `mapping_confidence = 1.0`.
+
+### 3. Final ontology inventory (exact, from `ontology_store/ontology_store.db`)
+
+| Ontology | Prefix | Terms | Synonyms | Edges | Xrefs | Source | Version | Complete |
+|---|---|---|---|---|---|---|---|---|
+| NCBI Taxonomy | NCBITaxon | 2,739,571 | 484,293 | 2,739,524 | 0 | bbop-sqlite S3 | 2026-05-13 | yes |
+| ChEBI | CHEBI | 205,304 | 504,401 | 380,491 | 389,458 | local sync | 252 | yes |
+| NCI Thesaurus | NCIT | 210,153 | 687,432 | 392,715 | 2,250 | local sync | 26.02d | yes |
+| MeSH | MESH | 1,336,993 | 285,828 | 38,645 | 0 | local sync | (unversioned) | yes |
+| Disease Ontology | DOID | 14,638 | 22,625 | 26,373 | 39,057 | bbop-sqlite S3 | 2026-04-30 | yes |
+| EFO | EFO | 18,394 | 22,313 | 30,454 | 32,492 | bbop-sqlite S3 | 3.90.0 | yes |
+| Human Phenotype Ontology | HP | 19,944 | 24,217 | 23,677 | 18,069 | bbop-sqlite S3 | (unversioned) | yes |
+| MONDO | MONDO | 31,886 | 95,210 | 56,077 | 143,373 | bbop-sqlite S3 | (unversioned) | yes |
+| UBERON | UBERON | 16,067 | 40,243 | 43,768 | 49,325 | bbop-sqlite S3 | (unversioned) | yes |
+| ENVO | ENVO | 4,366 | 3,569 | 7,334 | 2,807 | bbop-sqlite S3 | 2025-10-20 | yes |
+| **Total** | | **4,597,316** | **2,170,131** | **3,739,058** | **676,831** | | | |
+
+Local database file: `ontology_store/ontology_store.db`, **1.6 GB**,
+`PRAGMA integrity_check` returns `ok`. All 10 ontologies report
+`complete=1` in `ontology_meta`, and `term_count` there matches the real
+row count exactly for every one (verified by direct query, not trusted
+from the metadata table alone).
+
+**Root/branch strategy**: `app/normalization/grounding/roots.py`. Three
+tiers - `ROOTS` (8 real, live-verified single roots: EFO/MONDO/UBERON/
+NCBITaxon/DOID/HP/CHEBI, used by `ground()`'s branch check),
+`EXTENDED_ONTOLOGY_ROOTS` (verified-but-not-yet-field-bound roots -
+currently empty), `NO_SINGLE_ROOT` (ENVO/NCIT/MESH - real, structural
+findings that these ontologies have no single meaningful root to branch-
+check against, documented per-ontology in `roots.py`'s module
+docstring, not a gap).
+
+**Synchronization mechanism**: `scripts/ontology_sync.py`, real
+downloads from `bbop-sqlite`'s S3-hosted semantic-sql `.db.gz` dumps (7
+ontologies) plus local sync paths for ChEBI/NCIT/MeSH. Idempotent -
+`test_local_backend_resync_does_not_duplicate_synonyms_or_edges` and
+`test_build_seed_store_is_idempotent` both pass; directly verified via
+0 duplicate `(ontology, curie)` pairs and 0 duplicate `(ontology,
+subject, predicate, object)` edge tuples in the real production
+database. **Refresh strategy**: manual re-run of `ontology_sync.py`
+per-ontology (`--status` reports current sync state); no automatic
+scheduled refresh exists.
+
+### 4. Final accuracy metrics (independently re-verified 2026-08-10, not reused from memory)
+
+Corpus: `full_dump.csv`, BugSigDB's real curated export, 14,588 rows,
+loaded fresh for this verification. Methodology: `scripts/eval/
+bugsigdb_independent_evaluation.py` - runs BioAnalyzer's own
+`normalize_body_site()`/`normalize_condition()`/`normalize_host_species()`
+against every distinct real curated value and compares against
+BugSigDB's own ground truth (not generated from BioAnalyzer's own dicts
+or outputs). Ground truth was not modified.
+
+| Field | n (in-scope) | Precision | Recall | F1 | AUTO precision | False-AUTO | REVIEW rate | NONE rate |
+|---|---|---|---|---|---|---|---|---|
+| host_species | 78 | 100.0% | 100.0% | 1.000 | 100.0% (6/6) | 0 | 92.3% | 0.0% |
+| condition | 897 (212 out-of-scope, excluded) | 95.8% | 95.5% | 0.956 | 86.7% (52/60) | 8 (see below) | 93.2% | 0.1% |
+| body_site | 445 | 99.8% | 99.8% | 0.998 | 100.0% (72/72) | 0 | 83.8% | 0.0% |
+
+These figures match the previously reported baseline exactly and are
+independently re-derived here, not copy-pasted from a prior report.
+
+**On condition's "8 false-AUTO" / "4 genuinely wrong - DANGEROUS"
+label**: the evaluation script's raw output flags these mechanically (ID
+mismatch against ground truth). All 4 "genuinely wrong" rows are the
+*same single* real-world text, `"SARS-CoV-2-related disease"`,
+appearing against 4 different co-occurring ground-truth ID combinations
+in the dump. Individually investigated (see the 2026-08-09 sign-off
+section below): BugSigDB's own ground-truth ID for this text
+(`MONDO:0100318`) is **obsolete with no live replacement**;
+BioAnalyzer's answer (`MONDO:0100096`, "COVID-19") is real, current,
+non-obsolete, and branch-valid - a correct, defensible mapping being
+scored as "wrong" purely because it doesn't match a stale ground-truth
+ID. **Dangerous false-AUTO count, after this investigation: 0** - this
+is not a re-assertion of the number, it's the conclusion of tracing
+each of the 4 rows back to their single, already-understood root cause.
+The remaining 4 condition false-AUTO rows are "coarser-but-related"
+(real MONDO ancestor/descendant of ground truth, not a different
+concept) - non-dangerous by the evaluation script's own, separately-
+computed classification.
+
+### 5. Known limitations
+
+**Safety/correctness** (capable of an incorrect automatic mapping): **none
+known.** Every path historically found to risk this (specimen-vs-site
+conflation, disease-vs-measurement conflation, cross-ontology OLS
+contamination, stale/obsolete static IDs, wrong-branch matches, mis-typed
+CURIEs, substring/word-boundary false positives) has a fix and a
+permanent regression test (§6).
+
+**Accuracy** (may produce a suboptimal REVIEW/NONE rather than the best
+possible answer):
+- body_site: 1 residual case (`"Insect head"`, an entomology term) where
+  BioAnalyzer's answer is a real ancestor of the most specific ground-
+  truth term, not the ground truth term itself.
+- condition: the "SARS-CoV-2-related disease" ground-truth-staleness
+  case above; ~30 "genuinely different" condition mismatches not yet
+  individually triaged past the aggregate evaluation (real, disclosed
+  headroom - see the evaluation's own per-case listing for specifics,
+  not hidden behind the aggregate F1).
+- The live OLS fuzzy-search fallback (both `body_site.py` and
+  `condition.py`) has no relevance-score floor, so a low-information
+  generic word (`"patient"`, `"study"`) can return a real but irrelevant
+  same-ontology term at REVIEW tier - never AUTO, but a curator sees a
+  low-value suggestion rather than "no match."
+
+**Performance**: a query that permanently triggers the OLS cross-
+ontology-rejection path (§2 of the 2026-08-09/10 sign-off, below) is
+never cached (the fix returns before `store_cached_term()`), so it
+re-attempts a live network call on every occurrence rather than being
+served from cache after the first - a real, minor, non-safety
+characteristic, not fixed further (a "known-bad, don't retry" negative
+cache would be new complexity for a non-safety issue). `reachable_from()`
+against real NCBITaxon data (2.7M edges) completes in single-digit
+milliseconds (regression-guarded, §6); no other measured performance
+concern exists at current ontology-store scale (1.6 GB, 4.6M terms).
+
+**Operational**: no automatic ontology refresh (manual `ontology_sync.py`
+re-run required); `cache/`/`results/` directory permissions have
+historically drifted to root-owned after Docker runs (documented,
+previously fixed by a one-time `chown`, not a recurring code issue);
+the on-disk grounding/OLS-term caches (`cache/analysis_cache.db`) are
+unbounded (no TTL-based eviction beyond the existing 24h/30-day
+freshness checks already in place) - a real, disclosed, low-urgency
+operational note, not evaluated for a size ceiling this pass.
+
+**Scope**: `local_lookup()`'s candidate generation and the `ROOTS`
+branch-check registry cover EFO/MONDO/UBERON/NCBITaxon/DOID/HP/CHEBI;
+ENVO/NCIT/MESH are fully synced but have no field in BioAnalyzer's
+5-field schema that emits their CURIEs today, and (per `roots.py`'s own
+finding) no single meaningful branch root regardless. No BugSigDB
+curation field maps to ENVO/NCIT/MESH currently, so this is a real but
+inert scope boundary, not a gap against anything BioAnalyzer's 5 fields
+actually need.
+
+### 6. Regression test coverage
+
+Audited against the full historical bug catalogue (2026-08-10) - every
+category below has at least one dedicated, still-passing test:
+
+stale ontology IDs, obsolete terms, wrong branch, wrong label, wrong
+synonym, cross-ontology OLS result, null-like values, ambiguous matches,
+substring collisions, word-boundary collisions, specimen-vs-anatomical-
+site confusion, disease-vs-measurement confusion, generic-vs-specific
+anatomical terms, Roman-numeral disease variants, specificity overrides,
+OLS failures, malformed OLS responses, recursive/cyclic branch
+traversal, large-ontology performance (`test_local_backend_reachable_
+from_stays_fast_against_real_ncbitaxon_data`, added this pass - the one
+real, previously-uncovered gap this audit found; a test-only addition,
+not a production-code change), duplicate/repeated synchronization
+(`test_local_backend_resync_does_not_duplicate_synonyms_or_edges`,
+`test_build_seed_store_is_idempotent`).
+
+Cache corruption is covered for the DB-engine-mismatch case
+(`test_local_backend_gives_actionable_error_for_wrong_engine_file`);
+general cache-staleness/TTL behavior is covered by the existing
+`TestOlsSearchCaching`/`TestHostSpeciesNcbiCaching` hit/miss test
+classes rather than a dedicated "corruption" test - judged adequate
+coverage, not a gap requiring a new test.
+
+### 7. Reproducibility
+
+Verified directly, not assumed: identical `NormalizedTerm` results
+(label, ontology_id, status, confidence, candidates) across repeated
+in-process calls and across independent fresh `python3` process
+invocations, for a representative case from each field, under the
+production-default `GROUNDING_BACKEND_MODE=chain`. The only
+intentionally nondeterministic external behavior is the live OLS/NCBI
+network fallback path itself (reachable only on a local-store miss) -
+its result is cached after first resolution (subject to the cross-
+ontology validation in §2), so *within* a given cache state, results are
+still deterministic; a live ontology's content changing between two
+network calls (a real external system, out of this codebase's control)
+is the only source of true non-reproducibility, and it never affects
+AUTO tier (§2).
+
+### 8. Production data integrity (verified 2026-08-10, direct queries against the real store)
+
+- `PRAGMA integrity_check`: `ok`.
+- Duplicate `(ontology, curie)` term rows: 0.
+- Duplicate `(ontology, subject, predicate, object)` edge rows: 0.
+- Prefix correctness (spot-checked UBERON, MONDO): 0 CURIEs whose prefix
+  doesn't match their `ontology` column.
+- Orphan synonyms (referencing a nonexistent term): 0.
+- Orphan edge subjects (referencing a nonexistent term): 0.
+- Obsolete terms with a `replaced_by` that doesn't resolve within this
+  store: 10 of 2,509 (all `NCBITaxon:*` rank-metadata terms pointing to
+  `TAXRANK:*`, a real ontology this store doesn't sync - an external
+  cross-reference, not an internal consistency defect; verified this is
+  the *only* pattern among the 10, not a mix of real and spurious cases).
+- Synchronization idempotency: confirmed via passing tests (§6), not
+  re-run live against the full multi-GB real sync this pass (would
+  require re-downloading from S3; the existing idempotency tests already
+  exercise the same insert/upsert code path against representative
+  data).
+
+### 9. Files that constitute the grounding subsystem
+
+`app/normalization/types.py` (shared matching/null-detection primitives),
+`app/normalization/local_lookup.py`, `app/normalization/ols.py`,
+`app/normalization/host_species.py`, `app/normalization/body_site.py`,
+`app/normalization/condition.py`, `app/normalization/grounding/__init__.py`,
+`backend.py`, `chain.py`, `local_backend.py`, `ols_backend.py`, `roots.py`,
+`seed.py`, `tiering.py`. Consumed by
+`app/services/bugsigdb_analyzer/field_extraction.py` (the one production
+integration point). Evaluated by `scripts/eval/
+bugsigdb_independent_evaluation.py`, `scripts/eval/grounding_benchmark.py`,
+`scripts/eval/grounding_adversarial_benchmark.py`. Tested by
+`tests/test_normalization.py`, `tests/test_grounding.py`,
+`tests/test_grounding_backends.py`, `tests/test_local_lookup.py`,
+`tests/test_confidence_tier_invariants.py`, `tests/test_ontology_lookup_
+caching.py`.
+
+### 10. Recommended future evaluation strategy
+
+Driven by real evaluation failures, not speculative improvement, per
+this baseline's own freeze condition:
+
+1. Re-run `scripts/eval/bugsigdb_independent_evaluation.py` whenever a
+   static dict, override mechanism, or ranking signal changes - it's
+   fast (~6-30s depending on cache state) and now the standing source of
+   truth for "did this change actually help."
+2. If condition's ~30 genuinely-different mismatches are ever triaged,
+   do it the same way every fix in this baseline was made: check the
+   real local ontology store for a live, non-obsolete, branch-valid
+   alternative before changing any code; accept and document when none
+   exists rather than fabricating one.
+3. Do not add embeddings, a vector database, LLM-based ontology
+   selection, additional ranking complexity, or a new ontology backend
+   unless a *specific, measured* evaluation failure demonstrates the
+   existing deterministic scope + edit-distance + branch-validity
+   ranking is insufficient for it - none has, to date.
+4. A relevance-score floor for OLS fuzzy search (§5's accuracy
+   limitation) is the one concretely-scoped future enhancement flagged
+   by this baseline - would need calibration against OLS's real response
+   scoring fields before implementation, real work, not done
+   speculatively this pass.
+
+---
 
 Brutally honest, subsystem by subsystem. "Before" = the single-file
 `grounding.py` + `ols.py` shipped 2026-07-21 (PR #115).

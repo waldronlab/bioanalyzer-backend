@@ -14,6 +14,8 @@ isn't importable.
 
 from __future__ import annotations
 
+import os
+
 import pytest
 
 from app.normalization import grounding as grounding_module
@@ -30,7 +32,10 @@ from app.normalization.grounding.backend import (
     rank_candidates_explained,
 )
 from app.normalization.grounding.chain import ChainedBackend
-from app.normalization.grounding.local_backend import LocalOntologyBackend
+from app.normalization.grounding.local_backend import (
+    DEFAULT_DB_PATH,
+    LocalOntologyBackend,
+)
 from app.normalization.grounding.ols_backend import OLSBackend
 from app.normalization.grounding.roots import ROOTS, prefix_of
 from app.normalization.grounding.seed import build_seed_store
@@ -991,3 +996,37 @@ def test_ground_with_explicit_backend_overrides_default(monkeypatch):
     assert "round-trip failed" in decision.reason
     assert decision.check is not None
     assert decision.check.exists is False
+
+
+@pytest.mark.skipif(
+    not os.path.exists(DEFAULT_DB_PATH),
+    reason="real synced local ontology store not present in this environment",
+)
+def test_local_backend_reachable_from_stays_fast_against_real_ncbitaxon_data():
+    """Permanent regression guard for a real, severe performance bug fixed
+    2026-08: a single `WITH RECURSIVE` SQL query for `reachable_from()`
+    took 4-12 seconds per call against NCBITaxon's real ~2.7M-edge table
+    (`EXPLAIN QUERY PLAN` showed the recursive join only binding the
+    `ontology` half of the composite index, forcing a full per-hop table
+    scan) - fixed by rewriting to an application-level BFS issuing one
+    indexed, non-recursive query per frontier level (see
+    `local_backend.py`'s module docstring and `_bfs_edges_from()`). Run
+    against the *real* synced production store (not the small in-memory
+    fixture every other test in this file uses), since the bug this
+    guards against only manifested at real NCBITaxon scale (~2.7M terms,
+    ~2.7M edges) - skips cleanly in an environment that hasn't run
+    `scripts/ontology_sync.py`. The 1-second bound is deliberately
+    generous versus the ~5ms this fix actually achieves (avoiding CI
+    flakiness) while still catching a real regression back toward the
+    old 4-12s behavior by two to three orders of magnitude."""
+    import time
+
+    backend = LocalOntologyBackend(db_path=DEFAULT_DB_PATH)
+    try:
+        start = time.perf_counter()
+        result = backend.reachable_from("NCBITaxon:9606", "NCBITaxon:2759", "ncbitaxon")
+        elapsed = time.perf_counter() - start
+    finally:
+        backend.close()
+    assert result is True
+    assert elapsed < 1.0, f"reachable_from() took {elapsed:.3f}s, expected < 1.0s"
