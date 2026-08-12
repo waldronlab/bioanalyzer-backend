@@ -86,4 +86,4 @@ BioAnalyzer help      # Get help
 
 ---
 
-**Need more help?** Run `BioAnalyzer help` or visit the web interface!
+**Need more help?** Run `BioAnalyzer help` or use the issue section
