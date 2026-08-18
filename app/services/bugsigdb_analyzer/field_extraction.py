@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import app.services.bugsigdb_analyzer as _pkg
 from app.normalization.body_site import normalize_body_site
 from app.normalization.condition import normalize_condition
-from app.normalization.grounding import TIER_AUTO, tier_for
+from app.normalization.grounding import TIER_AUTO, TIER_REVIEW, tier_for
 from app.normalization.host_species import normalize_host_species
 from app.normalization.sample_size import normalize_sample_size
 from app.normalization.sequencing_type import normalize_sequencing_type
@@ -363,6 +363,14 @@ def _postprocess_field_results(
         if should_apply:
             cond_term = normalize_condition(disease)
             if cond_term.status != "ABSENT":
+                # mapping_tier/mapping_candidates must be recomputed for this
+                # *new* ontology_id, not inherited from whatever term used to
+                # be in this dict - otherwise a legitimately-earned "auto"
+                # tier on the old ontology_id would silently carry over onto
+                # a different ID that tier_for() never actually graded (the
+                # same "auto" safety invariant this field guards elsewhere -
+                # see app.normalization.grounding.tier_for).
+                tier = tier_for(cond_term)
                 condition.update(
                     {
                         "value": cond_term.label,
@@ -373,6 +381,15 @@ def _postprocess_field_results(
                             float(condition.get("confidence", 0.0) or 0.0), 0.75
                         ),
                         "reason_if_missing": "",
+                        "mapping_tier": tier,
+                        "mapping_candidates": (
+                            [
+                                {"label": label, "ontology_id": oid}
+                                for label, oid in cond_term.candidates
+                            ]
+                            if tier != TIER_AUTO
+                            else []
+                        ),
                     }
                 )
                 out["condition"] = condition
@@ -445,6 +462,13 @@ def _field_results_from_unified_payload(
                 field["confidence"] = min(
                     float(field.get("confidence", 0.0) or 0.0), 0.60
                 )
+            # A regex keyword match never ran the LLM verification step that
+            # the "auto" tier's whole premise depends on (see
+            # app.normalization.grounding.tier_for) - a heuristic-sourced
+            # field must never skip curator review just because its raw
+            # guess happened to be an exact static-dict match.
+            if field.get("mapping_tier") == TIER_AUTO:
+                field["mapping_tier"] = TIER_REVIEW
 
     return field_results
 

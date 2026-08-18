@@ -469,6 +469,47 @@ class TestPostprocessFieldResults:
         )
         assert result["condition"]["value"] == "colorectal cancer"
 
+    def test_condition_upgrade_recomputes_mapping_tier_not_stale_auto(self):
+        """CRITICAL-adjacent regression: this branch swaps in a NEW
+        ontology_id (from the newly-found, more specific disease phrase) but
+        used to leave whatever mapping_tier was already in the dict
+        untouched. If the OLD ontology_id had legitimately earned "auto",
+        that label would silently carry over onto the NEW ontology_id, which
+        tier_for() never actually graded - the same "auto"-tier safety
+        invariant as the heuristic-fallback issue, via a second path.
+        mapping_tier must be recomputed for the new term, not inherited."""
+        from app.normalization.types import NormalizedTerm
+
+        field_results = {
+            "condition": {
+                "value": "cancer",
+                "status": "PRESENT",
+                "confidence": 0.5,
+                "ontology_id": "MONDO:OLD-FAKE-EXACT-MATCH",
+                "mapping_tier": "auto",
+                "mapping_candidates": [],
+            }
+        }
+        # A live/ambiguous-lookup-style term (confidence < 1.0) can never
+        # legitimately grade "auto" - see tiering.py::ground()'s early
+        # mapping_confidence check, which never touches the ontology store.
+        new_term = NormalizedTerm(
+            label="colorectal cancer",
+            ontology_id="MONDO:NEW-LIVE-LOOKUP",
+            status="PRESENT",
+            mapping_confidence=0.6,
+        )
+        with patch(
+            "app.services.bugsigdb_analyzer.field_extraction.normalize_condition",
+            return_value=new_term,
+        ):
+            result = _postprocess_field_results(
+                field_results, "patients with colorectal cancer were recruited"
+            )
+
+        assert result["condition"]["ontology_id"] == "MONDO:NEW-LIVE-LOOKUP"
+        assert result["condition"]["mapping_tier"] == "review"
+
 
 class TestFieldResultsFromUnifiedPayload:
     def test_maps_all_five_fields(self):
@@ -504,6 +545,26 @@ class TestFieldResultsFromUnifiedPayload:
         results = _field_results_from_unified_payload({})
         for field in results.values():
             assert field["status"] == "ABSENT"
+
+    def test_heuristic_source_downgrades_auto_tier_to_review(self):
+        """CRITICAL (docs/CRITICAL_HIGH_ISSUES.md): a regex keyword match
+        never runs the LLM verification step the "auto" tier (which skips
+        curator review) depends on - the heuristic path must never reach it,
+        even when the raw guess happens to be an exact static-dict match."""
+        payload = {
+            "host_species_raw": "human",
+            "_source": "heuristic",
+        }
+        results = _field_results_from_unified_payload(payload)
+        assert results["host_species"]["mapping_tier"] == "review"
+
+    def test_llm_source_keeps_auto_tier(self):
+        """Sanity check for the fix above: a non-heuristic payload with the
+        same exact-match value must still be allowed to reach "auto" - the
+        fix downgrades only heuristic-sourced fields, not every field."""
+        payload = {"host_species_raw": "human"}
+        results = _field_results_from_unified_payload(payload)
+        assert results["host_species"]["mapping_tier"] == "auto"
 
 
 class TestAvgConfidence:
@@ -752,6 +813,12 @@ class TestAnalyzePaperSimple:
 
         assert result is not None
         assert result["fields"]["host_species"]["status"] == "PRESENT"
+        # CRITICAL (docs/CRITICAL_HIGH_ISSUES.md): this is the exact scenario
+        # that used to reach mapping_tier="auto" purely from a keyword match
+        # ("patients") with the LLM never having run at all - end-to-end
+        # proof through the real public entry point, not just the internal
+        # helper functions.
+        assert result["fields"]["host_species"]["mapping_tier"] == "review"
 
     @patch("app.services.bugsigdb_analyzer.is_in_bugsigdb", return_value=True)
     @patch("app.services.bugsigdb_analyzer.get_unified_qa")
@@ -848,7 +915,11 @@ class TestAnalyzePaperWithRag:
         self, mock_get_cache, mock_get_retriever, mock_get_qa, mock_in_bugsigdb
     ):
         """Same independence guarantee as the v1 pipeline: a PMID present in
-        BugSigDB reports in_bugsigdb=True regardless of extraction outcome."""
+        BugSigDB reports in_bugsigdb=True regardless of extraction outcome.
+        Also doubles as the v2/RAG pipeline's end-to-end proof for the
+        CRITICAL auto-tier fix (docs/CRITICAL_HIGH_ISSUES.md): invalid LLM
+        JSON forces the heuristic fallback on the default mock abstract
+        ("...30 human patients."), which must not reach mapping_tier="auto"."""
         mock_get_cache.return_value = _make_mock_cache_manager()
         mock_get_retriever.return_value = _make_mock_retriever(full_text="short")
         mock_get_qa.return_value = _make_mock_unified_qa(json_text="not valid json")
@@ -857,6 +928,7 @@ class TestAnalyzePaperWithRag:
 
         assert result is not None
         assert result["in_bugsigdb"] is True
+        assert result["fields"]["host_species"]["mapping_tier"] == "review"
 
     @patch("app.services.bugsigdb_analyzer.get_pubmed_retriever", return_value=None)
     @patch("app.services.bugsigdb_analyzer.get_cache_manager")
