@@ -161,6 +161,8 @@ class RAGStats(BaseModel):
     chunks_ranked: int
     chunks_summarized: int
     avg_relevance_score: float
+    max_relevance_score: float
+    min_relevance_score: float
     avg_confidence: float
     rerank_method: str
     summary_length: str

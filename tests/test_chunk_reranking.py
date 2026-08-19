@@ -301,6 +301,137 @@ class TestChunkReRanker:
         assert ranked == []
 
     @pytest.mark.asyncio
+    async def test_get_metrics_reflects_actual_relevance_scores(self):
+        """Regression test: get_metrics() must report real aggregate relevance
+        scores computed from the actual reranked chunks, not the old hardcoded
+        constants (avg=0.75, max=0.0, min=0.0) that were previously returned
+        because rerank_chunks() never wrote score aggregates into _metrics.
+
+        Uses purpose-built chunks with deliberately graduated keyword-match
+        density against the query, so every chunk gets a distinct, nonzero
+        keyword-rerank score and the aggregates are unambiguously not the
+        old constants.
+        """
+        from paperqa.types import Doc
+
+        test_doc = Doc(docname="test", dockey="test_key", citation="Test")
+        query = "microbiome host species sample sequencing"
+
+        # Graduated density: 5, 4, 3, 2, 1 of the 5 query terms present.
+        density_chunks = [
+            Text(
+                text=(
+                    "microbiome host species sample sequencing all present "
+                    "in this chunk about the study."
+                ),
+                name="dense_5",
+                doc=test_doc,
+            ),
+            Text(
+                text=(
+                    "microbiome host species sample present here but no "
+                    "mention of the analysis method."
+                ),
+                name="dense_4",
+                doc=test_doc,
+            ),
+            Text(
+                text="microbiome host species discussed without further detail.",
+                name="dense_3",
+                doc=test_doc,
+            ),
+            Text(
+                text="microbiome host mentioned only briefly in passing.",
+                name="dense_2",
+                doc=test_doc,
+            ),
+            Text(
+                text="microbiome mentioned once, nothing else relevant here.",
+                name="dense_1",
+                doc=test_doc,
+            ),
+        ]
+
+        reranker = ChunkReRanker(rerank_method="keyword")
+        ranked = await reranker.rerank_chunks(chunks=density_chunks, query=query)
+        metrics = reranker.get_metrics()
+
+        # Independently recompute expected aggregates from the actual
+        # returned scores (full population, not just a top_k slice).
+        expected_scores = [rc.relevance_score for rc in ranked]
+        expected_avg = sum(expected_scores) / len(expected_scores)
+        expected_max = max(expected_scores)
+        expected_min = min(expected_scores)
+
+        # Sanity check: the fixture actually produced graduated, distinct
+        # scores (otherwise this test wouldn't exercise real variance).
+        assert len(set(expected_scores)) == len(expected_scores)
+
+        assert metrics["chunks_reranked"] == len(density_chunks)
+        assert metrics["avg_relevance_score"] == pytest.approx(expected_avg)
+        assert metrics["max_relevance_score"] == pytest.approx(expected_max)
+        assert metrics["min_relevance_score"] == pytest.approx(expected_min)
+        assert "processing_time" in metrics
+
+        # The old hardcoded fallback values (used whenever these keys were
+        # never populated) would not survive this comparison.
+        assert metrics["avg_relevance_score"] != 0.75
+        assert metrics["max_relevance_score"] != 0.0
+        assert metrics["min_relevance_score"] != 0.0
+
+    @pytest.mark.asyncio
+    async def test_get_metrics_computed_over_full_population_not_top_k(
+        self, sample_chunks
+    ):
+        """Metrics must be computed over the full reranked set, not just the
+        post-top_k slice, so a small top_k can't trivially inflate the
+        reported average/min via selection bias."""
+        reranker = ChunkReRanker(rerank_method="keyword")
+        query = "host species Homo sapiens gastrointestinal colon"
+
+        full_ranked = await reranker.rerank_chunks(chunks=sample_chunks, query=query)
+        full_scores = [rc.relevance_score for rc in full_ranked]
+
+        reranker_top_k = ChunkReRanker(rerank_method="keyword")
+        top_ranked = await reranker_top_k.rerank_chunks(
+            chunks=sample_chunks, query=query, top_k=1
+        )
+        assert len(top_ranked) == 1
+        metrics = reranker_top_k.get_metrics()
+
+        # Even though only 1 chunk was returned, metrics reflect all chunks
+        # that were actually reranked/scored.
+        assert metrics["chunks_reranked"] == len(sample_chunks)
+        assert metrics["avg_relevance_score"] == pytest.approx(
+            sum(full_scores) / len(full_scores)
+        )
+        assert metrics["min_relevance_score"] == pytest.approx(min(full_scores))
+
+    @pytest.mark.asyncio
+    async def test_metrics_reset_on_empty_chunks_after_prior_call(self, sample_chunks):
+        """A chunkless call must reset metrics to zeroed values rather than
+        leaving stale data from a previous call on the same instance."""
+        reranker = ChunkReRanker(rerank_method="keyword")
+        query = "host species"
+
+        ranked = await reranker.rerank_chunks(chunks=sample_chunks, query=query)
+        prior_metrics = reranker.get_metrics()
+        assert prior_metrics["chunks_reranked"] == len(sample_chunks)
+        assert len(ranked) == len(sample_chunks)
+
+        empty_ranked = await reranker.rerank_chunks(chunks=[], query=query)
+        assert empty_ranked == []
+
+        reset_metrics = reranker.get_metrics()
+        assert reset_metrics == {
+            "processing_time": 0.0,
+            "chunks_reranked": 0,
+            "avg_relevance_score": 0.0,
+            "max_relevance_score": 0.0,
+            "min_relevance_score": 0.0,
+        }
+
+    @pytest.mark.asyncio
     async def test_score_parsing(self, sample_chunks, mock_llm_provider):
         """Test parsing scores from LLM responses."""
         # Test different response formats
