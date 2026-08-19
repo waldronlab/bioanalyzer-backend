@@ -189,7 +189,9 @@ async def _analyze_batch(
     max_concurrent = max(1, min(max_concurrent, MAX_BATCH_CONCURRENCY))
     semaphore = asyncio.Semaphore(max_concurrent)
 
-    async def _guarded(pmid: str):
+    async def _guarded(
+        pmid: str,
+    ) -> tuple[str, Optional[PaperAnalysisResultV2], Optional[str]]:
         async with semaphore:
             try:
                 result = await _analyze_single_rag(
