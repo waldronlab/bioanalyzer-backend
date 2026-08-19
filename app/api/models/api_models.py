@@ -175,6 +175,20 @@ class PaperAnalysisResultV2(PaperAnalysisResult):
     rag_config_used: Optional[RAGConfig] = None
 
 
+class BatchAnalysisFailure(BaseModel):
+    """One PMID within a batch request that failed to analyze."""
+
+    pmid: str
+    error: str
+
+
+class BatchAnalysisResponseV2(BaseModel):
+    """Batch analysis response distinguishing successes from failures."""
+
+    results: List[PaperAnalysisResultV2]
+    failed: List[BatchAnalysisFailure] = []
+
+
 class RAGConfigResponse(BaseModel):
     """RAG configuration information."""
 
