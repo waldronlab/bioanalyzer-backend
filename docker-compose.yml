@@ -11,9 +11,6 @@ services:
       LOG_LEVEL: "info"
     ports:
       - "8000:8000"
-    depends_on:
-      redis:
-        condition: service_healthy
     volumes:
       - ./cache:/app/cache
       - ./logs:/app/logs
@@ -34,6 +31,10 @@ services:
     networks:
       - bioanalyzer-net
 
+  # Not used by the application today (rate limiting/caching are in-memory
+  # and SQLite-backed respectively — see app/api/middleware/rate_limit.py
+  # and app/services/cache_manager.py). Provisioned for future production
+  # use only; the app service does not depend on it to start.
   redis:
     image: redis:7-alpine
     container_name: bioanalyzer-redis
