@@ -177,8 +177,10 @@ class TestBatchAnalysisV2:
         )
         assert response.status_code == 200
         data = response.json()
-        assert len(data) == 2
-        assert {r["pmid"] for r in data} == {"111", "222"}
+        results = data["results"]
+        assert len(results) == 2
+        assert {r["pmid"] for r in results} == {"111", "222"}
+        assert data["failed"] == []
 
     @patch("app.api.routers.bugsigdb_analysis_v2.analyze_paper_with_rag")
     def test_batch_filters_out_failed_pmids(self, mock_analyze, client):
@@ -198,8 +200,46 @@ class TestBatchAnalysisV2:
         )
         assert response.status_code == 200
         data = response.json()
-        assert len(data) == 1
-        assert data[0]["pmid"] == "111"
+        # Successful PMID shows up in `results`, nothing for "222" there.
+        assert len(data["results"]) == 1
+        assert data["results"][0]["pmid"] == "111"
+        # Failed PMID is explicitly reported in `failed`, not silently
+        # dropped - callers correlating results to input PMIDs need this
+        # signal instead of inferring failure from a shorter list.
+        assert len(data["failed"]) == 1
+        assert data["failed"][0]["pmid"] == "222"
+        # mask_exception_message() only rewrites credential-shaped
+        # substrings (API keys, bearer tokens, key=value pairs) - "boom"
+        # doesn't match any of those patterns, so it passes through as-is.
+        assert "boom" in data["failed"][0]["error"]
+
+    @patch("app.api.routers.bugsigdb_analysis_v2.analyze_paper_with_rag")
+    def test_batch_partial_failure_reconciles_against_request(
+        self, mock_analyze, client
+    ):
+        """3 PMIDs, 1 fails: results/failed counts and the failed PMID must
+        reconcile against the request, not just be a filtered-down list."""
+
+        async def side_effect(pmid, rag_config=None, use_rag=True):
+            if pmid == "222":
+                raise RuntimeError("boom")
+            return _mock_result(pmid)
+
+        mock_analyze.side_effect = side_effect
+        response = client.post(
+            "/api/v2/analyze/batch",
+            json={
+                "pmids": ["111", "222", "333"],
+                "use_rag": False,
+                "max_concurrent": 3,
+            },
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["results"]) == 2
+        assert {r["pmid"] for r in data["results"]} == {"111", "333"}
+        assert len(data["failed"]) == 1
+        assert data["failed"][0]["pmid"] == "222"
 
     @patch("app.api.routers.bugsigdb_analysis_v2.analyze_paper_with_rag")
     def test_batch_default_rag_config_used_when_enabled(self, mock_analyze, client):
@@ -232,8 +272,9 @@ class TestBatchAnalysisV2:
         )
         assert response.status_code == 200
         data = response.json()
-        assert len(data) == 4
-        actual = {r["pmid"]: r["in_bugsigdb"] for r in data}
+        results = data["results"]
+        assert len(results) == 4
+        actual = {r["pmid"]: r["in_bugsigdb"] for r in results}
         assert actual == membership
 
 
@@ -508,9 +549,11 @@ class TestGenuineAnalysisSchemaContract:
             )
         assert response.status_code == 200
         data = response.json()
-        assert len(data) == 2
-        actual = {r["pmid"]: r["in_bugsigdb"] for r in data}
+        results = data["results"]
+        assert len(results) == 2
+        actual = {r["pmid"]: r["in_bugsigdb"] for r in results}
         assert actual == membership
+        assert data["failed"] == []
 
     def test_genuine_v1_analysis_unaffected(self, client):
         """v1 never validated through PaperAnalysisResult (Dict[str, Any]
@@ -840,8 +883,9 @@ class TestOntologyGroundingResponseContract:
             )
         assert response.status_code == 200
         data = response.json()
-        assert len(data) == 2
-        by_pmid = {r["pmid"]: r for r in data}
+        results = data["results"]
+        assert len(results) == 2
+        by_pmid = {r["pmid"]: r for r in results}
         human_id = by_pmid["11111111"]["fields"]["host_species"]["ontology_id"]
         mouse_id = by_pmid["22222222"]["fields"]["host_species"]["ontology_id"]
         assert human_id == "NCBITaxon:9606"
@@ -1070,8 +1114,9 @@ class TestTopLevelAnalysisFieldsResponseContract:
             )
         assert response.status_code == 200
         data = response.json()
-        assert len(data) == 2
-        by_pmid = {r["pmid"]: r for r in data}
+        results = data["results"]
+        assert len(results) == 2
+        by_pmid = {r["pmid"]: r for r in results}
         assert by_pmid["11111111"]["year"] == 2019
         assert by_pmid["11111111"]["has_differential_abundance"] is True
         assert by_pmid["22222222"]["year"] == 2021

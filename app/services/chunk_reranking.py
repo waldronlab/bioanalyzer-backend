@@ -74,6 +74,13 @@ class ChunkReRanker:
     ) -> List[RankedChunk]:
         start_time = time.time()
         if not chunks:
+            self._metrics = {
+                "processing_time": 0.0,
+                "chunks_reranked": 0,
+                "avg_relevance_score": 0.0,
+                "max_relevance_score": 0.0,
+                "min_relevance_score": 0.0,
+            }
             return []
 
         chunks_to_rerank = chunks[
@@ -98,6 +105,14 @@ class ChunkReRanker:
         ranked.sort(key=lambda x: x.relevance_score, reverse=True)
         for i, rc in enumerate(ranked, start=1):
             rc.rank = i
+
+        scores = [rc.relevance_score for rc in ranked]
+        self._metrics["chunks_reranked"] = len(ranked)
+        self._metrics["avg_relevance_score"] = (
+            sum(scores) / len(scores) if scores else 0.0
+        )
+        self._metrics["max_relevance_score"] = max(scores) if scores else 0.0
+        self._metrics["min_relevance_score"] = min(scores) if scores else 0.0
 
         if top_k:
             ranked = ranked[:top_k]

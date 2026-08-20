@@ -161,6 +161,8 @@ class RAGStats(BaseModel):
     chunks_ranked: int
     chunks_summarized: int
     avg_relevance_score: float
+    max_relevance_score: float
+    min_relevance_score: float
     avg_confidence: float
     rerank_method: str
     summary_length: str
@@ -173,6 +175,20 @@ class PaperAnalysisResultV2(PaperAnalysisResult):
     rag_enabled: bool = False
     rag_stats: Optional[RAGStats] = None
     rag_config_used: Optional[RAGConfig] = None
+
+
+class BatchAnalysisFailure(BaseModel):
+    """One PMID within a batch request that failed to analyze."""
+
+    pmid: str
+    error: str
+
+
+class BatchAnalysisResponseV2(BaseModel):
+    """Batch analysis response distinguishing successes from failures."""
+
+    results: List[PaperAnalysisResultV2]
+    failed: List[BatchAnalysisFailure] = []
 
 
 class RAGConfigResponse(BaseModel):

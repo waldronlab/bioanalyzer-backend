@@ -8,7 +8,9 @@ from fastapi import APIRouter, HTTPException, Query
 
 from app.api.models.api_models import (
     AnalysisRequestV2,
+    BatchAnalysisFailure,
     BatchAnalysisRequestV2,
+    BatchAnalysisResponseV2,
     PaperAnalysisResultV2,
     RAGConfig,
     RAGConfigResponse,
@@ -175,7 +177,7 @@ async def _analyze_batch(
     use_rag: bool,
     rag_config: Optional[RAGConfig],
     max_concurrent: int,
-) -> List[PaperAnalysisResultV2]:
+) -> BatchAnalysisResponseV2:
     """Bounded-concurrency batch analysis over the RAG path.
 
     Batch has always been a /api/v2-only feature (BatchAnalysisRequestV2
@@ -187,22 +189,32 @@ async def _analyze_batch(
     max_concurrent = max(1, min(max_concurrent, MAX_BATCH_CONCURRENCY))
     semaphore = asyncio.Semaphore(max_concurrent)
 
-    async def _guarded(pmid: str) -> Optional[PaperAnalysisResultV2]:
+    async def _guarded(
+        pmid: str,
+    ) -> tuple[str, Optional[PaperAnalysisResultV2], Optional[str]]:
         async with semaphore:
             try:
-                return await _analyze_single_rag(
+                result = await _analyze_single_rag(
                     pmid, use_rag=use_rag, rag_config=rag_config
                 )
+                return pmid, result, None
             except Exception as e:
                 # Keep the batch resilient: one bad PMID shouldn't fail the
-                # whole request. Failures are logged and dropped from the
-                # result list, matching the previous behavior.
+                # whole request. Failures are logged and reported back in
+                # the response's `failed` list instead of being silently
+                # dropped from the result list.
                 safe_error = mask_exception_message(e)
                 logger.error(f"Error analyzing PMID {pmid} in batch: {safe_error}")
-                return None
+                return pmid, None, safe_error
 
-    results = await asyncio.gather(*(_guarded(pmid) for pmid in pmids))
-    return [r for r in results if r is not None]
+    outcomes = await asyncio.gather(*(_guarded(pmid) for pmid in pmids))
+    results = [result for _, result, err in outcomes if err is None]
+    failed = [
+        BatchAnalysisFailure(pmid=pmid, error=err)
+        for pmid, _, err in outcomes
+        if err is not None
+    ]
+    return BatchAnalysisResponseV2(results=results, failed=failed)
 
 
 # --------------------------------------------------------------------------- #
@@ -304,7 +316,7 @@ async def analyze_paper_post(request: AnalysisRequestV2) -> PaperAnalysisResultV
 @router.post("/analyze/batch")
 async def analyze_papers_batch(
     request: BatchAnalysisRequestV2,
-) -> List[PaperAnalysisResultV2]:
+) -> BatchAnalysisResponseV2:
     """
     Analyze multiple papers in batch with RAG support.
 

@@ -1,6 +1,3 @@
-# CI/CD Pipeline — tests, lint, type-check, security, Docker build
-# Runs on push/PR to main and develop; path filters avoid runs for docs-only changes.
-
 name: CI
 
 on:
