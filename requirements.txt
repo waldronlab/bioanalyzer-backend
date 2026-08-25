@@ -21,7 +21,11 @@ openpyxl>=3.1.0
 # --- NLP & LLM Ecosystem ---
 tiktoken>=0.5.0
 google-generativeai>=0.7.2
-litellm>=1.83.7
+# litellm 1.98.0 does `from typing import NotRequired` in
+# llms/anthropic/experimental_pass_through/context_management/editors/compact.py,
+# which only exists in stdlib typing on Python >=3.11 - `import litellm` raises
+# ImportError on 3.10 (upstream bug from commit 6b5249bc). Cap below it until fixed.
+litellm>=1.83.7,<1.98.0
 paper-qa>=5.0.0
 # Transitive deps (google-generativeai -> google-auth -> cryptography;
 # paper-qa -> paper-qa-pypdf -> pypdf); pinned explicitly to versions
