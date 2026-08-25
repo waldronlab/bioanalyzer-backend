@@ -54,7 +54,7 @@ logger = logging.getLogger(__name__)
 # pass via a direct HEAD request
 # (HTTP 200, `Content-Type: application/gzip`) for every ontology slug in
 # ROOTS/EXTENDED_ONTOLOGY_ROOTS.
-SEMANTIC_SQL_BASE_URL = "https://s3.amazonaws.com/bbop-sqlite"
+SEMANTIC_SQL_BASE_URL = "https://semanticsql.berkeleybop.io"
 
 # prefix -> the ontology's static lookup dict, keyed by the same prefixes
 # app.normalization.grounding.roots.ROOTS declares. Ontologies with no
