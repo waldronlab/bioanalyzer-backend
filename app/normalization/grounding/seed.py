@@ -49,18 +49,9 @@ from app.utils.credential_masking import mask_exception_message
 
 logger = logging.getLogger(__name__)
 
-# semantic-sql publishes one gzipped SQLite-projectable file per ontology
-# under a public bucket, named `<ontology>.db.gz`. Confirmed live in this
-# pass via a direct HEAD request
-# (HTTP 200, `Content-Type: application/gzip`) for every ontology slug in
-# ROOTS/EXTENDED_ONTOLOGY_ROOTS.
 SEMANTIC_SQL_BASE_URL = "https://s3.amazonaws.com/bbop-sqlite"
 
-# prefix -> the ontology's static lookup dict, keyed by the same prefixes
-# app.normalization.grounding.roots.ROOTS declares. Ontologies with no
-# static dict (e.g. DOID, which no BioAnalyzer normalizer currently emits)
-# are simply absent here - build_seed_store() skips them, by design; they
-# only ever get real data via ensure_ontology().
+
 _SEED_SOURCES: Dict[str, Dict[str, Tuple[str, str]]] = {
     "EFO": CONDITION_LOOKUP,  # CONDITION_LOOKUP mixes EFO/MONDO ids by prefix
     "MONDO": CONDITION_LOOKUP,
@@ -92,8 +83,7 @@ def build_seed_store(backend: LocalOntologyBackend) -> int:
             )
             if curie != root_id:
                 backend.insert_edge(ols_slug, curie, "is_a", root_id)
-        # The root term itself must exist too, or reachable_from()'s
-        # curie == root short-circuit is the only way it's ever "found".
+
         backend.upsert_term(
             ols_slug, root_id, root_id, version="bioanalyzer-static-2026-07-12"
         )
@@ -121,21 +111,9 @@ def ensure_ontology(
         with tempfile.TemporaryDirectory() as tmp:
             gz_path = os.path.join(tmp, f"{ontology_slug}.db.gz")
             db_path = os.path.join(tmp, f"{ontology_slug}.db")
-            # nosec B310 - `url` is built above from the hardcoded
-            # `SEMANTIC_SQL_BASE_URL` (a fixed "https://..." string
-            # literal) plus `ontology_slug`, which only ever comes from
-            # this codebase's own hardcoded ontology registry
-            # (scripts/ontology_sync.py), never from a network request or
-            # other untrusted input - the scheme itself can never be
-            # "file://" or otherwise attacker-controlled.
             urllib.request.urlretrieve(url, gz_path)  # nosec B310
             with gzip.open(gz_path, "rb") as src, open(db_path, "wb") as dst:
                 shutil.copyfileobj(src, dst)
-            # Clear any prior copy of this ontology only after the fetch has
-            # fully succeeded - a failed download must never touch existing
-            # good data (see clear_ontology()'s docstring for the duplicate-
-            # row bug this closes when re-syncing an already-synced
-            # ontology).
             backend.clear_ontology(ontology_slug)
             version = _project_semantic_sql(
                 db_path, ontology_slug, curie_prefix, backend
@@ -206,10 +184,6 @@ def _project_semantic_sql(
             syn_rows = [
                 (curie, synonym, scope)
                 for curie, synonym in src.execute(
-                    # nosec B608 - `view` iterates the fixed, hardcoded
-                    # `_SYNONYM_VIEWS` dict above, never external/user
-                    # input; the real value (`like_pattern`) is
-                    # parameterized.
                     f"SELECT subject, value FROM {view} WHERE subject LIKE ?",  # nosec B608
                     (like_pattern,),
                 )
@@ -227,11 +201,6 @@ def _project_semantic_sql(
         ]
         backend.bulk_insert_edges(ontology_slug, edge_rows)
 
-        # oio:hasDbXref - cross-references to other databases/ontologies,
-        # confirmed real via `has_dbxref_statement` against real downloaded
-        # data (2026-08-09 pass). Used as a corroborating ranking signal
-        # (backend.rank_candidates_explained()) when a candidate's xref
-        # points into another ontology this store also holds.
         xref_rows = [
             (curie, xref)
             for curie, xref in src.execute(

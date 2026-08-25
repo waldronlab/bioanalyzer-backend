@@ -17,10 +17,6 @@ class NormalizedTerm:
     status: str
     mapping_confidence: float
     raw: str = ""
-    # Up to 2 runner-up (label, ontology_id) pairs from the same lookup dict,
-    # surfaced so curators can pick an alternative when the mapping tier isn't
-    # "auto" (see app.normalization.grounding). Empty for API-resolved terms,
-    # which only ever produce a single candidate.
     candidates: Tuple[Tuple[str, str], ...] = field(default_factory=tuple)
 
     @classmethod
@@ -181,15 +177,6 @@ class LookupMatcher:
         return tuple(found)
 
 
-# British -> American spelling variants that show up in scientific papers and
-# would otherwise miss both our static lookup dicts and live OLS/MONDO
-# queries (e.g. a paper saying "faecal" scores as a mismatch against our
-# "feces" entries even though it's the same site) - ported from
-# MetaHarmonizer's _BRITISH_TO_AMERICAN list after a benchmark against
-# BugSigDB's real curated corpus found this exact gap. Applied before
-# matching, not as a lookup-dict key, so it benefits the normalizers that call it today
-# (body_site.py, condition.py — and their live search fallback) without
-# duplicating entries.
 _BRITISH_TO_AMERICAN = (
     (re.compile(r"faeces", re.IGNORECASE), "feces"),
     (re.compile(r"faecal", re.IGNORECASE), "fecal"),
@@ -224,36 +211,6 @@ def normalize_spelling(text: str) -> str:
     return text
 
 
-# Real, severe adversarial finding (2026-08-09 final safety-closure pass):
-# "N/A" resolved to 'nasal artery' (UBERON:2005085) at 0.73 confidence via
-# body_site.py's local-store miss-fallback - a data-entry placeholder for
-# "this field wasn't reported" being treated as real anatomical text and
-# fuzzy-matched to an unrelated, oddly-plausible-looking ontology term.
-# Non-dangerous on its own (0.73 never reaches "auto"), but a curator
-# shouldn't see a confident-looking wrong suggestion for a value that means
-# "no data" - and the same class of value can hit host_species.py's and
-# condition.py's own miss-fallbacks (live NCBI/OLS search) the same way,
-# each independently, since none of the three normalizers previously
-# distinguished "genuinely empty" from "explicitly marked as not
-# applicable/unknown". Fixed once, centrally, here - not as three separate
-# field-specific dictionaries - because the list of common non-groundable
-# data-entry placeholders is a property of *free text as data*, not of any
-# one ontology or field; `host_species.py`/`body_site.py`/`condition.py`
-# each call `is_null_like()` as the very first check in their
-# `normalize_*()` entry point, before any lookup (static dict, local store,
-# or live network) is attempted.
-#
-# Every value below is a standard, real data-entry/missing-value convention
-# (matches pandas' own default `na_values` list where they overlap, e.g.
-# "N/A", "NA", "null", "n/a", "#N/A" - plus the extraction-specific phrases
-# an LLM field-extraction prompt realistically produces for "not reported
-# in this paper": "not applicable", "not specified", "not reported").
-# Deliberately does NOT include words that are ambiguous with genuine
-# biomedical content in at least one of the three fields this guards (e.g.
-# "normal"/"control"/"healthy" are real, meaningful CONDITION_LOOKUP
-# entries - a comparator-arm description, not a missing-value marker - so
-# they are excluded even though some other datasets might use "normal" as
-# an NA placeholder).
 _NULL_LIKE_VALUES = frozenset(
     {
         "n/a",
@@ -288,16 +245,6 @@ _NULL_LIKE_VALUES = frozenset(
     }
 )
 
-
-# Leading/trailing whitespace, brackets, and periods, matched and stripped
-# as a single run per edge (not three separate chained .strip() calls,
-# which a self-review of this function found a real gap in: "(unknown)."
-# - a closing paren immediately followed by a period, no space between -
-# left "unknown)" behind after `.strip("()[]{}").strip().rstrip(".")`,
-# since the bracket-strip and period-strip each only look at what's
-# *currently* at the string's edge and never re-check after the other one
-# runs. A single regex removing any mix of these edge characters in one
-# pass has no such ordering dependency.
 _NULL_LIKE_EDGE_RE = re.compile(r"^[\s()\[\]{}]+|[\s()\[\]{}.]+$")
 
 

@@ -12,11 +12,6 @@ from app.normalization.local_lookup import local_lookup
 from app.normalization.ontology_cache import get_cached_term, store_cached_term
 from app.normalization.types import LookupMatcher, NormalizedTerm, is_null_like
 
-# keyword -> (scientific name, NCBITaxon ID)
-#
-# All 8 distinct NCBITaxon IDs below were exhaustively checked against the
-# live EBI OLS API on 2026-07-12 (see docs/PROJECT_AUDIT.md /
-# ONTOLOGY_AUDIT.md) - every one resolves to the species claimed here.
 SPECIES_LOOKUP: Dict[str, Tuple[str, str]] = {
     "human": ("Homo sapiens", "NCBITaxon:9606"),
     "humans": ("Homo sapiens", "NCBITaxon:9606"),
@@ -30,13 +25,6 @@ SPECIES_LOOKUP: Dict[str, Tuple[str, str]] = {
     "subjects": ("Homo sapiens", "NCBITaxon:9606"),
     "children": ("Homo sapiens", "NCBITaxon:9606"),
     "homo sapiens": ("Homo sapiens", "NCBITaxon:9606"),
-    # Deliberately NOT mapped to Homo sapiens: "adult", "infant", "neonate"
-    # (and plurals) are life-stage descriptors, not species-identifying -
-    # they're used for animal cohorts just as often ("adult mice", "infant
-    # rats", "neonate pigs"). Because _lookup_species() picks the longest
-    # matching key, these (5-7 chars) used to outrank short animal nouns
-    # like "mice"/"rat"/"pig" (3-4 chars), silently misclassifying animal
-    # studies as human whenever both appeared in the same text.
     "mouse": ("Mus musculus", "NCBITaxon:10090"),
     "mice": ("Mus musculus", "NCBITaxon:10090"),
     "mus musculus": ("Mus musculus", "NCBITaxon:10090"),
@@ -86,24 +74,6 @@ def normalize_host_species(raw_text: str) -> NormalizedTerm:
     hit = _MATCHER.match_longest(lowered)
     if hit:
         matched_key, (label, tax_id) = hit
-        # Real, severe false-AUTO bug found in a 2026-08-09 adversarial
-        # review: candidate/ambiguity detection used to run *only* when a
-        # literal "and"/"&"/"/"/"or" substring was present anywhere in the
-        # text - so "Germ-free C57BL 6 mice were colonized with fecal
-        # microbiota from IBD patients" (no such substring) matched
-        # "patients" (8 chars, -> Homo sapiens) over "mice" (4 chars, the
-        # actual study animal - "patients" here refers to the human FMT
-        # donor, not the host species) via plain longest-match, with the
-        # second, real candidate ("mice") never even computed - confidence
-        # 1.0, "auto" tier, completely wrong species, zero indication
-        # anything was ambiguous. Fixed by *always* checking for other real
-        # distinct candidates (not gating that check behind an indicator-
-        # substring heuristic, which also both missed cases without one of
-        # those four substrings and falsely triggered on unrelated slashes
-        # in strain names like "C57BL/6"/"BALB/c" even with zero real
-        # ambiguity) - genuine ambiguity is now determined by whether a
-        # second, real, distinct species match exists, not by incidental
-        # punctuation.
         candidates = _MATCHER.candidates(lowered, matched_key, (label, tax_id))
         if candidates:
             return NormalizedTerm(
@@ -111,16 +81,6 @@ def normalize_host_species(raw_text: str) -> NormalizedTerm:
             )
         return NormalizedTerm(label, tax_id, "PRESENT", 1.0)
 
-    # Nothing in the static dict matched. Before checking for compound-
-    # text ambiguity indicators or falling to the live NCBI API: try the
-    # local ontology store - real, complete NCBITaxon data (2026-08
-    # adversarial review found this had no production caller at all; see
-    # app.normalization.local_lookup's module docstring). Offline,
-    # sub-millisecond even against NCBITaxon's 2.7M real terms, and covers
-    # real species far beyond this module's ~31-entry static dict (a
-    # single species name like "Acrocephalus sechellensis" - a real
-    # BugSigDB-curated host species - has no chance of being in that
-    # dict, but resolves instantly from the real synced data).
     local_hit = local_lookup(raw_text.strip(), ("ncbitaxon",))
     if local_hit:
         return local_hit

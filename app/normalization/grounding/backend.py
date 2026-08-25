@@ -17,10 +17,6 @@ import difflib
 from dataclasses import dataclass, field
 from typing import List, Optional, Protocol, Tuple, runtime_checkable
 
-# Synonym-match specificity, mirroring OBO's own synonym-scope vocabulary
-# (oio:hasExactSynonym/hasBroadSynonym/hasNarrowSynonym/hasRelatedSynonym).
-# BioAnalyzer's tiering rule: exact label/exact-synonym + branch-ok is the
-# only scope that can ever earn "auto" tier; anything else is "review".
 SCOPE_EXACT = "exact"
 SCOPE_BROAD = "broad"
 SCOPE_NARROW = "narrow"
@@ -133,13 +129,6 @@ def rank_candidates(candidates: List[GroundedTerm]) -> List[GroundedTerm]:
     return sorted(candidates, key=lambda c: _SCOPE_RANK.get(c.scope, 99))
 
 
-# Scope contributes most of a candidate's confidence (it's the strongest,
-# most-verified evidence source: exact label/synonym vs. a looser synonym
-# relationship) - similarity to the query text refines within a scope tier,
-# it doesn't override scope. These weights are a deliberately simple,
-# auditable formula, not a fitted model - "deterministic and explainable"
-# was the explicit requirement, which rules out anything that isn't easy to
-# state in one sentence per evidence source.
 _SCOPE_WEIGHT = {
     SCOPE_EXACT: 1.0,
     SCOPE_BROAD: 0.75,
@@ -258,16 +247,6 @@ def rank_candidates_explained(
                         "wrong sense of this term"
                     )
 
-            # Cross-references (oio:hasDbXref, projected into the local
-            # store's `xrefs` table - see seed.py) are surfaced for
-            # explainability, not scored: most xref targets point to
-            # external vocabularies this store has no independent way to
-            # verify (ICD codes, Wikipedia URLs, ...), so treating an xref's
-            # mere presence as positive evidence would be unearned
-            # confidence, not a real corroboration. A curator can still see
-            # them and judge for themselves. Duck-typed capability check
-            # (`get_xrefs`), not a Protocol method - see ChainedBackend's
-            # `get_xrefs()` docstring for why.
             get_xrefs = getattr(backend, "get_xrefs", None)
             if get_xrefs is not None:
                 try:

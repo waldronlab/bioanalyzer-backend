@@ -93,31 +93,12 @@ ROOTS: dict[str, tuple[str, str]] = {
     "NCBITaxon": ("ncbitaxon", "NCBITaxon:2759"),  # "Eukaryota"
     "DOID": ("doid", "DOID:4"),  # "disease" - verified against real downloaded data
     "HP": ("hp", "HP:0000001"),  # "All" - verified 2026-08-09: real term exists,
-    # not obsolete, and a real descendant (HP:0001250 "Seizure") is confirmed
-    # reachable from it via LocalOntologyBackend.reachable_from() against the
-    # actual synced HP data (19,944 terms). Promoted from EXTENDED_ONTOLOGY_ROOTS
-    # now that it's round-tripped the same way DOID was - no BioAnalyzer field
-    # emits an HP: ontology_id today, so this has no behavioral effect on
-    # tiering.py's field-verification gate; it exists so any future caller of
-    # LocalOntologyBackend.lookup()/reachable_from() against real HP data (or
-    # the ranking signal in backend.py that reads this dict) gets a verified
-    # root instead of none at all.
     "CHEBI": ("chebi", "CHEBI:24431"),  # "chemical entity" - verified 2026-08-09:
-    # real term, no parent (true root), CHEBI:17234 "glucose" confirmed
-    # reachable via 18 real ancestor hops against the actual synced CHEBI
-    # data (205,304 terms). See module docstring for why the "chemical
-    # entity" branch specifically, not ChEBI's other two independent roots
-    # ("role", "subatomic particle").
 }
 
-# Real, verified, meaningful single roots not yet promoted into ROOTS -
-# see module docstring. Empty as of 2026-08-09.
 EXTENDED_ONTOLOGY_ROOTS: dict[str, tuple[str, str]] = {}
 
-# Ontologies with real, fully synced local data but no meaningful single
-# root to branch-check against - see module docstring for the per-ontology
-# technical evidence. ols_slug -> curie_prefix (not (slug, root_id) - there
-# is deliberately no root_id field here).
+
 NO_SINGLE_ROOT: dict[str, str] = {
     "envo": "ENVO",
     "ncit": "NCIT",

@@ -49,9 +49,6 @@ from app.normalization.types import NormalizedTerm
 
 _ALL_SCOPES = (SCOPE_EXACT, SCOPE_BROAD, SCOPE_NARROW, SCOPE_RELATED)
 
-# A module-level singleton, same lazy-init pattern
-# app.normalization.grounding.singletons/ontology_cache already use - one
-# open SQLite/DuckDB connection per process, not one per call.
 _backend: Optional[LocalOntologyBackend] = None
 
 
@@ -88,11 +85,6 @@ def local_lookup(query: str, ontology_slugs: Sequence[str]) -> Optional[Normaliz
             results, query=normalized_query, backend=backend
         )
         winner = ranked[0]
-        # Never let a local match reach "auto" confidence - see module
-        # docstring. rank_candidates_explained() can legitimately compute
-        # 1.0 for an exact-scope, exact-text, branch-confirmed match; that
-        # score is real evidence of match *quality*, not a license to skip
-        # curator review the way a pre-audited static-dict entry can.
         confidence = min(winner.confidence, 0.9)
 
         other_candidates: list[Tuple[str, str]] = []
