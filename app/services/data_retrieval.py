@@ -119,9 +119,16 @@ class PubMedRetriever:
         return params
 
     def _apply_rate_limiting(self):
-        """Apply NCBI rate limiting."""
-        delay = max(NCBI_RATE_LIMIT_DELAY, 0.0)
-        time.sleep(delay)
+        """Apply NCBI rate limiting.
+
+        NCBI's documented policy allows 10 req/s with an API key vs 3 req/s
+        without one - self.api_key is already sent on every request
+        (_prepare_request_params), so this was leaving a safe 3x+ speedup on
+        the table. 0.11s (~9.1 req/s) mirrors the same, already-in-production
+        numbers app.normalization.host_species._rate_limit_delay() uses.
+        """
+        delay = 0.11 if self.api_key else NCBI_RATE_LIMIT_DELAY
+        time.sleep(max(delay, 0.0))
 
     def _execute_request(self, url: str, params: Dict[str, Any]) -> requests.Response:
         """Execute the HTTP request."""

@@ -70,6 +70,9 @@ def test_curator_desk_csv_header_and_core_fields():
     assert row["Sequencing Type"] == "16S"
     assert row["Differential Abundance"] == "Yes"
     assert row["In bsgdb"] == "Yes"
+    assert row["Host Species Mapping Tier"] == "auto"
+    assert row["Body Site Mapping Tier"] == "auto"
+    assert row["Condition Mapping Tier"] == "auto"
 
     # Simplified curator-desk schema: no Status/Mapping-Confidence/Priority/
     # Summary/Processing Time/Sequencing Type Raw.
@@ -163,6 +166,92 @@ def test_format_csv_is_an_alias_for_curator_desk_csv():
     csv_cols = next(csv.DictReader(io.StringIO(render_results(results, "csv")))).keys()
     assert "Host Species Ontology ID" in csv_cols
     assert "Host Species Status" not in csv_cols
+
+
+def test_curator_desk_csv_flags_ungrounded_condition_as_none_not_blank():
+    """A condition label the LLM produced but nothing could ground to a real
+    EFO/MONDO term (mapping_tier "none") must be visibly distinct from a
+    field with no extraction attempt at all, not just an empty cell next to
+    an empty Ontology ID column."""
+    results = [
+        {
+            "pmid": "99",
+            "title": "T",
+            "journal": "J",
+            "fields": {
+                "condition": {
+                    "value": "some rare unlisted disease",
+                    "status": "PARTIALLY_PRESENT",
+                    "ontology_id": "",
+                    "mapping_confidence": 0.5,
+                    "mapping_tier": "none",
+                    "mapping_candidates": [],
+                },
+            },
+        }
+    ]
+    row = next(csv.DictReader(io.StringIO(render_results(results, "csv"))))
+    assert row["Condition"] == "some rare unlisted disease"
+    assert row["Condition Ontology ID"] == ""
+    assert row["Condition Mapping Tier"] == "none"
+    # Fields with no mapping_tier key at all (sequencing_type/sample_size
+    # never set one) still default to explicit "none", never a blank cell.
+    assert row["Host Species Mapping Tier"] == "none"
+    assert row["Body Site Mapping Tier"] == "none"
+
+
+def test_render_table_shows_ungrounded_warning_only_for_ontology_fields():
+    results = [
+        {
+            "pmid": "99",
+            "title": "T",
+            "journal": "J",
+            "fields": {
+                "condition": {
+                    "value": "some rare unlisted disease",
+                    "status": "PARTIALLY_PRESENT",
+                    "ontology_id": "",
+                    "mapping_tier": "none",
+                },
+                "host_species": {
+                    "value": "Homo sapiens",
+                    "status": "PRESENT",
+                    "ontology_id": "NCBITaxon:9606",
+                    "mapping_tier": "auto",
+                },
+                "sequencing_type": {"value": "16S", "status": "PRESENT"},
+            },
+        }
+    ]
+    table = render_results(results, "table")
+    assert table.count("UNGROUNDED") == 1
+
+
+def test_render_xml_includes_ontology_id_and_mapping_tier_for_ontology_fields_only():
+    results = [
+        {
+            "pmid": "99",
+            "title": "T",
+            "journal": "J",
+            "fields": {
+                "condition": {
+                    "value": "some rare unlisted disease",
+                    "status": "PARTIALLY_PRESENT",
+                    "ontology_id": "",
+                    "mapping_tier": "none",
+                },
+                "sequencing_type": {"value": "16S", "status": "PRESENT"},
+            },
+        }
+    ]
+    xml = render_results(results, "xml")
+    assert "<MappingTier>none</MappingTier>" in xml
+    assert "<OntologyId>" in xml
+    # sequencing_type has no ontology concept - no OntologyId/MappingTier
+    # inside its own <SequencingType> block.
+    seq_block = xml.split("<SequencingType>")[1].split("</SequencingType>")[0]
+    assert "OntologyId" not in seq_block
+    assert "MappingTier" not in seq_block
 
 
 def test_format_detailed_csv_is_the_separate_status_inclusive_export():

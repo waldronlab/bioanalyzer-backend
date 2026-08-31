@@ -30,6 +30,12 @@ ANALYSIS_FIELDS: Dict[str, str] = {
     "sample_size": "Sample Size",
 }
 
+# The 3 of the 5 fields that carry a controlled-vocabulary ontology mapping
+# (NCBITaxon/UBERON/EFO+MONDO) via app.normalization.grounding. sequencing_type
+# and sample_size never set an ontology_id, so mapping_tier is always "none"
+# for them by design, not by omission.
+ONTOLOGY_FIELDS = {"host_species", "body_site", "condition"}
+
 STATUS_ICONS = {"PRESENT": "✅", "PARTIALLY_PRESENT": "⚠️", "ABSENT": "❌"}
 
 
@@ -39,6 +45,10 @@ def _field_val(fields: dict, key: str, attr: str = "value") -> str:
 
 def _field_ontology_id(fields: dict, key: str) -> str:
     return str(fields.get(key, {}).get("ontology_id", "") or "")
+
+
+def _field_mapping_tier(fields: dict, key: str) -> str:
+    return str(fields.get(key, {}).get("mapping_tier", "") or "none")
 
 
 def _field_ontology_candidates(fields: dict, key: str) -> str:
@@ -103,6 +113,10 @@ def _render_table(results: List[Dict[str, Any]]) -> str:
                 f"{icon} {label:20} | {fd.get('status', 'UNKNOWN'):20} | "
                 f"{str(fd.get('value', 'N/A')):30} | {fd.get('confidence', 0.0):.2f}"
             )
+            if key in ONTOLOGY_FIELDS and fd.get("mapping_tier") == "none":
+                lines.append(
+                    "   ⚠ UNGROUNDED — no ontology mapping, needs curator review"
+                )
         lines += [
             "-" * 60,
             f"📋 Summary: {r.get('curation_summary', 'N/A')}",
@@ -158,6 +172,13 @@ def _render_curator_desk_csv(
         "Sequencing Type",
         "Differential Abundance",
         "In bsgdb",
+        # Appended, not interleaved: keeps every existing column's index
+        # stable for curator_table_r (separate repo) consumers. Explicit
+        # "none" (not blank) so an ungrounded field is visibly distinct
+        # from a field with nothing extracted at all.
+        "Host Species Mapping Tier",
+        "Body Site Mapping Tier",
+        "Condition Mapping Tier",
     ]
     out = io.StringIO()
     w = csv.DictWriter(out, fieldnames=columns, extrasaction="ignore")
@@ -197,6 +218,11 @@ def _render_curator_desk_csv(
                     r.get("has_differential_abundance")
                 ),
                 "In bsgdb": _bool_yes_no(r.get("in_bugsigdb")),
+                "Host Species Mapping Tier": _field_mapping_tier(
+                    fields, "host_species"
+                ),
+                "Body Site Mapping Tier": _field_mapping_tier(fields, "body_site"),
+                "Condition Mapping Tier": _field_mapping_tier(fields, "condition"),
             }
         )
     return out.getvalue()
@@ -230,8 +256,13 @@ def _render_xml(results: List[Dict[str, Any]]) -> str:
                 f"        <Status>{fd.get('status', 'UNKNOWN')}</Status>",
                 f"        <Value><![CDATA[{fd.get('value', 'N/A')}]]></Value>",
                 f"        <Confidence>{fd.get('confidence', 0.0):.2f}</Confidence>",
-                f"      </{tag}>",
             ]
+            if key in ONTOLOGY_FIELDS:
+                lines += [
+                    f"        <OntologyId><![CDATA[{fd.get('ontology_id', '') or ''}]]></OntologyId>",
+                    f"        <MappingTier>{fd.get('mapping_tier', '') or 'none'}</MappingTier>",
+                ]
+            lines.append(f"      </{tag}>")
         lines += [
             "    </Fields>",
             f"    <Summary><![CDATA[{r.get('curation_summary', '')}]]></Summary>",
