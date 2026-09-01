@@ -220,6 +220,10 @@ def test_render_table_shows_ungrounded_warning_only_for_ontology_fields():
                     "mapping_tier": "auto",
                 },
                 "sequencing_type": {"value": "16S", "status": "PRESENT"},
+                # ABSENT + mapping_tier "none" (its natural default, since
+                # nothing was ever extracted to ground) must NOT warn - the
+                # "❌ ABSENT" status already says everything there is to say.
+                "body_site": {"value": "", "status": "ABSENT", "mapping_tier": "none"},
             },
         }
     ]

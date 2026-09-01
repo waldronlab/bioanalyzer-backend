@@ -113,7 +113,11 @@ def _render_table(results: List[Dict[str, Any]]) -> str:
                 f"{icon} {label:20} | {fd.get('status', 'UNKNOWN'):20} | "
                 f"{str(fd.get('value', 'N/A')):30} | {fd.get('confidence', 0.0):.2f}"
             )
-            if key in ONTOLOGY_FIELDS and fd.get("mapping_tier") == "none":
+            if (
+                key in ONTOLOGY_FIELDS
+                and fd.get("mapping_tier") == "none"
+                and fd.get("status") in ("PRESENT", "PARTIALLY_PRESENT")
+            ):
                 lines.append(
                     "   ⚠ UNGROUNDED — no ontology mapping, needs curator review"
                 )
