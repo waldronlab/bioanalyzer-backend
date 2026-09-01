@@ -2,7 +2,7 @@
 Pydantic models for API requests and responses.
 """
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, computed_field
 from typing import Dict, List, Optional, Union, Any
 
 
@@ -76,6 +76,18 @@ class FieldAnalysis(BaseModel):
     mapping_tier: str = "none"  # "auto" | "review" | "none"
     mapping_candidates: List[Dict[str, str]] = Field(default_factory=list)
     raw: str = ""
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def needs_ontology_review(self) -> bool:
+        """True whenever this field's mapping wasn't auto-applied (i.e.
+        mapping_tier is "review" or "none") - lets an API client flag an
+        ungrounded/unverified ontology mapping without string-comparing
+        mapping_tier itself. Only meaningful for the 3 fields that carry an
+        ontology mapping at all (host_species/body_site/condition) - for
+        sequencing_type/sample_size, mapping_tier is always "none" by design
+        since those fields have no ontology to map to."""
+        return self.mapping_tier != "auto"
 
 
 class PaperAnalysisResult(BaseModel):
