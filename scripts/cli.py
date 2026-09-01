@@ -511,6 +511,24 @@ class BioAnalyzerCLI:
         self._emit(content, output_file, "PMIDs saved to")
         return pmids
 
+    def curate_topic(
+        self, topic: str, max_results: int, fmt: str, output_file: str | None
+    ) -> list[str]:
+        from app.services.pubmed_queries import BULK_RETRIEVAL_QUERIES
+
+        key = {
+            "women": "womens_health",
+            "masld": "masld",
+            "colorectal": "colorectal_cancer",
+        }[topic]
+        return self.search_pubmed(
+            query=BULK_RETRIEVAL_QUERIES[key],
+            preset=topic,
+            max_results=max_results,
+            fmt=fmt,
+            output_file=output_file,
+        )
+
     # ------------------------------------------------------------------
     # Analysis commands
     # ------------------------------------------------------------------
@@ -1010,6 +1028,7 @@ class BioAnalyzerCLI:
   build / start / stop / restart / status
   run table [--port N]
   search [--preset discovery|broad|precision] [-n N] [-o FILE] [--query Q]
+  curate <women|masld|colorectal> [-n N] [--format txt|json|csv] [-o FILE]
   analyze <pmid|pmids>  [--file F] [--format table|json|csv|detailed_csv|xml] [-o FILE]
   analyze-url <url>     [--file F] [--format table|json] [-o FILE]
   retrieve <pmid|pmids> [--file F] [--format table|json|csv] [-o FILE] [--save]
@@ -1072,6 +1091,13 @@ def _build_parser() -> argparse.ArgumentParser:
     sr.add_argument("--max-results", "-n", type=int, default=100)
     sr.add_argument("--format", choices=["txt", "json", "csv"], default="txt")
     sr.add_argument("--output", "-o")
+    cu = sub.add_parser(
+        "curate", help="PubMed esearch for a named bulk-retrieval topic"
+    )
+    cu.add_argument("topic", choices=["women", "masld", "colorectal"])
+    cu.add_argument("--max-results", "-n", type=int, default=100)
+    cu.add_argument("--format", choices=["txt", "json", "csv"], default="txt")
+    cu.add_argument("--output", "-o")
     an = sub.add_parser("analyze")
     an.add_argument("pmids", nargs="*")
     an.add_argument("--file", "-f")
@@ -1211,6 +1237,8 @@ def main() -> None:
             fmt=getattr(args, "format", "txt"),
             output_file=getattr(args, "output", None),
         )
+    elif cmd == "curate":
+        cli.curate_topic(args.topic, args.max_results, args.format, args.output)
     elif cmd == "analyze":
         pmids = _resolve_pmids(cli, args, announce_load=True)
         if pmids is None:

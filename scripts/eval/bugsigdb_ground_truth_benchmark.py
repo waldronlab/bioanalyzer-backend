@@ -226,6 +226,43 @@ class FieldTally:
         return 100.0 * self.n_agree / self.n_compared
 
 
+class IoUTally:
+    def __init__(self, name: str):
+        self.name = name
+        self.n_compared = 0
+        self.total_iou = 0.0
+
+    def record(self, iou: float) -> None:
+        self.n_compared += 1
+        self.total_iou += iou
+
+    @property
+    def mean(self) -> Optional[float]:
+        if self.n_compared == 0:
+            return None
+        return self.total_iou / self.n_compared
+
+
+def _jaccard(predicted: Set[str], ground_truth: Set[str]) -> float:
+    """Intersection-over-union between a predicted value set and the
+    ground-truth set.
+
+    BioAnalyzer predicts one value per field per paper, so `predicted` is
+    normally a singleton here - this reduces to 1/|ground_truth| when the
+    prediction is a member, 0 otherwise. Still more informative than exact
+    match for PMIDs where BugSigDB curates multiple distinct values per
+    field (see classification "G" in benchmark_results/forensic_table.csv),
+    since it reflects how large the ground-truth set was rather than just
+    hit/miss. This is a bounded proxy, not a measure of multi-value
+    extraction capability - BioAnalyzer does not currently predict more
+    than one value per field per paper.
+    """
+    union = predicted | ground_truth
+    if not union:
+        return 0.0
+    return len(predicted & ground_truth) / len(union)
+
+
 def _load_predictions(predictions_path: Path) -> Dict[str, Dict[str, str]]:
     with open(predictions_path, encoding="utf-8") as f:
         rows = list(csv.DictReader(f))
@@ -240,6 +277,7 @@ def _load_predictions(predictions_path: Path) -> Dict[str, Dict[str, str]]:
 def _compare_field(
     field: str,
     tallies: Dict[str, FieldTally],
+    iou_tallies: Dict[str, IoUTally],
     discrepancies: List[Dict[str, str]],
     pmid: str,
     predicted_label: str,
@@ -252,6 +290,9 @@ def _compare_field(
         label_key = f"{field}_label"
         agree = pred_norm in ground_truth_labels
         tallies.setdefault(label_key, FieldTally(label_key)).record(agree)
+        iou_tallies.setdefault(label_key, IoUTally(label_key)).record(
+            _jaccard({pred_norm}, ground_truth_labels)
+        )
         if not agree:
             discrepancies.append(
                 {
@@ -268,6 +309,9 @@ def _compare_field(
             id_key = f"{field}_ontology_id"
             agree = pred_id_norm in ground_truth_ids
             tallies.setdefault(id_key, FieldTally(id_key)).record(agree)
+            iou_tallies.setdefault(id_key, IoUTally(id_key)).record(
+                _jaccard({pred_id_norm}, ground_truth_ids)
+            )
             if not agree:
                 discrepancies.append(
                     {
@@ -294,6 +338,7 @@ def cmd_compare(args: argparse.Namespace) -> int:
         ground_truth: Dict[str, Dict[str, List[str]]] = json.load(f)
 
     tallies: Dict[str, FieldTally] = {}
+    iou_tallies: Dict[str, IoUTally] = {}
     discrepancies: List[Dict[str, str]] = []
 
     matched_pmids = set(predictions) & set(ground_truth)
@@ -314,6 +359,7 @@ def cmd_compare(args: argparse.Namespace) -> int:
         _compare_field(
             "host_species",
             tallies,
+            iou_tallies,
             discrepancies,
             pmid,
             pred.get(PRED_LABEL_COL["host_species"], ""),
@@ -322,6 +368,7 @@ def cmd_compare(args: argparse.Namespace) -> int:
         _compare_field(
             "body_site",
             tallies,
+            iou_tallies,
             discrepancies,
             pmid,
             pred.get(PRED_LABEL_COL["body_site"], ""),
@@ -332,6 +379,7 @@ def cmd_compare(args: argparse.Namespace) -> int:
         _compare_field(
             "condition",
             tallies,
+            iou_tallies,
             discrepancies,
             pmid,
             pred.get(PRED_LABEL_COL["condition"], ""),
@@ -342,6 +390,7 @@ def cmd_compare(args: argparse.Namespace) -> int:
         _compare_field(
             "sequencing_type",
             tallies,
+            iou_tallies,
             discrepancies,
             pmid,
             pred.get(PRED_LABEL_COL["sequencing_type"], ""),
@@ -376,19 +425,30 @@ def cmd_compare(args: argparse.Namespace) -> int:
     summary_rows = []
     for key in sorted(tallies):
         t = tallies[key]
+        iou_t = iou_tallies.get(key)
         summary_rows.append(
             {
                 "field": key,
                 "n_compared": t.n_compared,
                 "n_agree": t.n_agree,
                 "agreement_pct": round(t.pct, 1) if t.pct is not None else "",
+                "mean_iou": (
+                    round(iou_t.mean, 3) if iou_t and iou_t.mean is not None else ""
+                ),
             }
         )
 
     summary_csv = outdir / "summary.csv"
     with open(summary_csv, "w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(
-            f, fieldnames=["field", "n_compared", "n_agree", "agreement_pct"]
+            f,
+            fieldnames=[
+                "field",
+                "n_compared",
+                "n_agree",
+                "agreement_pct",
+                "mean_iou",
+            ],
         )
         w.writeheader()
         w.writerows(summary_rows)
@@ -423,6 +483,31 @@ def cmd_compare(args: argparse.Namespace) -> int:
                     f"the human curated value, they agree **{row['agreement_pct']}%** "
                     f"of the time (n={row['n_compared']}).\n"
                 )
+
+        f.write("\n## Jaccard / IoU scoring (multi-value ground truth)\n\n")
+        f.write(
+            "BugSigDB often curates multiple experiments per PMID with distinct "
+            "field values (e.g. different conditions per experiment). The "
+            "agreement percentages above score a match if BioAnalyzer's single "
+            "paper-level prediction matches *any* member of that set (full "
+            "credit or none). Jaccard/IoU below is a stricter, additional lens: "
+            "intersection-over-union between the predicted value and the full "
+            "ground-truth set. Since BioAnalyzer currently predicts one value "
+            "per field per paper, this is a bounded proxy - 1/|ground truth "
+            "set| when the prediction is correct, 0 when it isn't - that "
+            "rewards matching a *small* ground-truth set more than a large "
+            "one. It is not a measure of multi-value extraction capability; "
+            "BioAnalyzer does not currently predict multiple values per "
+            "field.\n\n"
+        )
+        for row in summary_rows:
+            field_label = row["field"].replace("_", " ")
+            if row["mean_iou"] == "":
+                continue
+            f.write(
+                f"- **{field_label}**: mean IoU **{row['mean_iou']}** "
+                f"(n={row['n_compared']}).\n"
+            )
 
     print(f"\nWrote {summary_csv}")
     print(f"Wrote {discrepancies_csv} ({len(discrepancies)} mismatches)")
