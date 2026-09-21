@@ -74,48 +74,17 @@ TIER_REVIEW = "review"
 TIER_NONE = "none"
 
 
-# Which backend tier_for()/ground() use when a caller doesn't supply their
-# own - a real, environment-configurable choice (GROUNDING_BACKEND_MODE),
-# not the hardcoded module-level singleton an earlier version of this file
-# had. Modes:
-#   "chain" (default) - LocalOntologyBackend first (instant, deterministic,
-#       offline; real complete EFO/MONDO/UBERON/NCBITaxon/DOID/HP data as of
-#       the 2026-08 full sync), OLSBackend second (broader coverage / any
-#       ontology this store hasn't been synced for) - this local-first,
-#       OLS-fallback shape is safe against the partial-coverage bug because
-#       LocalOntologyBackend correctly reports "unknown" (None), not a false
-#       negative, for any ontology it hasn't been marked complete for (see
-#       local_backend.py's module docstring). Degrades gracefully to
-#       byte-for-byte "ols" behavior in any environment where the local
-#       store is empty/missing (e.g. a fresh clone that hasn't run
-#       scripts/ontology_sync.py) - every check just falls through to OLS.
-#   "ols" - live EBI OLS4 only, byte-for-byte the original single-file
-#       grounding.py's behavior. Use this to force live-only checks
-#       regardless of what the local store holds.
-#   "local" - LocalOntologyBackend only, fully offline, no OLS fallback.
-#       Only sensible once every ontology your fields actually use is
-#       `ensure_ontology()`'d to completeness (see scripts/ontology_sync.py)
-#       - otherwise every term outside that coverage grounds as "unable to
-#       verify" (fail open to "auto", per the source-based tiering rule)
-#       rather than being checked against anything OLS could still answer.
 def _build_default_backend() -> GroundingBackend:
     mode = os.getenv("GROUNDING_BACKEND_MODE", "chain").strip().lower()
     if mode == "ols":
         return OLSBackend()
     if mode in ("local", "chain"):
-        # Imported lazily, not at module top-level, so choosing "ols" (the
-        # default) never pays for importing LocalOntologyBackend's sqlite3/
-        # duckdb connection machinery at all.
+
         from app.normalization.grounding.local_backend import (
             DEFAULT_DB_PATH,
             LocalOntologyBackend,
         )
 
-        # Read LOCAL_ONTOLOGY_DB_PATH here, at call time, rather than
-        # relying on LocalOntologyBackend's own constructor default - that
-        # default is a module-level constant evaluated once at import time
-        # (a real staleness trap: setting the env var after local_backend.py
-        # has already been imported would silently have no effect on it).
         db_path = os.getenv("LOCAL_ONTOLOGY_DB_PATH", DEFAULT_DB_PATH)
         local = LocalOntologyBackend(db_path=db_path)
         if mode == "local":
@@ -131,27 +100,6 @@ def _build_default_backend() -> GroundingBackend:
 
 _DEFAULT_BACKEND = _build_default_backend()
 
-# Real, severe bug found in a 2026-08-09 adversarial review: the four-step
-# discipline (round-trip / obsolete / branch) verifies a CURIE is real,
-# current, and in the right ontology's subtree - but never checked whether
-# it's the concept a caller actually *claims* it is. A static-dict entry
-# with a correct-shaped but wrong-referent CURIE (e.g. an off-by-one ID -
-# "MONDO:0005181" is a completely real, non-obsolete, correctly-branched
-# MONDO disease term, just for "progressive external ophthalmoplegia", not
-# "Parkinson disease") passed all four checks and graded "auto" - exactly
-# the incident class (2026-07, see this module's docstring) the whole
-# subsystem exists to prevent, just not caught by any of the four existing
-# steps. Fixed with a fifth check: compare the claimed label against the
-# ontology's own real label for that CURIE (`difflib.SequenceMatcher`,
-# same deterministic, stdlib-only approach `backend.rank_candidates_
-# explained()` already uses - no new dependency, no embeddings).
-#
-# Threshold calibrated against every real static-dict entry, not guessed:
-# the worst legitimate case ("skin" claimed for UBERON:0002097, whose real
-# label is "skin of body" - a deliberate shorter/friendlier label choice)
-# scores 0.500 similarity; the real MONDO:0005181 mismatch above scores
-# 0.151. 0.4 sits with comfortable margin on both sides of that real gap -
-# not fitted to make a specific test case pass.
 _LABEL_MISMATCH_THRESHOLD = 0.4
 
 
@@ -182,12 +130,6 @@ def _ground_static_match(
         return None
     ontology, root_id = root_info
 
-    # Via the package namespace (_pkg), not a direct import, so
-    # monkeypatching app.normalization.grounding.get_cached_grounding /
-    # store_cached_grounding (as the existing test suite does) is honored -
-    # same reason app.services.bugsigdb_analyzer calls its own submodules
-    # through `_pkg` instead of a direct relative import (see that
-    # package's docstring for the general pattern).
     cached = _pkg.get_cached_grounding(ontology_id)
     if cached is not None:
         return GroundingCheck(

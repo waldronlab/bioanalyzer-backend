@@ -14,11 +14,6 @@ from typing import Any, Dict, Optional, Tuple
 
 _cache_manager = None
 
-# How long a grounding_check_cache row (round-trip/obsolete/branch result for
-# one ontology_id) is trusted before app.normalization.grounding re-checks it
-# against live OLS. Unlike get_cached_term/store_cached_term above, this cache
-# is expected to go stale on purpose - an ontology term can be deprecated
-# after the fact, which is exactly the drift this exists to catch.
 GROUNDING_CACHE_VALIDITY_HOURS = int(os.getenv("GROUNDING_CACHE_VALIDITY_HOURS", "720"))
 
 

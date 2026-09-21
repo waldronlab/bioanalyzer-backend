@@ -38,7 +38,11 @@ dependencies = [
     # NLP and LLM dependencies
     "google-generativeai>=0.7.2",
     "tiktoken>=0.5.0",
-    "litellm>=1.83.7",
+    # litellm 1.98.0 does `from typing import NotRequired` in
+    # llms/anthropic/experimental_pass_through/context_management/editors/compact.py,
+    # which only exists in stdlib typing on Python >=3.11 - `import litellm` raises
+    # ImportError on 3.10 (upstream bug from commit 6b5249bc). Cap below it until fixed.
+    "litellm>=1.83.7,<1.98.0",
     # Paper-QA agent integration
     # Note: paper-qa>=5.0.0 requires Python >=3.11
     # For Python <3.11, install paper-qa>=4.9.0,<5.0.0

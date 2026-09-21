@@ -124,37 +124,13 @@ CREATE INDEX IF NOT EXISTS idx_xrefs_curie ON xrefs(ontology, curie);
 CREATE INDEX IF NOT EXISTS idx_xrefs_xref ON xrefs(xref);
 """
 
-# Ancestors were originally computed with a single `WITH RECURSIVE` query
-# (this module's original approach) - correct, but a real 2026-08 perf audit found
-# it takes 4-12 SECONDS per branch-check against NCBITaxon's real 2.7M-edge
-# table (verified: EXPLAIN QUERY PLAN shows the recursive step's join only
-# binds the `ontology` half of idx_edges_subject - `SEARCH e USING INDEX
-# idx_edges_subject (ontology=?)`, not `(ontology=? AND subject=?)` - so
-# each hop nested-loop-scans the whole ontology's edge rows instead of
-# seeking. `INDEXED BY idx_edges_subject` does not change this - confirmed
-# empirically, same plan, same ~9s. This is a known SQLite limitation with
-# correlated index seeks inside a recursive CTE's join, not something a
-# query hint fixes.
-#
-# Fixed by replacing the single SQL recursion with an application-level
-# BFS (_bfs_edges_from below) that issues one indexed, non-recursive query
-# per frontier level (`subject IN (...)`, which *does* seek the composite
-# index correctly - confirmed against the same data, <1ms for a 29-hop
-# NCBITaxon chain). Portable across both engines since it's ordinary SQL,
-# not engine-specific tuning. Explicit `visited`-set dedup replaces the old
-# UNION-as-cycle-guard trick and also correctly handles multi-parent DAGs
-# (a term with >1 `is_a`/`part_of` parent), which a single linear walk
-# would have missed.
 _EDGE_QUERY_CHUNK = 500
 
 
 def _bfs_edges_from(db: "_Connection", ontology: str, start: str, target: str) -> bool:
     frontier = {start}
     visited = {start}
-    # A real ontology's is_a/part_of depth from any term to its top-level
-    # root never approaches this; it's a runaway-graph safety cap, not a
-    # tuned expectation (confirmed: NCBITaxon's deepest species-to-root
-    # chains are ~30 hops).
+
     for _ in range(500):
         if not frontier:
             return False
@@ -164,10 +140,6 @@ def _bfs_edges_from(db: "_Connection", ontology: str, start: str, target: str) -
             chunk = frontier_list[i : i + _EDGE_QUERY_CHUNK]
             placeholders = ", ".join("?" for _ in chunk)
             rows = db.execute(
-                # nosec B608 - `placeholders` is just a `?`-per-chunk-item
-                # count string (see the line above), never a value; every
-                # real value (`ontology`, each `chunk` item) is passed
-                # through the parameterized tuple below, not interpolated.
                 f"SELECT object FROM edges WHERE ontology = ? AND subject IN ({placeholders})",  # nosec B608
                 (ontology, *chunk),
             )
@@ -225,27 +197,7 @@ class _Connection:
             parent = os.path.dirname(db_path)
             if parent:
                 os.makedirs(parent, exist_ok=True)
-        # A real, severe perf bug found 2026-08 (post-release hardening
-        # audit): when the on-disk file is already in SQLite's format (the
-        # common case - ontology_sync.py falls back to sqlite3 whenever
-        # duckdb isn't installed at *sync* time, independent of whether
-        # it's installed now, at *read* time), duckdb.connect() doesn't
-        # open it natively - it transparently reads it through duckdb's
-        # sqlite_scanner compatibility layer instead. EXPLAIN confirmed
-        # that layer does a raw SQLITE_SCAN of the whole ~3.9M-row edges
-        # table and filters in memory afterward - idx_edges_subject exists
-        # and is intact, but the scanner never seeks it - turning a <1ms
-        # indexed lookup into ~1s per call (confirmed empirically) and the
-        # BFS branch-check's ~20-30 sequential hops into ~27s total, most
-        # of the way back to the exact "full scan instead of index seek"
-        # class of bug _bfs_edges_from's rewrite (above) already fixed
-        # once. Checking the well-known SQLite file-format magic header
-        # first and preferring the plain sqlite3 driver whenever it
-        # matches sidesteps the scanner entirely - same schema, same
-        # query strings, same results, just the driver proven fast for
-        # this exact indexed-point-lookup workload. Only applies when the
-        # file already exists in SQLite format; a fresh/absent file or a
-        # genuine duckdb-native file still prefer duckdb exactly as before.
+
         if db_path != ":memory:" and _is_sqlite_file(db_path):
             import sqlite3
 
@@ -261,25 +213,11 @@ class _Connection:
 
             try:
                 conn = sqlite3.connect(db_path, check_same_thread=False)
-                # sqlite3.connect() is lazy - it doesn't read the file at
-                # all until a query touches real page data. "SELECT 1" is a
-                # constant expression and doesn't count (verified: it does
-                # NOT catch a DuckDB-formatted file - the failure only
-                # surfaced later, from _init_schema's CREATE TABLE).
-                # sqlite_master is what every SQLite file has and only a
-                # SQLite file can serve, so this forces the real check now.
+
                 conn.execute("SELECT name FROM sqlite_master LIMIT 1")
                 return "sqlite3", conn
             except sqlite3.DatabaseError as e:
-                # A DuckDB-written file and a SQLite-written file are NOT
-                # interchangeable on disk, despite this class presenting one
-                # SQL surface over either - found empirically running
-                # scripts/ontology_sync.py against a store built with
-                # duckdb available, then read back without it installed:
-                # sqlite3 fails with the unhelpful "file is not a database"
-                # for what is actually "this file is a real DuckDB
-                # database, just not one you can open right now". Re-raise
-                # with the actual, actionable explanation instead.
+
                 if db_path != ":memory:" and os.path.exists(db_path):
                     raise RuntimeError(
                         f"Cannot open {db_path!r} with sqlite3 ({e}). If this "
@@ -581,10 +519,6 @@ class LocalOntologyBackend:
         if scopes:
             placeholders = ",".join("?" for _ in scopes)
             rows = self._db.execute(
-                # nosec B608 - `placeholders` is a `?`-per-scope-count
-                # string only (see the line above); every real value
-                # (`ontology`, each `scopes` entry, `normalized`) is passed
-                # through the parameterized tuple below, not interpolated.
                 f"SELECT s.curie, s.synonym, s.scope, t.label, t.version "  # nosec B608
                 f"FROM synonyms s JOIN terms t "
                 f"ON t.ontology = s.ontology AND t.curie = s.curie "
@@ -616,11 +550,7 @@ class LocalOntologyBackend:
         if not rows:
             if self.is_complete(ontology):
                 return GroundingCheck(exists=False, source=self.name)
-            # This store doesn't claim complete coverage of `ontology` - a
-            # miss here means "unknown", not "confirmed absent". Returning
-            # None (not a GroundingCheck) lets a ChainedBackend correctly
-            # fall through to a backend that can actually answer, instead
-            # of treating a partial store's silence as a hard no.
+
             return None
         label, obsolete, replaced_by = rows[0]
         return GroundingCheck(
@@ -645,9 +575,7 @@ class LocalOntologyBackend:
             return True
         if self.is_complete(ontology):
             return False
-        # Same reasoning as get(): an incomplete store's "no edges found"
-        # isn't proof there's no path - it might just not have the
-        # intermediate hierarchy yet.
+
         return None
 
     def ontology_versions(self, ontology: str) -> List[str]:

@@ -13,19 +13,6 @@ from app.normalization.types import (
     normalize_spelling,
 )
 
-# keyword -> (canonical label, ontology ID)
-#
-# Every ID below was verified against the live EBI OLS API (the same source
-# ols_search() below falls back to) on 2026-07-12, after an audit found most
-# of a prior version of this dict pointed at wrong or obsolete EFO terms
-# (fabricated-looking IDs that didn't survive a live lookup - see
-# docs/PROJECT_AUDIT.md). EFO is used where a live EFO term exists; MONDO is
-# used where EFO has retired the term in favor of MONDO (OLS reports this as
-# the term's replacement). A handful of non-disease comparator-arm/exposure
-# concepts ("healthy"/"control"/"normal", "antibiotic") have no clean
-# disease-ontology equivalent and are intentionally left with ontology_id=""
-# rather than force a fabricated ID - normalize_condition() still returns
-# their label, just with mapping_tier="none" (see grounding.py).
 CONDITION_LOOKUP: Dict[str, Tuple[str, str]] = {
     "parkinson disease": ("Parkinson disease", "MONDO:0005180"),
     "parkinson's": ("Parkinson disease", "MONDO:0005180"),
@@ -47,34 +34,9 @@ CONDITION_LOOKUP: Dict[str, Tuple[str, str]] = {
     "t2d": ("type 2 diabetes mellitus", "MONDO:0005148"),
     "type 1 diabetes": ("type 1 diabetes mellitus", "MONDO:0005147"),
     "t1d": ("type 1 diabetes mellitus", "MONDO:0005147"),
-    # Real gap found in a 2026-08 independent BugSigDB evaluation: "type 2"/
-    # "type 1" above only match the digit spelling, so real curated text
-    # using roman numerals ("Type II diabetes mellitus", 5 real occurrences
-    # in BugSigDB's dump) missed these keys entirely and fell through to
-    # the much shorter, generic "diabetes" key instead, confidently
-    # returning the wrong (too-generic) MONDO:0005015 "diabetes mellitus"
-    # rather than the correct type-specific term - not dangerous (still a
-    # real, non-obsolete, branch-valid MONDO term, so it round-tripped
-    # clean and graded "auto"), but a real, avoidable accuracy loss.
     "type ii diabetes": ("type 2 diabetes mellitus", "MONDO:0005148"),
     "type i diabetes": ("type 1 diabetes mellitus", "MONDO:0005147"),
-    # Real gap found in the 2026-08-09 semantic-hardening pass: "gestational
-    # diabetes"/"gestational diabetes mellitus" fell through the type-1/
-    # type-2 keys above (neither is a substring match) straight to the
-    # short, generic "diabetes" key, confidently returning the wrong
-    # (too-generic) MONDO:0005015 "diabetes mellitus" instead of the real,
-    # non-obsolete, branch-valid MONDO:0005406 "gestational diabetes" -
-    # verified against the live local MONDO store, not guessed. Listed
-    # before "diabetes" so `match_longest()` (this dict's matcher) prefers
-    # the longer, more specific key, same precedence the roman-numeral keys
-    # above rely on.
     "gestational diabetes": ("gestational diabetes", "MONDO:0005406"),
-    # EFO:0000400 was the original mapping here; the 2026-08-09 grounding
-    # benchmark (scripts/eval/grounding_benchmark.py) caught it as a real
-    # stale ID - it's obsolete in EFO's current release with no recorded
-    # replacement (`obsolete_diabetes mellitus`, replaced_by=None). Switched
-    # to MONDO:0005015, verified against the real synced MONDO data: exists,
-    # not obsolete, label "diabetes mellitus", reachable from MONDO:0000001.
     "diabetes": ("diabetes mellitus", "MONDO:0005015"),
     "autism": ("autism spectrum disorder", "MONDO:0005258"),
     "asd": ("autism spectrum disorder", "MONDO:0005258"),
@@ -102,12 +64,6 @@ CONDITION_LOOKUP: Dict[str, Tuple[str, str]] = {
     "rheumatoid arthritis": ("rheumatoid arthritis", "MONDO:0008383"),
     "lupus": ("systemic lupus erythematosus", "MONDO:0007915"),
     "psoriasis": ("psoriasis", "MONDO:0005083"),
-    # Real gap found in the 2026-08-09 semantic-hardening pass: unlike "egg
-    # allergy" (the only real MONDO terms for that are both obsolete with
-    # no replacement - "allergic disease" below is genuinely the best
-    # available answer), "food allergy" has a real, non-obsolete, branch-
-    # valid MONDO term (MONDO:0700226) that the old "allergy" catch-all
-    # below was silently overriding with a too-generic answer.
     "food allergy": ("food allergy", "MONDO:0700226"),
     "antibiotic": ("antibiotic exposure", ""),
     "healthy": ("healthy", ""),
@@ -137,13 +93,6 @@ def _extract_clean_disease_name(raw_text: str) -> str:
     return text.strip()
 
 
-# "control"/"normal"/"healthy" describe the comparator arm of a case-control
-# study, not a diagnosis - and they're frequently *longer* than the disease
-# abbreviation they're being contrasted with ("IBD patients vs healthy
-# controls", "HIV patients compared to controls"). Plain longest-match-wins
-# would pick "control(s)" over "IBD"/"HIV"/"ASD"/"T2D" and misreport the
-# actual studied condition as "healthy". These three keys are only used as
-# a last resort, never over a real disease-name match.
 _HEALTHY_KEYS = frozenset({"healthy", "control", "normal"})
 
 _MATCHER = LookupMatcher(CONDITION_LOOKUP, deferred_keys=_HEALTHY_KEYS)
@@ -268,9 +217,6 @@ def normalize_condition(raw_text: str) -> NormalizedTerm:
     if hit:
         matched_key, (label, efo_id) = hit
         if matched_key in _HEALTHY_KEYS:
-            # A comparator-arm/exposure key only ever wins when nothing
-            # else matched (LookupMatcher's deferred-key rule) - no
-            # candidates in that case, matching the original behavior.
             return NormalizedTerm(label, efo_id, "PRESENT", 1.0)
         override = _resolve_more_specific_override(raw_text, efo_id)
         if override is not None:
@@ -282,14 +228,6 @@ def normalize_condition(raw_text: str) -> NormalizedTerm:
             )
         return NormalizedTerm(label, efo_id, "PRESENT", 1.0)
 
-    # Nothing in the static dict matched. Before any network call: try the
-    # local ontology store - real, complete EFO/MONDO data (2026-08
-    # adversarial review found this had no production caller at all; see
-    # app.normalization.local_lookup's module docstring for why and what
-    # changed). Same EFO-then-MONDO precedence as the live fallback below,
-    # same progressive-query shortening, but offline and sub-millisecond -
-    # for any term the complete local ontology already covers, this now
-    # answers instead of ever reaching the network.
     clean_term = _extract_clean_disease_name(normalize_spelling(raw_text))
     query = clean_term or raw_text.strip()
     for candidate in _progressive_queries(query):
@@ -297,14 +235,6 @@ def normalize_condition(raw_text: str) -> NormalizedTerm:
         if local_hit:
             return local_hit
 
-    # Live fallback for anything the local store also doesn't have: try
-    # EFO first (matches this module's documented convention), then
-    # MONDO - EFO has retired most disease terms in favor of MONDO (see
-    # the dict's docstring), so a term absent from EFO is often still live
-    # in MONDO. Both providers go through ols_search()'s persistent cache
-    # (see app.normalization.ontology_cache), so a term only needs a live
-    # lookup once - subsequent calls for the same term are served from
-    # that cache.
     for candidate in _progressive_queries(query):
         hit = ols_search(candidate, "efo", "EFO", mapping_confidence=0.9)
         if not hit:
