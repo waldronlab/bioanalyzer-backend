@@ -18,7 +18,7 @@ Takes a PMID, fetches the paper from PubMed, and extracts:
 1. Host Species (Human, Mouse, etc.) — mapped to NCBITaxon
 2. Body Site (Gut, Oral, Skin, etc.) — mapped to UBERON
 3. Condition (disease/treatment being studied) — mapped to EFO
-4. Sequencing Type (16S, metagenomics, etc.)
+4. Sequencing Type — BugSigDB's own values: 16S, 18S, WMS, ITS / ITS2, PCR
 5. Sample Size (number of samples/participants)
 
 ...plus whether the paper reports differential abundance and whether it's

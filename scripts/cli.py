@@ -923,7 +923,7 @@ class BioAnalyzerCLI:
             "host_species": "Host organism (e.g. Human, Mouse, Rat)",
             "body_site": "Sample location (e.g. Gut, Oral, Skin)",
             "condition": "Disease, treatment, or exposure studied",
-            "sequencing_type": "Molecular method (e.g. 16S, metagenomics)",
+            "sequencing_type": "Molecular method (e.g. 16S, WMS)",
             "sample_size": "Number of samples / participants",
         }
         for key, label in ANALYSIS_FIELDS.items():

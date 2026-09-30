@@ -71,7 +71,7 @@ def show_field_info():
         },
         "sequencing_type": {
             "name": "Sequencing Type",
-            "description": "What molecular method was used (e.g., 16S, metagenomics)",
+            "description": "What molecular method was used (e.g., 16S, WMS)",
             "required": True,
         },
         "sample_size": {

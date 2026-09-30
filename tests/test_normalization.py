@@ -1,4 +1,6 @@
+import csv
 import time
+from pathlib import Path
 
 import pytest
 import requests
@@ -18,7 +20,10 @@ from app.normalization.condition import (
 from app.normalization.host_species import normalize_host_species
 from app.normalization.ols import format_ontology_id, ols_search
 from app.normalization.sample_size import normalize_sample_size, _simple_word_to_num
-from app.normalization.sequencing_type import normalize_sequencing_type
+from app.normalization.sequencing_type import (
+    BUGSIGDB_SEQ_VOCAB,
+    normalize_sequencing_type,
+)
 from app.normalization.types import is_null_like
 
 
@@ -635,42 +640,133 @@ def test_condition_disease_wins_over_comparator_arm_wording():
     assert t.label == "healthy"
 
 
-def test_sequencing_type_normalization_variants():
-    t = normalize_sequencing_type("16S rRNA gene sequencing")
-    assert t.label == "16S"
+def test_sequencing_type_vocab_is_bugsigdbs():
+    # Exactly BugSigDB's "Sequencing type" dropdown values, spelled the
+    # same way - no BioAnalyzer-only values like "shotgun" or "other".
+    assert BUGSIGDB_SEQ_VOCAB == ["16S", "18S", "WMS", "ITS / ITS2", "PCR"]
+
+
+def test_sequencing_type_vocab_matches_full_dump():
+    dump = Path(__file__).resolve().parents[1] / "full_dump.csv"
+    if not dump.exists():
+        pytest.skip("full_dump.csv (BugSigDB export) not present")
+    with open(dump, encoding="utf-8", newline="") as f:
+        # The export starts with a "# BugSigDB <date>, License: ..." line.
+        if not f.readline().startswith("#"):
+            f.seek(0)
+        values = {row["Sequencing type"] for row in csv.DictReader(f)}
+    assert values - {"", "NA"} == set(BUGSIGDB_SEQ_VOCAB)
+
+
+@pytest.mark.parametrize(
+    "raw_text, label",
+    [
+        ("16S rRNA gene sequencing", "16S"),
+        ("sequencing of the V3-V4 hypervariable region", "16S"),
+        ("V4 region amplicon sequencing", "16S"),
+        ("18S rRNA gene sequencing", "18S"),
+        ("ITS1 sequencing", "ITS / ITS2"),
+        ("internal transcribed spacer 2 amplicons", "ITS / ITS2"),
+        ("whole metagenome shotgun sequencing", "WMS"),
+        ("shotgun metagenomics study", "WMS"),
+        ("metagenomic sequencing", "WMS"),
+        ("WMS", "WMS"),
+        ("qPCR", "PCR"),
+        ("real-time PCR of Bifidobacterium", "PCR"),
+        # A specific method beats PCR - nearly every amplicon paper also
+        # mentions "PCR amplification"...
+        ("PCR amplification of the 16S rRNA gene", "16S"),
+        ("16S rRNA gene sequencing and qPCR", "16S"),
+        # ...but targeted PCR with no sequencing at all is PCR, even when
+        # the primers target a marker gene.
+        ("qPCR with 16S rRNA gene primers for Bifidobacterium", "PCR"),
+        # "Metagenomics" used loosely for a 16S survey is not WMS.
+        ("16S rRNA metagenomics", "16S"),
+        # The pronoun "its" is not ITS.
+        ("16S rRNA sequencing of its V4 region", "16S"),
+    ],
+)
+def test_sequencing_type_maps_to_bugsigdb_value(raw_text, label):
+    t = normalize_sequencing_type(raw_text)
+    assert t.label == label
     assert t.status == "PRESENT"
     assert t.ontology_id == ""
+    assert t.raw == raw_text
 
-    t = normalize_sequencing_type("whole metagenome shotgun sequencing")
-    assert t.label == "shotgun"
 
-    t = normalize_sequencing_type("shotgun metagenomics study")
-    assert t.label == "metagenomics"
+@pytest.mark.parametrize(
+    "raw_text, label",
+    [
+        # 98.8% of BugSigDB's amplicon experiments are 16S.
+        ("amplicon sequencing", "16S"),
+        # Usually shotgun metagenomics, but can mean isolate genomes.
+        ("whole-genome sequencing", "WMS"),
+        # Plain "PCR" may just be the amplification step, not targeted PCR.
+        ("PCR", "PCR"),
+    ],
+)
+def test_sequencing_type_best_guess_needs_review(raw_text, label):
+    t = normalize_sequencing_type(raw_text)
+    assert t.label == label
+    assert t.status == "PARTIALLY_PRESENT"
+    assert t.mapping_confidence < 1.0
+
+
+@pytest.mark.parametrize(
+    "legacy, label, status",
+    [
+        ("16S", "16S", "PRESENT"),
+        ("shotgun", "WMS", "PRESENT"),
+        ("metagenomics", "WMS", "PRESENT"),
+        ("ITS", "ITS / ITS2", "PRESENT"),
+        ("WGS", "WMS", "PARTIALLY_PRESENT"),
+        ("amplicon", "16S", "PARTIALLY_PRESENT"),
+    ],
+)
+def test_sequencing_type_legacy_values_remap(legacy, label, status):
+    # Values from the old BioAnalyzer-only vocabulary (still in older CSVs
+    # and feedback files) map onto BugSigDB's.
+    t = normalize_sequencing_type(legacy)
+    assert (t.label, t.status) == (label, status)
+
+
+@pytest.mark.parametrize(
+    "raw_text",
+    [
+        "RNA-seq metatranscriptomics",
+        "other",
+        "new custom chemistry",
+        "sequencing results",
+        # "v3" here is the reagent kit version, not a 16S region.
+        "Illumina MiSeq with Reagent Kit v3",
+    ],
+)
+def test_sequencing_type_without_bugsigdb_value_is_blank(raw_text):
+    # Stated, but not one of BugSigDB's values: never invent one - leave
+    # the label blank and keep the paper's own wording on .raw.
+    t = normalize_sequencing_type(raw_text)
+    assert t.label == ""
+    assert t.status == "PARTIALLY_PRESENT"
+    assert t.raw == raw_text
+
+
+def test_sequencing_type_lists_every_method_used():
+    t = normalize_sequencing_type("16S rRNA gene and shotgun metagenomic sequencing")
+    assert t.label == "16S; WMS"
     assert t.status == "PRESENT"
 
-    t = normalize_sequencing_type("ITS1 sequencing")
-    assert t.label == "ITS"
+    t = normalize_sequencing_type("16S and ITS2 amplicon sequencing")
+    assert t.label == "16S; ITS / ITS2"
 
-    t = normalize_sequencing_type("RNA-seq metatranscriptomics")
-    assert t.label == "RNA-seq"
+    # One confident method plus one best guess needs review as a whole.
+    t = normalize_sequencing_type("16S rRNA and whole genome sequencing")
+    assert t.label == "16S; WMS"
+    assert t.status == "PARTIALLY_PRESENT"
 
-    t = normalize_sequencing_type("")
-    assert t.status == "ABSENT"
 
-    # Unmatched text falls back to the "other" vocab value (status PRESENT,
-    # not PARTIALLY_PRESENT — it was found, just not classifiable), and the
-    # original wording is preserved on .raw for the "Sequencing Type Raw"
-    # side column.
-    t = normalize_sequencing_type("new custom chemistry")
-    assert t.label == "other"
-    assert t.status == "PRESENT"
-    assert t.raw == "new custom chemistry"
-
-    # A matched phrase still preserves .raw, but callers should treat the
-    # column as unnecessary when raw == normalized value.
-    t = normalize_sequencing_type("16S rRNA gene sequencing")
-    assert t.label == "16S"
-    assert t.raw == "16S rRNA gene sequencing"
+@pytest.mark.parametrize("raw_text", ["", None, "   ", "not reported", "N/A"])
+def test_sequencing_type_absent(raw_text):
+    assert normalize_sequencing_type(raw_text).status == "ABSENT"
 
 
 def test_sample_size_normalization_variants():

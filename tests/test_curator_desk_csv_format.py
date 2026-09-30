@@ -231,6 +231,54 @@ def test_render_table_shows_ungrounded_warning_only_for_ontology_fields():
     assert table.count("UNGROUNDED") == 1
 
 
+def test_render_table_shows_paper_wording_for_unmapped_sequencing_type():
+    def table_for(sequencing_type):
+        results = [{"pmid": "7", "fields": {"sequencing_type": sequencing_type}}]
+        return render_results(results, "table")
+
+    # A stated method with no BugSigDB value is blank - show what the
+    # paper said so the blank isn't mistaken for "nothing found".
+    table = table_for(
+        {
+            "value": "",
+            "status": "PARTIALLY_PRESENT",
+            "raw": "RNA-seq metatranscriptomics",
+        }
+    )
+    assert "Not a BugSigDB sequencing type" in table
+    assert "RNA-seq metatranscriptomics" in table
+
+    for mapped_or_absent in (
+        {"value": "WMS", "status": "PRESENT", "raw": "shotgun metagenomics"},
+        {"value": "", "status": "ABSENT", "raw": ""},
+    ):
+        assert "Not a BugSigDB sequencing type" not in table_for(mapped_or_absent)
+
+
+def test_curator_desk_csv_sequencing_type_uses_bugsigdb_values_only():
+    # The curator-desk CSV carries BugSigDB's value (or a blank), never the
+    # paper's raw wording - Levi's simplified schema has no raw column.
+    results = [
+        {
+            "pmid": "8",
+            "fields": {
+                "sequencing_type": {
+                    "value": "",
+                    "status": "PARTIALLY_PRESENT",
+                    "raw": "RNA-seq metatranscriptomics",
+                }
+            },
+        },
+        {
+            "pmid": "9",
+            "fields": {"sequencing_type": {"value": "16S; WMS", "status": "PRESENT"}},
+        },
+    ]
+    rows = list(csv.DictReader(io.StringIO(render_results(results, "csv"))))
+    assert [r["Sequencing Type"] for r in rows] == ["", "16S; WMS"]
+    assert "RNA-seq" not in render_results(results, "csv")
+
+
 def test_render_xml_includes_ontology_id_and_mapping_tier_for_ontology_fields_only():
     results = [
         {
