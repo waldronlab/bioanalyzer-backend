@@ -93,7 +93,7 @@ Below the main fields you will see **per‑field controls** for each of the five
 
 1. The app shows **BioAnalyzer's predicted value** as plain text.
 2. You provide:
-   - **Curator value** – type the corrected value if BioAnalyzer's prediction is wrong or incomplete (leave blank to accept the prediction as-is).
+   - **Curator value** – type the corrected value if BioAnalyzer's prediction is wrong or incomplete (leave blank to accept the prediction as-is). For **Sequencing Type**, pick from BugSigDB's own values instead (`16S`, `18S`, `WMS`, `ITS / ITS2`, `PCR`); choose more than one if the paper used several methods.
    - **"Was BioAnalyzer correct for this field?"**: `Correct` / `Incorrect` / `Unclear` / `Not reviewed`.
 3. For **Host Species, Body Site, and Condition** specifically, you also see an **ontology mapping** control:
    - BioAnalyzer's predicted Ontology ID (or a note that none was found).
