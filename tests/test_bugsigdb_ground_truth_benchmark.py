@@ -122,6 +122,74 @@ class TestCompareFieldRecordsIoU:
         assert iou_tallies == {}
         assert discrepancies == []
 
+    def test_blank_prediction_counted_separately_not_dropped(self):
+        # BugSigDB has a value, BioAnalyzer gave none: not an agreement or
+        # a disagreement in `pct`, but it must be counted so the
+        # blank-as-miss figure can include it.
+        tallies = {}
+        iou_tallies = {}
+        discrepancies = []
+
+        gtb._compare_field(
+            "condition",
+            tallies,
+            iou_tallies,
+            discrepancies,
+            pmid="123",
+            predicted_label="",
+            ground_truth_labels={"asthma"},
+            predicted_id="",
+            ground_truth_ids={"MONDO:0004979"},
+        )
+
+        for key in ("condition_label", "condition_ontology_id"):
+            assert tallies[key].n_compared == 0
+            assert tallies[key].n_blank == 1
+            assert tallies[key].pct is None
+            assert tallies[key].pct_blank_as_miss == pytest.approx(0.0)
+            assert iou_tallies[key].mean_blank_as_miss == pytest.approx(0.0)
+        assert discrepancies == []
+
+    def test_multi_value_sequencing_type_scored_as_a_set(self):
+        # BioAnalyzer lists every method a paper used ("16S; WMS"); it
+        # agrees if any is in the ground-truth set, and IoU is a real
+        # set overlap rather than a single-value proxy.
+        tallies = {}
+        iou_tallies = {}
+        discrepancies = []
+
+        gtb._compare_field(
+            "sequencing_type",
+            tallies,
+            iou_tallies,
+            discrepancies,
+            pmid="123",
+            predicted_label="16S; WMS",
+            ground_truth_labels={"16s"},
+            multi_value_predicted=True,
+        )
+
+        assert tallies["sequencing_type_label"].n_agree == 1
+        assert iou_tallies["sequencing_type_label"].mean == pytest.approx(0.5)
+        assert discrepancies == []
+
+    def test_single_value_fields_do_not_split_on_semicolons(self):
+        tallies = {}
+        iou_tallies = {}
+        discrepancies = []
+
+        gtb._compare_field(
+            "condition",
+            tallies,
+            iou_tallies,
+            discrepancies,
+            pmid="123",
+            predicted_label="asthma; eczema",
+            ground_truth_labels={"asthma"},
+        )
+
+        assert tallies["condition_label"].n_agree == 0
+
 
 class TestCmdCompareWritesMeanIoU:
     def test_summary_csv_has_mean_iou_column_with_correct_values(self, tmp_path):
@@ -205,3 +273,67 @@ class TestCmdCompareWritesMeanIoU:
 
         summary_md = (outdir / "summary.md").read_text()
         assert "Jaccard / IoU" in summary_md
+
+
+class TestCmdCompareCountsBlankPredictions:
+    def test_summary_reports_agreement_with_blanks_as_misses(self, tmp_path):
+        predictions_csv = tmp_path / "predictions.csv"
+        with open(predictions_csv, "w", newline="", encoding="utf-8") as f:
+            w = csv.DictWriter(
+                f, fieldnames=["PMID", "Condition", "Condition Ontology ID"]
+            )
+            w.writeheader()
+            w.writerow(
+                {
+                    "PMID": "1",
+                    "Condition": "asthma",
+                    "Condition Ontology ID": "MONDO:0004979",
+                }
+            )
+            # Label but no ontology ID - the case the old benchmark dropped.
+            w.writerow(
+                {"PMID": "2", "Condition": "eczema", "Condition Ontology ID": ""}
+            )
+
+        ground_truth_json = tmp_path / "gt.json"
+        ground_truth_json.write_text(
+            json.dumps(
+                {
+                    "1": {
+                        "condition_labels": ["asthma"],
+                        "condition_ids": ["MONDO:0004979"],
+                    },
+                    "2": {
+                        "condition_labels": ["eczema"],
+                        "condition_ids": ["MONDO:0004980"],
+                    },
+                }
+            )
+        )
+
+        outdir = tmp_path / "out"
+        args = type(
+            "Args",
+            (),
+            {
+                "predictions": str(predictions_csv),
+                "ground_truth": str(ground_truth_json),
+                "output": str(outdir),
+            },
+        )()
+        assert gtb.cmd_compare(args) == 0
+
+        with open(outdir / "summary.csv", encoding="utf-8") as f:
+            rows = {row["field"]: row for row in csv.DictReader(f)}
+
+        label = rows["condition_label"]
+        assert (label["n_compared"], label["n_blank_prediction"]) == ("2", "0")
+        assert float(label["agreement_pct_blank_as_miss"]) == pytest.approx(100.0)
+
+        ids = rows["condition_ontology_id"]
+        assert (ids["n_compared"], ids["n_blank_prediction"]) == ("1", "1")
+        assert float(ids["agreement_pct"]) == pytest.approx(100.0)
+        assert float(ids["agreement_pct_blank_as_miss"]) == pytest.approx(50.0)
+
+        summary_md = (outdir / "summary.md").read_text()
+        assert "left blank as misses: **50.0%** (n=2)" in summary_md
