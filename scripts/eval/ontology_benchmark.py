@@ -43,8 +43,7 @@ GOLD_CASES = [
     ),
     GoldCase("condition", "obese adults", "obesity disorder", "MONDO:0011122"),
     GoldCase("sequencing_type", "16S rRNA gene sequencing", "16S", ""),
-    # shotgun and metagenomics are in the same BugSigDB-compatible family
-    GoldCase("sequencing_type", "shotgun metagenomics", "metagenomics", ""),
+    GoldCase("sequencing_type", "shotgun metagenomics", "WMS", ""),
 ]
 
 

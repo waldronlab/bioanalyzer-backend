@@ -108,7 +108,12 @@ Rules:
   extraction error even though the word "healthy" literally appears in the text.
   If the study is on healthy subjects only, with no disease/condition group at all, return null — do NOT invent a condition.
 - sequencing_type_raw: Give the sequencing or molecular method name only. Prefer METHODS if sections are present, otherwise extract from any available text. Give the method name exactly as written
-  (e.g. "16S rRNA gene sequencing", "shotgun metagenomics", "whole-genome sequencing"). If no sequencing/molecular method is stated, return null.
+  (e.g. "16S rRNA gene sequencing of the V4 region", "shotgun metagenomic sequencing", "ITS2 amplicon sequencing", "qPCR").
+  BugSigDB records one of: 16S (16S rRNA amplicon), 18S (18S rRNA amplicon), WMS (whole-metagenome shotgun),
+  ITS / ITS2 (fungal ITS amplicon), PCR (targeted qPCR/PCR of specific taxa) — so always include the marker gene or
+  approach that tells these apart. If the text only says "amplicon sequencing" or "high-throughput sequencing", look in
+  METHODS for the target gene (16S, 18S, ITS) and include it. If several methods were used (e.g. 16S and shotgun), give
+  all of them joined with " and ". If no sequencing/molecular method is stated, return null.
 - sample_size_raw    : Give ONLY an integer. Prefer METHODS if sections are present, otherwise extract from any available text. Convert word-numbers
   (e.g. "forty-two" → 42). If a range or multiple cohorts, give the total or largest number.
   If completely absent from the paper, return null.

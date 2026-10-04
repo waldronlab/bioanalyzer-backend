@@ -209,15 +209,30 @@ def cmd_prepare(args: argparse.Namespace) -> int:
 
 
 class FieldTally:
+    """Agreement among papers where BioAnalyzer gave a value (`pct`), plus
+    `n_blank`: papers where BugSigDB has a value but BioAnalyzer gave none.
+
+    `pct` alone silently drops blank predictions from its denominator, which
+    flatters any field BioAnalyzer often leaves blank - e.g. the 2026-08
+    benchmark reported Condition ontology-ID agreement as 48/79 = 60.8%,
+    leaving out 20 papers BugSigDB has a Condition ID for but BioAnalyzer
+    gave none; counted as misses it is 48/99 = 48.5%. `pct_blank_as_miss`
+    reports that view.
+    """
+
     def __init__(self, name: str):
         self.name = name
         self.n_compared = 0
         self.n_agree = 0
+        self.n_blank = 0
 
     def record(self, agree: bool) -> None:
         self.n_compared += 1
         if agree:
             self.n_agree += 1
+
+    def record_blank(self) -> None:
+        self.n_blank += 1
 
     @property
     def pct(self) -> Optional[float]:
@@ -225,16 +240,27 @@ class FieldTally:
             return None
         return 100.0 * self.n_agree / self.n_compared
 
+    @property
+    def pct_blank_as_miss(self) -> Optional[float]:
+        total = self.n_compared + self.n_blank
+        if total == 0:
+            return None
+        return 100.0 * self.n_agree / total
+
 
 class IoUTally:
     def __init__(self, name: str):
         self.name = name
         self.n_compared = 0
         self.total_iou = 0.0
+        self.n_blank = 0
 
     def record(self, iou: float) -> None:
         self.n_compared += 1
         self.total_iou += iou
+
+    def record_blank(self) -> None:
+        self.n_blank += 1
 
     @property
     def mean(self) -> Optional[float]:
@@ -242,20 +268,28 @@ class IoUTally:
             return None
         return self.total_iou / self.n_compared
 
+    @property
+    def mean_blank_as_miss(self) -> Optional[float]:
+        total = self.n_compared + self.n_blank
+        if total == 0:
+            return None
+        return self.total_iou / total
+
 
 def _jaccard(predicted: Set[str], ground_truth: Set[str]) -> float:
     """Intersection-over-union between a predicted value set and the
     ground-truth set.
 
-    BioAnalyzer predicts one value per field per paper, so `predicted` is
-    normally a singleton here - this reduces to 1/|ground_truth| when the
+    BioAnalyzer predicts one value per field per paper - except Sequencing
+    Type, which lists every method the paper used - so `predicted` is
+    normally a singleton here and this reduces to 1/|ground_truth| when the
     prediction is a member, 0 otherwise. Still more informative than exact
     match for PMIDs where BugSigDB curates multiple distinct values per
     field (see classification "G" in benchmark_results/forensic_table.csv),
     since it reflects how large the ground-truth set was rather than just
-    hit/miss. This is a bounded proxy, not a measure of multi-value
-    extraction capability - BioAnalyzer does not currently predict more
-    than one value per field per paper.
+    hit/miss. For the single-value fields this is a bounded proxy, not a
+    measure of multi-value extraction capability; for Sequencing Type it is
+    a real set overlap.
     """
     union = predicted | ground_truth
     if not union:
@@ -284,14 +318,25 @@ def _compare_field(
     ground_truth_labels: Set[str],
     predicted_id: Optional[str] = None,
     ground_truth_ids: Optional[Set[str]] = None,
+    multi_value_predicted: bool = False,
 ) -> None:
-    pred_norm = _norm(predicted_label)
-    if pred_norm and ground_truth_labels:
-        label_key = f"{field}_label"
-        agree = pred_norm in ground_truth_labels
+    # Sequencing Type lists every method a paper used, joined with "; "
+    # (see app.normalization.sequencing_type); it agrees if any of them is
+    # in the ground-truth set, and its IoU is a real set overlap.
+    if multi_value_predicted:
+        parts = (predicted_label or "").split(";")
+        pred_set = {v for v in (_norm(p) for p in parts) if v}
+    else:
+        pred_set = {_norm(predicted_label)} - {""}
+    label_key = f"{field}_label"
+    if ground_truth_labels and not pred_set:
+        tallies.setdefault(label_key, FieldTally(label_key)).record_blank()
+        iou_tallies.setdefault(label_key, IoUTally(label_key)).record_blank()
+    elif pred_set and ground_truth_labels:
+        agree = bool(pred_set & ground_truth_labels)
         tallies.setdefault(label_key, FieldTally(label_key)).record(agree)
         iou_tallies.setdefault(label_key, IoUTally(label_key)).record(
-            _jaccard({pred_norm}, ground_truth_labels)
+            _jaccard(pred_set, ground_truth_labels)
         )
         if not agree:
             discrepancies.append(
@@ -305,8 +350,11 @@ def _compare_field(
 
     if predicted_id is not None and ground_truth_ids is not None:
         pred_id_norm = _norm_id(predicted_id)
-        if pred_id_norm and ground_truth_ids:
-            id_key = f"{field}_ontology_id"
+        id_key = f"{field}_ontology_id"
+        if ground_truth_ids and not pred_id_norm:
+            tallies.setdefault(id_key, FieldTally(id_key)).record_blank()
+            iou_tallies.setdefault(id_key, IoUTally(id_key)).record_blank()
+        elif pred_id_norm and ground_truth_ids:
             agree = pred_id_norm in ground_truth_ids
             tallies.setdefault(id_key, FieldTally(id_key)).record(agree)
             iou_tallies.setdefault(id_key, IoUTally(id_key)).record(
@@ -395,12 +443,15 @@ def cmd_compare(args: argparse.Namespace) -> int:
             pmid,
             pred.get(PRED_LABEL_COL["sequencing_type"], ""),
             set(gt.get("sequencing_type", [])),
+            multi_value_predicted=True,
         )
 
         # sample_size: numeric membership, not string membership.
         pred_size_raw = (pred.get(PRED_LABEL_COL["sample_size"], "") or "").strip()
         gt_sizes = set(gt.get("sample_size", []))
-        if pred_size_raw and gt_sizes:
+        if gt_sizes and not pred_size_raw:
+            tallies.setdefault("sample_size", FieldTally("sample_size")).record_blank()
+        elif pred_size_raw and gt_sizes:
             try:
                 pred_size = int(float(pred_size_raw))
                 agree = pred_size in gt_sizes
@@ -422,6 +473,9 @@ def cmd_compare(args: argparse.Namespace) -> int:
     outdir = Path(args.output)
     outdir.mkdir(parents=True, exist_ok=True)
 
+    def _rounded(value: Optional[float], digits: int) -> Any:
+        return round(value, digits) if value is not None else ""
+
     summary_rows = []
     for key in sorted(tallies):
         t = tallies[key]
@@ -431,9 +485,12 @@ def cmd_compare(args: argparse.Namespace) -> int:
                 "field": key,
                 "n_compared": t.n_compared,
                 "n_agree": t.n_agree,
-                "agreement_pct": round(t.pct, 1) if t.pct is not None else "",
-                "mean_iou": (
-                    round(iou_t.mean, 3) if iou_t and iou_t.mean is not None else ""
+                "agreement_pct": _rounded(t.pct, 1),
+                "mean_iou": _rounded(iou_t.mean if iou_t else None, 3),
+                "n_blank_prediction": t.n_blank,
+                "agreement_pct_blank_as_miss": _rounded(t.pct_blank_as_miss, 1),
+                "mean_iou_blank_as_miss": _rounded(
+                    iou_t.mean_blank_as_miss if iou_t else None, 3
                 ),
             }
         )
@@ -448,6 +505,9 @@ def cmd_compare(args: argparse.Namespace) -> int:
                 "n_agree",
                 "agreement_pct",
                 "mean_iou",
+                "n_blank_prediction",
+                "agreement_pct_blank_as_miss",
+                "mean_iou_blank_as_miss",
             ],
         )
         w.writeheader()
@@ -471,18 +531,29 @@ def cmd_compare(args: argparse.Namespace) -> int:
             "field (BioAnalyzer's v1/v2 pipelines extract one field-set per "
             "PMID, not per-experiment). Label comparisons are "
             "case/whitespace-normalized exact string matches, not semantic "
-            'similarity - e.g. "gut" vs "feces" counts as disagreement.\n\n'
+            'similarity - e.g. "gut" vs "feces" counts as disagreement. '
+            "Each field's first figure covers only papers where BioAnalyzer "
+            "gave a value; where it left the field blank for papers BugSigDB "
+            "has a value for, a second figure counts those blanks as misses.\n\n"
         )
         for row in summary_rows:
             field_label = row["field"].replace("_", " ")
             if row["agreement_pct"] == "":
                 f.write(f"- **{field_label}**: no comparable data.\n")
-            else:
+                continue
+            f.write(
+                f"- When comparing BioAnalyzer's extracted **{field_label}** to "
+                f"the human curated value, they agree **{row['agreement_pct']}%** "
+                f"of the time (n={row['n_compared']})."
+            )
+            if row["n_blank_prediction"]:
                 f.write(
-                    f"- When comparing BioAnalyzer's extracted **{field_label}** to "
-                    f"the human curated value, they agree **{row['agreement_pct']}%** "
-                    f"of the time (n={row['n_compared']}).\n"
+                    f" Counting the {row['n_blank_prediction']} paper(s) "
+                    "BioAnalyzer left blank as misses: "
+                    f"**{row['agreement_pct_blank_as_miss']}%** "
+                    f"(n={row['n_compared'] + row['n_blank_prediction']})."
                 )
+            f.write("\n")
 
         f.write("\n## Jaccard / IoU scoring (multi-value ground truth)\n\n")
         f.write(
@@ -492,13 +563,13 @@ def cmd_compare(args: argparse.Namespace) -> int:
             "paper-level prediction matches *any* member of that set (full "
             "credit or none). Jaccard/IoU below is a stricter, additional lens: "
             "intersection-over-union between the predicted value and the full "
-            "ground-truth set. Since BioAnalyzer currently predicts one value "
-            "per field per paper, this is a bounded proxy - 1/|ground truth "
-            "set| when the prediction is correct, 0 when it isn't - that "
-            "rewards matching a *small* ground-truth set more than a large "
-            "one. It is not a measure of multi-value extraction capability; "
-            "BioAnalyzer does not currently predict multiple values per "
-            "field.\n\n"
+            "ground-truth set. BioAnalyzer predicts one value per field per "
+            "paper - except Sequencing Type, which lists every method the "
+            "paper used - so for the single-value fields this is a bounded "
+            "proxy - 1/|ground truth set| when the prediction is correct, 0 "
+            "when it isn't - that rewards matching a *small* ground-truth set "
+            "more than a large one, not a measure of multi-value extraction "
+            "capability. For Sequencing Type it is a real set overlap.\n\n"
         )
         for row in summary_rows:
             field_label = row["field"].replace("_", " ")
@@ -506,8 +577,14 @@ def cmd_compare(args: argparse.Namespace) -> int:
                 continue
             f.write(
                 f"- **{field_label}**: mean IoU **{row['mean_iou']}** "
-                f"(n={row['n_compared']}).\n"
+                f"(n={row['n_compared']})."
             )
+            if row["n_blank_prediction"]:
+                f.write(
+                    " Counting blank predictions as 0: "
+                    f"**{row['mean_iou_blank_as_miss']}**."
+                )
+            f.write("\n")
 
     print(f"\nWrote {summary_csv}")
     print(f"Wrote {discrepancies_csv} ({len(discrepancies)} mismatches)")

@@ -66,6 +66,11 @@ BOOLEAN_COLUMNS = ["Differential Abundance", "In bsgdb"]
 OPTIONS = {
     "col_feedback": ["Not reviewed", "Correct", "Incorrect", "Unclear"],
 }
+# BugSigDB's own "Sequencing type" values - the only values BioAnalyzer
+# emits (app/normalization/sequencing_type.py::BUGSIGDB_SEQ_VOCAB; kept in
+# sync by tests/test_curator_table_app.py). This app runs standalone
+# under `streamlit run`, so it can't import that module.
+SEQUENCING_TYPE_VALUES = ["16S", "18S", "WMS", "ITS / ITS2", "PCR"]
 
 _safe = lambda col: col.replace(" ", "_")
 FEEDBACK_BASE_COLS = [
@@ -288,7 +293,13 @@ def render_filters(df: pd.DataFrame) -> pd.DataFrame:
         years = df["Year"].dropna()
         if not years.empty:
             min_y, max_y = int(years.min()), int(years.max())
-            year_range = st.sidebar.slider("Year range", min_y, max_y, (min_y, max_y))
+            # st.slider raises when min == max (e.g. a daily batch of papers
+            # all from one year), crashing the whole page - and with one
+            # year there's nothing to filter by anyway.
+            if min_y < max_y:
+                year_range = st.sidebar.slider(
+                    "Year range", min_y, max_y, (min_y, max_y)
+                )
     da_only = st.sidebar.checkbox(
         "Only differential abundance papers",
         value=True,
@@ -399,11 +410,25 @@ def render_column_level_validation(
                 st.markdown(f"**{col}**")
                 st.write(f"BioAnalyzer predicted: `{pred}`")
                 true_key = f"{TRUE_PREFIX}{safe}"
-                out[true_key] = st.text_input(
-                    f"Curator value for {col}",
-                    value="",
-                    key=f"ui__{true_key}__{selected_pmid}",
-                )
+                if col == "Sequencing Type":
+                    # A pick-list, not free text, so a correction can't bring
+                    # back a non-BugSigDB value. Several allowed: a paper can
+                    # use more than one method ("16S; WMS", as predicted).
+                    picked = st.multiselect(
+                        f"Curator value for {col}",
+                        options=SEQUENCING_TYPE_VALUES,
+                        default=[],
+                        key=f"ui__{true_key}__{selected_pmid}",
+                    )
+                    out[true_key] = "; ".join(
+                        v for v in SEQUENCING_TYPE_VALUES if v in picked
+                    )
+                else:
+                    out[true_key] = st.text_input(
+                        f"Curator value for {col}",
+                        value="",
+                        key=f"ui__{true_key}__{selected_pmid}",
+                    )
                 fb_key = f"{COL_FB_PREFIX}{safe}"
                 out[fb_key] = st.selectbox(
                     f"Was BioAnalyzer correct for {col}?",

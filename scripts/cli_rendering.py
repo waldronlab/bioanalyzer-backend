@@ -121,6 +121,19 @@ def _render_table(results: List[Dict[str, Any]]) -> str:
                 lines.append(
                     "   ⚠ UNGROUNDED — no ontology mapping, needs curator review"
                 )
+            # A stated method with no BugSigDB value is left blank (see
+            # app.normalization.sequencing_type); show the paper's own
+            # wording so the blank isn't mistaken for "nothing found".
+            if (
+                key == "sequencing_type"
+                and fd.get("status") == "PARTIALLY_PRESENT"
+                and not fd.get("value")
+                and fd.get("raw")
+            ):
+                lines.append(
+                    f"   ⚠ Not a BugSigDB sequencing type (paper says: \"{fd['raw']}\")"
+                    " — needs curator review"
+                )
         lines += [
             "-" * 60,
             f"📋 Summary: {r.get('curation_summary', 'N/A')}",

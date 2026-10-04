@@ -334,6 +334,24 @@ class TestHeuristicPayloadFromText:
         payload = _heuristic_payload_from_text("Shotgun metagenomic sequencing.")
         assert payload["sequencing_type_raw"] == "shotgun metagenomics"
 
+    @pytest.mark.parametrize(
+        "text, raw",
+        [
+            ("18S rRNA genes were sequenced.", "18S rRNA gene sequencing"),
+            ("Fungal ITS2 amplicons were sequenced.", "ITS amplicon sequencing"),
+            ("Bifidobacteria were quantified by qPCR.", "qPCR"),
+        ],
+    )
+    def test_detects_other_bugsigdb_methods(self, text, raw):
+        payload = _heuristic_payload_from_text(text)
+        assert payload["sequencing_type_raw"] == raw
+
+    def test_its_pronoun_is_not_its_sequencing(self):
+        payload = _heuristic_payload_from_text(
+            "The cohort and its controls were followed up."
+        )
+        assert payload["sequencing_type_raw"] is None
+
     def test_extracts_sample_size_from_n_equals(self):
         payload = _heuristic_payload_from_text("A total of n=42 were enrolled.")
         assert payload["sample_size_raw"] == 42
@@ -545,6 +563,20 @@ class TestFieldResultsFromUnifiedPayload:
         results = _field_results_from_unified_payload({})
         for field in results.values():
             assert field["status"] == "ABSENT"
+
+    def test_sequencing_type_is_a_bugsigdb_value(self):
+        payload = {"sequencing_type_raw": "shotgun metagenomic sequencing"}
+        results = _field_results_from_unified_payload(payload)
+        assert results["sequencing_type"]["value"] == "WMS"
+        assert results["sequencing_type"]["status"] == "PRESENT"
+
+    def test_sequencing_type_without_bugsigdb_value_keeps_raw(self):
+        payload = {"sequencing_type_raw": "RNA-seq metatranscriptomics"}
+        seq = _field_results_from_unified_payload(payload)["sequencing_type"]
+        assert seq["value"] == ""
+        assert seq["status"] == "PARTIALLY_PRESENT"
+        assert seq["raw"] == "RNA-seq metatranscriptomics"
+        assert seq["reason_if_missing"] == ""
 
     def test_heuristic_source_downgrades_auto_tier_to_review(self):
         """CRITICAL (docs/CRITICAL_HIGH_ISSUES.md): a regex keyword match

@@ -317,8 +317,8 @@ Please provide a detailed analysis in the following structured format:
             4. SEQUENCING TYPE EXTRACTION:
                - Look for specific methods: "16S rRNA gene sequencing", "V4 region amplification"
                - Check for platforms: "Illumina MiSeq", "Next-generation sequencing"
-               - Identify techniques: "Shotgun metagenomics", "Amplicon sequencing"
-               - Be precise: "16S rRNA" not "sequencing", "Metagenomics" not "genomics"
+               - Identify techniques in BugSigDB's terms: 16S (16S rRNA amplicon), 18S, WMS (whole-metagenome shotgun), ITS / ITS2, PCR (targeted qPCR)
+               - Be precise: "16S rRNA" not "sequencing", "Shotgun metagenomics" not "genomics"
                - If "16S" or "sequencing" found, mark PRESENT with confidence 0.9
 
             5. SAMPLE SIZE EXTRACTION:

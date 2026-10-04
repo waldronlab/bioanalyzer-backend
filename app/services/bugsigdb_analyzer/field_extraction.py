@@ -119,8 +119,9 @@ def _build_field_result_from_term(term: Any) -> Dict[str, Any]:
     """Build a FieldDict from a NormalizedTerm.
 
     Includes a `raw` key holding the pre-normalization text (currently
-    populated only by normalize_sequencing_type, e.g. when it falls back
-    to "other") so the side-by-side original wording isn't lost.
+    populated only by normalize_sequencing_type, e.g. when a stated method
+    has no BugSigDB value and the label is left blank) so the original
+    wording isn't lost.
     """
     if not isinstance(term, NormalizedTerm):
         raise TypeError("expected NormalizedTerm")
@@ -254,6 +255,12 @@ def _heuristic_payload_from_text(text: str) -> Dict[str, Any]:
         sequencing_type_raw = "16S rRNA gene sequencing"
     elif "shotgun" in lower or "metagenomic" in lower:
         sequencing_type_raw = "shotgun metagenomics"
+    elif re.search(r"\b18s\b", lower):
+        sequencing_type_raw = "18S rRNA gene sequencing"
+    elif re.search(r"\bITS[12]?\b", t) or "internal transcribed spacer" in lower:
+        sequencing_type_raw = "ITS amplicon sequencing"
+    elif re.search(r"\b(?:q|dd)pcr\b|\breal-time pcr\b", lower):
+        sequencing_type_raw = "qPCR"
     elif "high-throughput sequencing" in lower:
         sequencing_type_raw = "high-throughput sequencing"
     elif "sequencing" in lower:
