@@ -51,6 +51,7 @@ from app.models.extraction_schemas import (
     MicrobialSignature,
     StudyAnalysisResult,
 )
+from app.utils.credential_masking import mask_exception_message
 
 logger = logging.getLogger(__name__)
 
@@ -213,8 +214,6 @@ def _field_result_from_raw(value: Optional[str], normalizer_fn=None) -> FieldRes
                 ),
             )
         except Exception as e:
-            from app.utils.credential_masking import mask_exception_message
-
             logger.debug(
                 "Normalizer %s failed for %r: %s",
                 normalizer_fn,
@@ -447,7 +446,11 @@ class AgentOrchestrator:
             )
             return experiments
         except Exception as exc:
-            logger.error("Experiment extraction failed for pmid=%s: %s", pmid, exc)
+            logger.error(
+                "Experiment extraction failed for pmid=%s: %s",
+                pmid,
+                mask_exception_message(exc),
+            )
             return []
 
     async def _extract_signatures(
@@ -472,7 +475,7 @@ class AgentOrchestrator:
             logger.error(
                 "Signature extraction failed for experiment %s: %s",
                 experiment.experiment_id,
-                exc,
+                mask_exception_message(exc),
             )
             return []
 

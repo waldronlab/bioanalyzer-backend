@@ -10,6 +10,7 @@ from app.core.exceptions import log_masked_exception
 from app.models.unified_qa import UnifiedQA
 from app.services.data_retrieval import PubMedRetriever
 from app.utils.config import GEMINI_API_KEY
+from app.utils.credential_masking import mask_exception_message
 from app.utils.performance_logger import perf_logger
 
 try:
@@ -127,7 +128,9 @@ class SystemService:
             total = stats.get("total_requests", 0)
             return (stats.get("cache_hits", 0) / total) if total else 0.0
         except Exception as exc:
-            logger.warning("Failed to compute cache hit rate: %s", exc)
+            logger.warning(
+                "Failed to compute cache hit rate: %s", mask_exception_message(exc)
+            )
             return 0.0
 
 

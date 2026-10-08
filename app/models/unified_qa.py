@@ -93,7 +93,8 @@ class UnifiedQA:
                 )
             except Exception as paperqa_error:
                 logger.warning(
-                    f"UnifiedQA: Paper-QA initialization failed: {paperqa_error}"
+                    "UnifiedQA: Paper-QA initialization failed: %s",
+                    mask_exception_message(paperqa_error),
                 )
                 logger.info("UnifiedQA: Will fall back to non-Paper-QA providers")
                 self.use_paperqa = False

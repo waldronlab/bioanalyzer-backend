@@ -7,6 +7,8 @@ from typing import List, Dict, Optional, Tuple
 from dataclasses import dataclass
 from pathlib import Path
 
+from app.utils.credential_masking import mask_exception_message
+
 logger = logging.getLogger(__name__)
 
 try:
@@ -69,7 +71,9 @@ class ContextualSummarizationService:
                     f"model {self.summary_llm.model} for summarization"
                 )
             except Exception as e:
-                logger.warning(f"Failed to initialize summary LLM: {e}")
+                logger.warning(
+                    "Failed to initialize summary LLM: %s", mask_exception_message(e)
+                )
                 self.summary_llm = None
 
         self.summary_templates = self._create_summary_templates()
@@ -128,7 +132,9 @@ Summary should:
                 with open(cache_file, "r") as f:
                     return json.load(f)
             except Exception as e:
-                logger.warning(f"Failed to load cached summary: {e}")
+                logger.warning(
+                    "Failed to load cached summary: %s", mask_exception_message(e)
+                )
         return None
 
     def _save_cached_summary(self, cache_key: str, summary_data: Dict):
@@ -141,7 +147,9 @@ Summary should:
             with open(cache_file, "w") as f:
                 json.dump(summary_data, f, indent=2)
         except Exception as e:
-            logger.warning(f"Failed to save cached summary: {e}")
+            logger.warning(
+                "Failed to save cached summary: %s", mask_exception_message(e)
+            )
 
     async def summarize_chunk(
         self, chunk: Text, query: str, summary_length: Optional[str] = None
@@ -186,7 +194,7 @@ Summary should:
                 summary_text = response.get("text", "")
                 confidence = response.get("confidence", 0.5)
             except Exception as e:
-                logger.error(f"Summary LLM failed: {e}")
+                logger.error("Summary LLM failed: %s", mask_exception_message(e))
                 # Fallback to simple extraction
                 summary_text = self._extract_key_sentences(chunk_text, query)
         else:

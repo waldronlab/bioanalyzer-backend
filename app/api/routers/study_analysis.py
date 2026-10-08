@@ -3,11 +3,12 @@
 import asyncio
 import logging
 import time
+import traceback
 import uuid
 from typing import Dict, Optional
 from fastapi import APIRouter, HTTPException, BackgroundTasks
 from pydantic import BaseModel, HttpUrl
-from app.utils.credential_masking import mask_exception_message
+from app.utils.credential_masking import mask_exception_message, mask_string
 
 from app.services.web_scraper import WebScraperService
 from app.services.image_processor import ImageProcessorService
@@ -247,6 +248,10 @@ async def process_url_analysis(
     except Exception as e:
         safe_error = mask_exception_message(e)
         error_msg = safe_error if safe_error else f"{type(e).__name__} occurred"
-        logger.error(f"Job {job_id}: Failed with error: {safe_error}", exc_info=True)
+        logger.error(
+            "Job %s: Failed with error:\n%s",
+            job_id,
+            mask_string(traceback.format_exc()),
+        )
         job_store[job_id].status = "failed"
         job_store[job_id].error = error_msg
