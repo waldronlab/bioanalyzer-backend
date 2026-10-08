@@ -5,6 +5,7 @@ import logging
 import os
 import re
 import tempfile
+import traceback
 from pathlib import Path
 from typing import Optional
 from urllib.parse import urljoin, urlparse
@@ -13,6 +14,7 @@ import aiohttp
 from bs4 import BeautifulSoup
 from html2text import html2text
 
+from app.utils.credential_masking import mask_exception_message, mask_string
 from app.utils.url_safety import UnsafeURLError, assert_public_url
 
 logger = logging.getLogger(__name__)
@@ -89,13 +91,17 @@ class WebScraperService:
                 return download_path
             except (OSError, PermissionError) as e:
                 logger.warning(
-                    f"Download directory '{download_path}' is not writable: {e}. "
-                    f"Falling back to temporary directory."
+                    "Download directory '%s' is not writable: %s. "
+                    "Falling back to temporary directory.",
+                    download_path,
+                    mask_exception_message(e),
                 )
         except (OSError, PermissionError) as e:
             logger.warning(
-                f"Cannot create download directory '{download_path}': {e}. "
-                f"Falling back to temporary directory."
+                "Cannot create download directory '%s': %s. "
+                "Falling back to temporary directory.",
+                download_path,
+                mask_exception_message(e),
             )
 
         # Fall back to a temporary directory
@@ -110,8 +116,9 @@ class WebScraperService:
         except Exception as e:
             # Last resort: use system temp directory directly
             logger.error(
-                f"Cannot create temporary download directory: {e}. "
-                f"Using system temp directory."
+                "Cannot create temporary download directory: %s. "
+                "Using system temp directory.",
+                mask_exception_message(e),
             )
             return Path(tempfile.gettempdir())
 
@@ -152,8 +159,9 @@ class WebScraperService:
             }
 
         except Exception as e:
-            error_msg = str(e) if str(e) else f"{type(e).__name__}: {repr(e)}"
-            logger.error(f"Error scraping URL {url}: {error_msg}", exc_info=True)
+            logger.error(
+                "Error scraping URL %s:\n%s", url, mask_string(traceback.format_exc())
+            )
             raise
 
     async def _fetch_html(self, url: str) -> str:
@@ -257,7 +265,9 @@ class WebScraperService:
                     if downloaded_file:
                         downloaded.append(downloaded_file)
                 except Exception as e:
-                    logger.warning(f"Failed to download {url}: {e}")
+                    logger.warning(
+                        "Failed to download %s: %s", url, mask_exception_message(e)
+                    )
                     continue
 
         return downloaded
@@ -269,7 +279,9 @@ class WebScraperService:
         try:
             assert_public_url(url)
         except UnsafeURLError as e:
-            logger.warning(f"Skipping unsafe download URL {url}: {e}")
+            logger.warning(
+                "Skipping unsafe download URL %s: %s", url, mask_exception_message(e)
+            )
             return None
 
         try:
@@ -296,8 +308,10 @@ class WebScraperService:
                     file_path.parent.mkdir(parents=True, exist_ok=True)
                 except (OSError, PermissionError) as e:
                     logger.error(
-                        f"Cannot create directory for {filename}: {e}. "
-                        f"Download directory may not be writable."
+                        "Cannot create directory for %s: %s. "
+                        "Download directory may not be writable.",
+                        filename,
+                        mask_exception_message(e),
                     )
                     return None
 
@@ -307,8 +321,10 @@ class WebScraperService:
                     file_path.write_bytes(content)
                 except (OSError, PermissionError) as e:
                     logger.error(
-                        f"Cannot write file {filename}: {e}. "
-                        f"Download directory may not be writable."
+                        "Cannot write file %s: %s. "
+                        "Download directory may not be writable.",
+                        filename,
+                        mask_exception_message(e),
                     )
                     return None
 
@@ -323,7 +339,7 @@ class WebScraperService:
                 }
 
         except Exception as e:
-            logger.error(f"Error downloading {url}: {e}")
+            logger.error("Error downloading %s: %s", url, mask_exception_message(e))
             return None
 
     def _generate_filename(self, url: str) -> str:
@@ -377,5 +393,7 @@ class WebScraperService:
                 )
         except (OSError, PermissionError) as e:
             logger.warning(
-                f"Could not clean up download directory {self.download_dir}: {e}"
+                "Could not clean up download directory %s: %s",
+                self.download_dir,
+                mask_exception_message(e),
             )
