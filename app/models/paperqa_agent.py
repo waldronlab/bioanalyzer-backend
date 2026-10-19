@@ -8,6 +8,8 @@ from typing import Dict, Optional, Union, List
 import asyncio
 import json
 
+from app.utils.credential_masking import mask_exception_message
+
 try:
     from paperqa import Docs, Settings
     from paperqa.settings import AgentSettings
@@ -17,10 +19,9 @@ try:
     PAPERQA_AVAILABLE = True
 except ImportError as e:
     PAPERQA_AVAILABLE = False
-    logging.warning(f"Paper-QA not available: {e}")
+    logging.warning("Paper-QA not available: %s", mask_exception_message(e))
 
 from app.utils.config import GEMINI_TIMEOUT
-from app.utils.credential_masking import mask_exception_message
 
 logger = logging.getLogger(__name__)
 

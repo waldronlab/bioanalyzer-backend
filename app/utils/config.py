@@ -171,7 +171,7 @@ except (PermissionError, OSError) as e:
     logging.getLogger(__name__).warning(
         "Could not create log directory %s: %s. File logging may be unavailable.",
         LOG_DIR,
-        e,
+        mask_exception_message(e),
     )
 
 # Main application log
@@ -230,7 +230,7 @@ def setup_logging() -> logging.Logger:
     except (PermissionError, OSError) as e:
         # Fall back to console-only logging if file handlers fail
         logging.getLogger(__name__).warning(
-            "Could not create main log file handler: %s", e
+            "Could not create main log file handler: %s", mask_exception_message(e)
         )
 
     try:
@@ -247,7 +247,8 @@ def setup_logging() -> logging.Logger:
         file_handlers_created.append("performance")
     except (PermissionError, OSError) as e:
         logging.getLogger(__name__).warning(
-            "Could not create performance log file handler: %s", e
+            "Could not create performance log file handler: %s",
+            mask_exception_message(e),
         )
 
     try:
@@ -264,7 +265,7 @@ def setup_logging() -> logging.Logger:
         file_handlers_created.append("error")
     except (PermissionError, OSError) as e:
         logging.getLogger(__name__).warning(
-            "Could not create error log file handler: %s", e
+            "Could not create error log file handler: %s", mask_exception_message(e)
         )
 
     try:
@@ -281,7 +282,7 @@ def setup_logging() -> logging.Logger:
         file_handlers_created.append("api")
     except (PermissionError, OSError) as e:
         logging.getLogger(__name__).warning(
-            "Could not create API log file handler: %s", e
+            "Could not create API log file handler: %s", mask_exception_message(e)
         )
 
     # Always add console handler (it should always work)

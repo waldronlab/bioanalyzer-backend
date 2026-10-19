@@ -45,7 +45,7 @@ app = FastAPI(
         "name": "MIT",
         "url": "https://opensource.org/licenses/MIT",
     },
-    tags_metadata=[
+    openapi_tags=[
         {
             "name": "BugSigDB Analysis",
             "description": "Core endpoints for analyzing papers for the essential BugSigDB curation fields.",

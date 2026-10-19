@@ -8,6 +8,8 @@ from typing import Optional
 from paperqa.readers import parse_text
 from paperqa.types import ParsedText
 
+from app.utils.credential_masking import mask_exception_message
+
 logger = logging.getLogger(__name__)
 
 
@@ -106,7 +108,11 @@ class ConverterService:
                 return f"_Binary file ({suffix}) - content not extracted_\n"
 
         except Exception as e:
-            logger.warning(f"Could not extract content from {file_path}: {e}")
+            logger.warning(
+                "Could not extract content from %s: %s",
+                file_path,
+                mask_exception_message(e),
+            )
             return None
 
     def _format_parsed_text(self, parsed_text: ParsedText) -> str:

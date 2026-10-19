@@ -8,6 +8,7 @@ from typing import Optional
 
 import aiohttp
 
+from app.utils.credential_masking import mask_exception_message
 from app.utils.url_safety import UnsafeURLError, assert_public_url
 
 logger = logging.getLogger(__name__)
@@ -74,7 +75,9 @@ class ImageProcessorService:
             return processed
 
         except Exception as exc:
-            logger.error("Error processing image %s: %s", image_url, exc)
+            logger.error(
+                "Error processing image %s: %s", image_url, mask_exception_message(exc)
+            )
             return None
 
     async def _download_image(
@@ -93,7 +96,9 @@ class ImageProcessorService:
         try:
             assert_public_url(image_url)
         except UnsafeURLError as e:
-            logger.warning("Skipping unsafe image URL %s: %s", image_url, e)
+            logger.warning(
+                "Skipping unsafe image URL %s: %s", image_url, mask_exception_message(e)
+            )
             return None
 
         try:
@@ -103,7 +108,9 @@ class ImageProcessorService:
                 return await self._fetch_image(local_session, image_url)
 
         except Exception as exc:
-            logger.error("Error downloading image %s: %s", image_url, exc)
+            logger.error(
+                "Error downloading image %s: %s", image_url, mask_exception_message(exc)
+            )
             return None
 
     async def _fetch_image(
@@ -210,7 +217,7 @@ class ImageProcessorService:
             return description
 
         except Exception as exc:
-            logger.error("Error describing image: %s", exc)
+            logger.error("Error describing image: %s", mask_exception_message(exc))
             return ""
 
     def cleanup_cache(self):
