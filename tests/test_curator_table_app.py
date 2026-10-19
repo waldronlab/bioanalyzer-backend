@@ -67,10 +67,17 @@ def test_sequencing_type_correction_is_a_bugsigdb_picklist(tmp_path, monkeypatch
     ]
     assert seq.options == ["16S", "18S", "WMS", "ITS / ITS2", "PCR"]
 
+    # These widgets all live inside st.form("feedback_form"). Streamlit only
+    # commits a form's widgets when the form is submitted, and discards
+    # whatever is pending if some other rerun happens first - so fill every
+    # field and submit in a single .run(), which is also what a real curator
+    # does (form widgets don't rerun the script on their own). Setting them
+    # one .run() at a time lost each value to the next rerun on Streamlit
+    # 1.65 and saved a blank Sequencing Type.
     # Picked out of vocabulary order: saved in it, as BioAnalyzer predicts.
-    seq.set_value(["WMS", "16S"]).run()
+    seq.set_value(["WMS", "16S"])
     [curator] = [t for t in at.text_input if t.label == "Curator ID / initials"]
-    curator.input("RO").run()
+    curator.input("RO")
     [save] = [b for b in at.button if b.label == "Save feedback"]
     save.click().run()
     assert not at.exception, at.exception
@@ -78,6 +85,9 @@ def test_sequencing_type_correction_is_a_bugsigdb_picklist(tmp_path, monkeypatch
     feedback = tmp_path / "feedback" / "curator_feedback.csv"
     rows = list(csv.DictReader(open(feedback, encoding="utf-8")))
     assert rows[-1]["true__Sequencing_Type"] == "16S; WMS"
+    # Guards the same class of bug on the plain text fields: a dropped
+    # curator_id silently falls back to the logged-in username.
+    assert rows[-1]["curator_id"] == "RO"
 
 
 def test_curator_table_sequencing_type_options_match_bugsigdb_vocab():
