@@ -91,7 +91,12 @@ from .parsing import (
 )
 from .rag_analysis import analyze_paper_with_rag, analyze_single_field
 from .simple_analysis import analyze_paper_simple
-from .singletons import get_cache_manager, get_pubmed_retriever, get_unified_qa
+from .singletons import (
+    describe_active_model,
+    get_cache_manager,
+    get_pubmed_retriever,
+    get_unified_qa,
+)
 
 __all__ = [
     "analyze_paper_simple",
@@ -101,6 +106,7 @@ __all__ = [
     "get_unified_qa",
     "get_pubmed_retriever",
     "get_cache_manager",
+    "describe_active_model",
     "UnifiedQA",
     "PubMedRetriever",
     "CacheManager",

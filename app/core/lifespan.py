@@ -4,6 +4,7 @@ from typing import AsyncIterator, Callable, Optional, TypeVar
 
 from fastapi import FastAPI
 
+from app.models.llm_provider import resolve_provider_and_model
 from app.models.unified_qa import UnifiedQA
 from app.services.data_retrieval import PubMedRetriever
 from app.utils.config import GEMINI_API_KEY, NCBI_API_KEY
@@ -27,8 +28,13 @@ def _safe_init(factory: Callable[[], T], service_name: str) -> Optional[T]:
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Initialize singletons on startup, expose via app.state, clear on shutdown."""
+    # Honour LLM_PROVIDER / LLM_MODEL (auto-detected from the configured API
+    # key when unset) instead of pinning /qa to Gemini.
+    provider, model = resolve_provider_and_model()
     app.state.unified_qa = _safe_init(
-        lambda: UnifiedQA(use_gemini=True, gemini_api_key=GEMINI_API_KEY),
+        lambda: UnifiedQA(
+            provider=provider, model=model, gemini_api_key=GEMINI_API_KEY
+        ),
         "UnifiedQA",
     )
     app.state.pubmed_retriever = _safe_init(

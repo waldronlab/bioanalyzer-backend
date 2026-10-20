@@ -63,12 +63,23 @@ class UnifiedQA:
         if provider is None:
             provider = LLM_PROVIDER
 
+        if provider is None and LLMProviderManager is not None:
+            # Same detection LLMProviderManager would do for itself; resolving
+            # it here lets the Gemini-only paths below honour the choice too.
+            provider = LLMProviderManager.detect_provider()
+
+        provider = provider.lower() if provider else None
+
         if model is None:
             model = LLM_MODEL
 
         self.provider = provider
         self.model = model
-        self.use_paperqa = bool(use_paperqa) and PAPERQA_AVAILABLE
+        # PaperQAAgent is Gemini-backed, so it must not take over chat() when
+        # the configured provider is something else.
+        self.use_paperqa = (
+            bool(use_paperqa) and PAPERQA_AVAILABLE and provider in (None, "gemini")
+        )
 
         self.qa_system = None
         self.llm_manager = None
@@ -102,6 +113,8 @@ class UnifiedQA:
         if LITELLM_AVAILABLE and LLMProviderManager:
             try:
                 self.llm_manager = LLMProviderManager(provider=provider, model=model)
+                self.provider = self.llm_manager.provider.value
+                self.model = self.llm_manager.model
                 logger.info(
                     f"UnifiedQA: Using LiteLLM with provider={self.llm_manager.provider.value}, model={self.llm_manager.model}"
                 )
@@ -112,7 +125,11 @@ class UnifiedQA:
                 self.llm_manager = None
 
         if self.qa_system is None:
-            if api_key_candidate:
+            # GeminiQA is Gemini-only: build it when Gemini is what was asked
+            # for, or as a last resort when no LiteLLM manager is available.
+            if api_key_candidate and (
+                provider in (None, "gemini") or self.llm_manager is None
+            ):
                 try:
                     from .gemini_qa import GeminiQA
 

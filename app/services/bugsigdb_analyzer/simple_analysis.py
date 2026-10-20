@@ -9,7 +9,7 @@ from typing import Any, Dict, Optional
 
 import app.services.bugsigdb_analyzer as _pkg
 from app.utils.credential_masking import mask_exception_message
-from app.utils.config import DEFAULT_MODEL, CACHE_VALIDITY_HOURS
+from app.utils.config import CACHE_VALIDITY_HOURS
 
 from .constants import _current_timestamp
 from .field_extraction import (
@@ -121,6 +121,9 @@ async def analyze_paper_simple(
 
         processing_time = time.time() - start_time
 
+        # Report what actually ran rather than the DEFAULT_MODEL label.
+        model_label = _pkg.describe_active_model()
+
         # ── Assemble result dict ───────────────────────────────────────────
         # Key names here are the single source of truth — data.R reads these.
         result: Dict[str, Any] = {
@@ -137,7 +140,7 @@ async def analyze_paper_simple(
             "curation_summary": _build_curation_summary(field_results),
             "processing_time": processing_time,
             "analysis_timestamp": _current_timestamp(),
-            "model_used": DEFAULT_MODEL,
+            "model_used": model_label,
         }
 
         logger.info(
@@ -155,7 +158,7 @@ async def analyze_paper_simple(
                     "publication_date": texts.get("publication_date", ""),
                     "authors": texts.get("authors", []),
                 },
-                source=DEFAULT_MODEL,
+                source=model_label,
                 confidence=_avg_confidence(field_results),
             )
         except Exception as cache_error:
