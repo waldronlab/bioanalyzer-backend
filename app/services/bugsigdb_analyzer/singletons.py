@@ -5,6 +5,8 @@ Singleton service instances for the BugSigDB analyzer.
 import logging
 from typing import Optional
 
+import app.services.bugsigdb_analyzer as _pkg
+from app.models.llm_provider import resolve_provider_and_model
 from app.models.unified_qa import UnifiedQA
 from app.services.cache_manager import CacheManager
 from app.services.data_retrieval import PubMedRetriever
@@ -30,26 +32,65 @@ _cache_manager: Optional[CacheManager] = None
 def get_unified_qa() -> Optional[UnifiedQA]:
     global _unified_qa
     if _unified_qa is None:
+        # Provider/model come from LLM_PROVIDER / LLM_MODEL (auto-detected
+        # from the configured API key when unset). Hardcoding "gemini" here
+        # meant an OpenAI/Anthropic/Ollama deployment still sent every
+        # extraction request to Gemini.
+        provider, model = resolve_provider_and_model()
         try:
             _unified_qa = UnifiedQA(
-                provider="gemini",
-                model=DEFAULT_MODEL,
+                provider=provider,
+                model=model,
                 gemini_api_key=GEMINI_API_KEY,
                 use_paperqa=False,
             )
-            logger.info("UnifiedQA initialised successfully")
+            logger.info(
+                "UnifiedQA initialised successfully (provider=%s, model=%s)",
+                provider,
+                model or "<provider default>",
+            )
         except Exception as e:
             logger.error("UnifiedQA init failed: %s", mask_exception_message(e))
-            try:
-                from app.models.gemini_qa import GeminiQA
+            # GeminiQA is Gemini-only, so it is a valid fallback only when
+            # Gemini is what was asked for in the first place.
+            if provider == "gemini" and GEMINI_API_KEY:
+                try:
+                    from app.models.gemini_qa import GeminiQA
 
-                _unified_qa = GeminiQA(api_key=GEMINI_API_KEY)
-                logger.info("Fallback to GeminiQA successful")
-            except Exception as e2:
+                    _unified_qa = GeminiQA(api_key=GEMINI_API_KEY)
+                    logger.info("Fallback to GeminiQA successful")
+                except Exception as e2:
+                    logger.error(
+                        "GeminiQA fallback also failed: %s", mask_exception_message(e2)
+                    )
+            else:
                 logger.error(
-                    "GeminiQA fallback also failed: %s", mask_exception_message(e2)
+                    "No fallback available for provider=%s; check its API key "
+                    "and LLM_PROVIDER configuration",
+                    provider,
                 )
     return _unified_qa
+
+
+def describe_active_model() -> str:
+    """Return the model actually used for extraction, as "provider/model".
+
+    Falls back to DEFAULT_MODEL only when no real client is available, so
+    results no longer claim DEFAULT_MODEL regardless of what ran.
+    """
+    qa = _pkg.get_unified_qa()
+    manager = getattr(qa, "llm_manager", None)
+    provider = getattr(getattr(manager, "provider", None), "value", None)
+    model = getattr(manager, "model", None)
+    if isinstance(provider, str) and isinstance(model, str) and model:
+        return model if model.startswith(f"{provider}/") else f"{provider}/{model}"
+
+    # GeminiQA fallback path (no LiteLLM manager) carries its own model name.
+    qa_model = getattr(getattr(qa, "qa_system", None), "model", None)
+    if isinstance(qa_model, str) and qa_model:
+        return qa_model
+
+    return DEFAULT_MODEL
 
 
 def get_pubmed_retriever() -> Optional[PubMedRetriever]:

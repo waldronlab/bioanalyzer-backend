@@ -2,7 +2,7 @@
 
 import os
 import logging
-from typing import Optional, Dict, List, Any
+from typing import Optional, Dict, List, Any, Tuple
 from enum import Enum
 from app.utils.credential_masking import mask_exception_message, mask_string
 
@@ -94,7 +94,17 @@ class LLMProviderManager:
         )
 
     def _detect_provider(self) -> str:
-        """Detect provider from environment variables."""
+        """Instance-level alias kept for backwards compatibility."""
+        return self.detect_provider()
+
+    @staticmethod
+    def detect_provider() -> str:
+        """Detect provider from environment variables.
+
+        Public so that callers which build a client indirectly (UnifiedQA,
+        the analyzer singletons, the app lifespan) can resolve the same
+        provider this manager would pick for itself.
+        """
         # Check in order of preference
         if os.getenv("OPENAI_API_KEY"):
             return LLMProvider.OPENAI.value
@@ -274,3 +284,43 @@ class LLMProviderManager:
         # llamafile is always available if installed locally
 
         return available
+
+
+# Values of LLMProvider are also used as provider *labels* elsewhere (e.g.
+# DEFAULT_MODEL / AVAILABLE_MODELS in app.utils.config, surfaced by /config),
+# so a config value that is only one of these names does not name a model.
+_PROVIDER_LABELS = {p.value for p in LLMProvider}
+
+
+def resolve_provider_and_model() -> Tuple[str, Optional[str]]:
+    """Resolve the (provider, model) every LLM client in the app should use.
+
+    - provider: ``LLM_PROVIDER`` when set, otherwise auto-detected from
+      whichever API key is configured — the behaviour documented in
+      ``.env.example``.
+    - model: ``LLM_MODEL`` when set. ``DEFAULT_MODEL`` is honoured only for
+      Gemini, where it has always named the Gemini model; it defaults to the
+      bare provider label ``"gemini"``, which is not a usable model name and
+      must never be handed to another provider.
+
+    Returns ``None`` for the model when nothing specific is configured, so
+    :class:`LLMProviderManager` falls back to its own per-provider default.
+    """
+    # Imported lazily: app.utils.config reads these from the environment at
+    # import time, and a function-local import both avoids an import cycle
+    # and picks up values patched on the config module (as tests do).
+    from app.utils.config import DEFAULT_MODEL, LLM_MODEL, LLM_PROVIDER
+
+    provider = (LLM_PROVIDER or LLMProviderManager.detect_provider()).lower()
+
+    if LLM_MODEL:
+        return provider, LLM_MODEL
+
+    if (
+        provider == LLMProvider.GEMINI.value
+        and DEFAULT_MODEL
+        and DEFAULT_MODEL.lower() not in _PROVIDER_LABELS
+    ):
+        return provider, DEFAULT_MODEL
+
+    return provider, None

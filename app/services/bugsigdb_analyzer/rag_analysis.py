@@ -11,7 +11,7 @@ from typing import Any, Dict, List, Optional
 
 import app.services.bugsigdb_analyzer as _pkg
 from app.utils.credential_masking import mask_exception_message
-from app.utils.config import ANALYSIS_TIMEOUT, DEFAULT_MODEL, GEMINI_API_KEY
+from app.utils.config import ANALYSIS_TIMEOUT, GEMINI_API_KEY
 
 from .constants import _current_timestamp
 from .field_extraction import (
@@ -162,6 +162,9 @@ async def analyze_paper_with_rag(
             payload, analysis_text
         )
 
+        # Report what actually ran rather than the DEFAULT_MODEL label.
+        model_label = _pkg.describe_active_model()
+
         # ── Assemble result dict ───────────────────────────────────────────
         result: Dict[str, Any] = {
             "pmid": pmid,
@@ -176,7 +179,7 @@ async def analyze_paper_with_rag(
             "fields": field_results,
             "curation_summary": _build_curation_summary(field_results),
             "analysis_timestamp": _current_timestamp(),
-            "model_used": DEFAULT_MODEL,
+            "model_used": model_label,
             # RAG-specific extras (not consumed by data.R; useful for debugging)
             "processing_time": processing_time,
             "rag_enabled": use_rag_final,
@@ -207,7 +210,7 @@ async def analyze_paper_with_rag(
                     "publication_date": texts.get("publication_date", ""),
                     "authors": texts.get("authors", []),
                 },
-                source=DEFAULT_MODEL,
+                source=model_label,
                 confidence=_avg_confidence(field_results),
             )
         except Exception as cache_error:
