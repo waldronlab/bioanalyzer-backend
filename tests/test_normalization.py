@@ -265,6 +265,24 @@ def test_body_site_precise_anatomical_terms_outrank_specimen_type_alias():
     assert normalize_body_site("oral swab").label == "saliva"
 
 
+def test_body_site_tissue_phrasings_are_not_swallowed_by_the_specimen_alias():
+    """Companion to the test above. The "intestinal" -> feces specimen alias
+    is right for casual specimen text ("intestinal samples"), but a paper
+    that says "intestinal biopsy" sampled tissue, and BugSigDB curates that
+    as "intestine" (UBERON:0000160) - see PMIDs 26181352 and 35188868 in the
+    100-paper ground-truth benchmark. Fixed the same way "Small intestine"
+    was: longer, explicitly tissue-naming keys listed so LookupMatcher's
+    longest-match picks them over the bare alias."""
+    for text in ("intestinal biopsy", "Intestinal biopsies", "intestinal tissue"):
+        t = normalize_body_site(text)
+        assert t.label == "intestine"
+        assert t.ontology_id == "UBERON:0000160"
+
+    # The specimen alias itself must be completely unaffected.
+    assert normalize_body_site("intestinal samples").label == "feces"
+    assert normalize_body_site("gut microbiome").label == "feces"
+
+
 @requires_real_ontology_store
 def test_body_site_local_store_override_catches_phrasings_beyond_the_static_dict():
     """2026-08-09 semantic-hardening follow-up: the fix above (adding
@@ -910,10 +928,19 @@ def test_host_species_ncbi_fallback_handles_narrowed_exceptions(monkeypatch, fak
 def test_ols_search_success(monkeypatch):
     def fake_get(url, params=None, timeout=None):
         assert url == ols_module.OLS_SEARCH_URL
+        # `synonym` mirrors what OLS4 really returns for this term: ols_search
+        # accepts a hit on the term's own label or synonyms, so a fixture
+        # without them would not match any query but "felis catus" itself.
         return _DummyResponse(
             {
                 "response": {
-                    "docs": [{"label": "felis catus", "obo_id": "NCBITaxon_9685"}]
+                    "docs": [
+                        {
+                            "label": "felis catus",
+                            "obo_id": "NCBITaxon_9685",
+                            "synonym": ["domestic cat", "cat"],
+                        }
+                    ]
                 }
             }
         )
@@ -1180,7 +1207,11 @@ def test_body_site_ols_fallback_success(monkeypatch):
         )
 
     monkeypatch.setattr(requests, "get", fake_get)
-    t = normalize_body_site("duodenal biopsy")
+    # Queried by the term's own name: the live OLS4 search returns no UBERON
+    # doc at all for "duodenal biopsy", so asserting it resolves to duodenum
+    # tested only the mock. This still covers the path under test - an OLS hit
+    # becoming a PRESENT NormalizedTerm at 0.9 confidence.
+    t = normalize_body_site("duodenum")
     assert t.label == "duodenum"
     assert t.ontology_id == "UBERON:0002114"
     assert t.status == "PRESENT"

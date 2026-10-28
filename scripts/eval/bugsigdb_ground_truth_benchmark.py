@@ -126,12 +126,21 @@ def _parse_full_dump(dump_path: Path) -> Dict[str, Dict[str, Any]]:
                 if oid:
                     gt["body_site_ids"].add(oid)
 
-        condition = _norm(row.get("Condition"))
-        if condition and condition != "na":
-            gt["condition_labels"].add(condition)
-        efo_id = _norm_id(row.get("EFO ID"))
-        if efo_id and efo_id != "NA":
-            gt["condition_ids"].add(efo_id)
+        # Comma-split like Body site above: BugSigDB packs multiple conditions
+        # into one cell, and leaving them joined made a correct single-value
+        # prediction unmatchable (e.g. "nicotine dependence,smoking behavior").
+        condition_raw = (row.get("Condition") or "").strip()
+        if condition_raw and condition_raw != "NA":
+            for label in condition_raw.split(","):
+                label = _norm(label)
+                if label and label != "na":
+                    gt["condition_labels"].add(label)
+        efo_raw = (row.get("EFO ID") or "").strip()
+        if efo_raw and efo_raw != "NA":
+            for oid in efo_raw.split(","):
+                oid = _norm_id(oid)
+                if oid:
+                    gt["condition_ids"].add(oid)
 
         seq_type = _norm(row.get("Sequencing type"))
         if seq_type and seq_type != "na":
@@ -152,6 +161,16 @@ def _has_any_ground_truth(gt: Dict[str, Any]) -> bool:
 
 
 def _jsonable(ground_truth: Dict[str, Dict[str, Any]]) -> Dict[str, Dict[str, List]]:
+    """Serialize the per-PMID ground-truth sets to sorted JSON lists.
+
+    Each field is an unordered *set* of every distinct value BugSigDB curated
+    across that PMID's experiments, sorted only to keep the file diffable.
+    The `*_labels` and `*_ids` lists are therefore sorted independently and
+    are NOT positional pairs - `body_site_labels[0]` need not be the label of
+    `body_site_ids[0]`. Scoring never pairs them (a prediction is a hit if it
+    matches any member of the relevant set), so this is correct as written,
+    but do not read the file as if the two lists lined up.
+    """
     return {
         pmid: {k: sorted(v) for k, v in fields.items()}
         for pmid, fields in ground_truth.items()
@@ -297,6 +316,47 @@ def _jaccard(predicted: Set[str], ground_truth: Set[str]) -> float:
     return len(predicted & ground_truth) / len(union)
 
 
+# --- optional ontology-equivalence scoring (--synonym-scoring) --------------
+# Exact string matching scores "Parkinson disease" against the curated
+# "parkinson's disease" as a miss even though both name MONDO:0005180. This
+# reports that agreement as an ADDITIONAL metric beside the strict one - never
+# replacing it - and takes equivalence from the ontology's own label/synonym
+# sets via the same strict lookup production uses, so it is not a similarity
+# threshold anyone can tune until a run looks better.
+_EQUIVALENCE_ENABLED = False
+_EQUIVALENCE_ONTOLOGIES = {
+    "condition": (("efo", "EFO"), ("mondo", "MONDO")),
+    "body_site": (("uberon", "UBERON"),),
+    "host_species": (("ncbitaxon", "NCBITaxon"),),
+}
+_CURIE_MEMO: Dict[Tuple[str, str], Optional[str]] = {}
+
+
+def _resolve_curie(label: str, ontologies: Tuple[Tuple[str, str], ...]) -> Optional[str]:
+    """CURIE for *label* if an ontology lists it as a term name/synonym."""
+    for ontology, prefix in ontologies:
+        key = (ontology, label)
+        if key not in _CURIE_MEMO:
+            from app.normalization.ols import ols_search  # lazy: needs network
+
+            hit = ols_search(label, ontology, prefix)
+            _CURIE_MEMO[key] = hit[1] if hit else None
+        if _CURIE_MEMO[key]:
+            return _CURIE_MEMO[key]
+    return None
+
+
+def _ontology_equivalent(field: str, pred_labels: Set[str], gt_labels: Set[str]) -> bool:
+    ontologies = _EQUIVALENCE_ONTOLOGIES.get(field)
+    if not ontologies:
+        return False
+    pred_ids = {c for c in (_resolve_curie(p, ontologies) for p in pred_labels) if c}
+    if not pred_ids:
+        return False
+    gt_ids = {c for c in (_resolve_curie(g, ontologies) for g in gt_labels) if c}
+    return bool(pred_ids & gt_ids)
+
+
 def _load_predictions(predictions_path: Path) -> Dict[str, Dict[str, str]]:
     with open(predictions_path, encoding="utf-8") as f:
         rows = list(csv.DictReader(f))
@@ -329,9 +389,12 @@ def _compare_field(
     else:
         pred_set = {_norm(predicted_label)} - {""}
     label_key = f"{field}_label"
+    syn_key = f"{label_key}_synonym_aware"
     if ground_truth_labels and not pred_set:
         tallies.setdefault(label_key, FieldTally(label_key)).record_blank()
         iou_tallies.setdefault(label_key, IoUTally(label_key)).record_blank()
+        if _EQUIVALENCE_ENABLED:
+            tallies.setdefault(syn_key, FieldTally(syn_key)).record_blank()
     elif pred_set and ground_truth_labels:
         agree = bool(pred_set & ground_truth_labels)
         tallies.setdefault(label_key, FieldTally(label_key)).record(agree)
@@ -346,6 +409,10 @@ def _compare_field(
                     "predicted": predicted_label,
                     "ground_truth": "; ".join(sorted(ground_truth_labels)),
                 }
+            )
+        if _EQUIVALENCE_ENABLED:
+            tallies.setdefault(syn_key, FieldTally(syn_key)).record(
+                agree or _ontology_equivalent(field, pred_set, ground_truth_labels)
             )
 
     if predicted_id is not None and ground_truth_ids is not None:
@@ -372,6 +439,8 @@ def _compare_field(
 
 
 def cmd_compare(args: argparse.Namespace) -> int:
+    global _EQUIVALENCE_ENABLED
+    _EQUIVALENCE_ENABLED = bool(getattr(args, "synonym_scoring", False))
     predictions_path = Path(args.predictions)
     gt_path = Path(args.ground_truth)
     if not predictions_path.exists():
@@ -536,6 +605,18 @@ def cmd_compare(args: argparse.Namespace) -> int:
             "gave a value; where it left the field blank for papers BugSigDB "
             "has a value for, a second figure counts those blanks as misses.\n\n"
         )
+        if _EQUIVALENCE_ENABLED:
+            f.write(
+                "A `*_synonym_aware` row accompanies each label field below. It "
+                "scores agreement when the predicted and curated values resolve "
+                "to the *same ontology term*, taking equivalence from that "
+                "ontology's own label and synonym lists rather than from a "
+                "similarity threshold - so it credits "
+                '"Parkinson disease" vs "parkinson\'s disease" (both '
+                "MONDO:0005180) without being tunable to flatter a run. It is "
+                "reported *in addition to* the exact-string figure, which is "
+                "unchanged and remains the headline number.\n\n"
+            )
         for row in summary_rows:
             field_label = row["field"].replace("_", " ")
             if row["agreement_pct"] == "":
@@ -634,6 +715,15 @@ def main() -> int:
     )
     p_compare.add_argument(
         "-o", "--output", default="results/bugsigdb_benchmark", help="Output directory"
+    )
+    p_compare.add_argument(
+        "--synonym-scoring",
+        action="store_true",
+        help=(
+            "Additionally report label agreement where prediction and curated "
+            "value resolve to the same ontology term (needs network: live OLS "
+            "lookups). Reported beside the exact-string figure, never instead."
+        ),
     )
     p_compare.set_defaults(func=cmd_compare)
 
