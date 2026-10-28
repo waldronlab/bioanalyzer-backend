@@ -43,11 +43,17 @@ class TestOlsSearchCaching:
             mock_get.return_value = _fake_ols_response(
                 "Parkinson disease", "EFO_0002508"
             )
-            result = ols.ols_search("parkinsons", "efo", "EFO", mapping_confidence=0.9)
+            # The query is the term's own label: ols_search only accepts a hit
+            # whose label or synonyms match, so an abbreviation like
+            # "parkinsons" would (correctly) resolve to nothing and this test
+            # would stop exercising the cache-miss path it exists to cover.
+            result = ols.ols_search(
+                "Parkinson disease", "efo", "EFO", mapping_confidence=0.9
+            )
 
         mock_get.assert_called_once()
         store_mock.assert_called_once_with(
-            "efo", "parkinsons", "Parkinson disease", "EFO:0002508", 0.9
+            "efo", "Parkinson disease", "Parkinson disease", "EFO:0002508", 0.9
         )
         assert result == ("Parkinson disease", "EFO:0002508", 0.9)
 

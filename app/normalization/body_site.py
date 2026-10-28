@@ -13,7 +13,6 @@ from app.normalization.types import (
     normalize_spelling,
 )
 
-
 BODY_SITE_LOOKUP: Dict[str, Tuple[str, str]] = {
     "small intestine": ("small intestine", "UBERON:0002108"),
     "large intestine": ("large intestine", "UBERON:0000059"),
@@ -21,6 +20,15 @@ BODY_SITE_LOOKUP: Dict[str, Tuple[str, str]] = {
     "feces": ("feces", "UBERON:0001988"),
     "fecal": ("feces", "UBERON:0001988"),
     "stool": ("feces", "UBERON:0001988"),
+    # Tissue phrasings must be listed ahead of the "intestinal" specimen
+    # alias below: LookupMatcher prefers the longest matching key, so these
+    # win outright. A paper saying "intestinal biopsy" sampled tissue, not
+    # stool, and BugSigDB curates that as its own value (UBERON:0000160) -
+    # confirmed on PMIDs 26181352 and 35188868. The bare "intestinal" alias
+    # stays pointed at feces on purpose; see the specimen-alias test.
+    "intestinal biopsy": ("intestine", "UBERON:0000160"),
+    "intestinal tissue": ("intestine", "UBERON:0000160"),
+    "intestinal biopsies": ("intestine", "UBERON:0000160"),
     "gut": ("feces", "UBERON:0001988"),
     "intestine": ("feces", "UBERON:0001988"),
     "intestinal": ("feces", "UBERON:0001988"),

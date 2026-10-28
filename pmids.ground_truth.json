@@ -1,0 +1,2557 @@
+{
+  "22339879": {
+    "host_species": [
+      "homo sapiens"
+    ],
+    "body_site_labels": [
+      "feces"
+    ],
+    "body_site_ids": [
+      "UBERON:0001988"
+    ],
+    "condition_labels": [
+      "irritable bowel syndrome"
+    ],
+    "condition_ids": [
+      "MONDO:0005052"
+    ],
+    "sequencing_type": [
+      "16s"
+    ],
+    "sample_size": [
+      46
+    ]
+  },
+  "25444008": {
+    "host_species": [
+      "homo sapiens"
+    ],
+    "body_site_labels": [
+      "feces"
+    ],
+    "body_site_ids": [
+      "UBERON:0001988"
+    ],
+    "condition_labels": [
+      "antimicrobial agent",
+      "delivery method",
+      "premature birth"
+    ],
+    "condition_ids": [
+      "CHEBI:33281",
+      "EFO:0000395",
+      "EFO:0003917"
+    ],
+    "sequencing_type": [
+      "16s",
+      "pcr"
+    ],
+    "sample_size": [
+      14,
+      19,
+      24,
+      27,
+      40
+    ]
+  },
+  "25599982": {
+    "host_species": [
+      "homo sapiens"
+    ],
+    "body_site_labels": [
+      "feces"
+    ],
+    "body_site_ids": [
+      "UBERON:0001988"
+    ],
+    "condition_labels": [
+      "food allergy"
+    ],
+    "condition_ids": [
+      "MONDO:0700226"
+    ],
+    "sequencing_type": [
+      "16s"
+    ],
+    "sample_size": [
+      166
+    ]
+  },
+  "25944283": {
+    "host_species": [
+      "homo sapiens"
+    ],
+    "body_site_labels": [
+      "feces"
+    ],
+    "body_site_ids": [
+      "UBERON:0001988"
+    ],
+    "condition_labels": [
+      "atopic eczema",
+      "delivery method"
+    ],
+    "condition_ids": [
+      "EFO:0000395",
+      "MONDO:0004980"
+    ],
+    "sequencing_type": [
+      "16s"
+    ],
+    "sample_size": [
+      14,
+      19
+    ]
+  },
+  "26179554": {
+    "host_species": [
+      "homo sapiens"
+    ],
+    "body_site_labels": [
+      "colonic mucosa",
+      "feces"
+    ],
+    "body_site_ids": [
+      "UBERON:0000317",
+      "UBERON:0001988"
+    ],
+    "condition_labels": [
+      "parkinson's disease"
+    ],
+    "condition_ids": [
+      "MONDO:0005180"
+    ],
+    "sequencing_type": [
+      "16s"
+    ],
+    "sample_size": [
+      72
+    ]
+  },
+  "26181352": {
+    "host_species": [
+      "homo sapiens"
+    ],
+    "body_site_labels": [
+      "intestine"
+    ],
+    "body_site_ids": [
+      "UBERON:0000160"
+    ],
+    "condition_labels": [
+      "colorectal cancer"
+    ],
+    "condition_ids": [
+      "MONDO:0005575"
+    ],
+    "sequencing_type": [
+      "16s"
+    ],
+    "sample_size": [
+      1116
+    ]
+  },
+  "27015276": {
+    "host_species": [
+      "homo sapiens"
+    ],
+    "body_site_labels": [
+      "feces"
+    ],
+    "body_site_ids": [
+      "UBERON:0001988"
+    ],
+    "condition_labels": [
+      "colorectal cancer"
+    ],
+    "condition_ids": [
+      "MONDO:0005575"
+    ],
+    "sequencing_type": [
+      "16s"
+    ],
+    "sample_size": [
+      131
+    ]
+  },
+  "27228093": {
+    "host_species": [
+      "homo sapiens"
+    ],
+    "body_site_labels": [
+      "feces"
+    ],
+    "body_site_ids": [
+      "UBERON:0001988"
+    ],
+    "condition_labels": [
+      "obesity",
+      "sex design"
+    ],
+    "condition_ids": [
+      "EFO:0001752",
+      "MONDO:0011122"
+    ],
+    "sequencing_type": [
+      "16s"
+    ],
+    "sample_size": [
+      26,
+      75
+    ]
+  },
+  "27288567": {
+    "host_species": [
+      "homo sapiens"
+    ],
+    "body_site_labels": [
+      "feces"
+    ],
+    "body_site_ids": [
+      "UBERON:0001988"
+    ],
+    "condition_labels": [
+      "unipolar depression"
+    ],
+    "condition_ids": [
+      "MONDO:0002009"
+    ],
+    "sequencing_type": [
+      "16s"
+    ],
+    "sample_size": [
+      100
+    ]
+  },
+  "27884202": {
+    "host_species": [
+      "homo sapiens"
+    ],
+    "body_site_labels": [
+      "sigmoid colon"
+    ],
+    "body_site_ids": [
+      "UBERON:0001159"
+    ],
+    "condition_labels": [
+      "sampling site"
+    ],
+    "condition_ids": [
+      "EFO:0000688"
+    ],
+    "sequencing_type": [
+      "16s"
+    ],
+    "sample_size": [
+      46
+    ]
+  },
+  "28457228": {
+    "host_species": [
+      "homo sapiens"
+    ],
+    "body_site_labels": [
+      "feces"
+    ],
+    "body_site_ids": [
+      "UBERON:0001988"
+    ],
+    "condition_labels": [
+      "irritable bowel syndrome"
+    ],
+    "condition_ids": [
+      "MONDO:0005052"
+    ],
+    "sequencing_type": [
+      "16s"
+    ],
+    "sample_size": [
+      29,
+      36,
+      39
+    ]
+  },
+  "28624933": {
+    "host_species": [
+      "homo sapiens"
+    ],
+    "body_site_labels": [
+      "feces"
+    ],
+    "body_site_ids": [
+      "UBERON:0001988"
+    ],
+    "condition_labels": [
+      "diet"
+    ],
+    "condition_ids": [
+      "EFO:0002755"
+    ],
+    "sequencing_type": [
+      "16s"
+    ],
+    "sample_size": [
+      10,
+      16,
+      20,
+      24,
+      26
+    ]
+  },
+  "28765474": {
+    "host_species": [
+      "homo sapiens"
+    ],
+    "body_site_labels": [
+      "stomach"
+    ],
+    "body_site_ids": [
+      "UBERON:0000945"
+    ],
+    "condition_labels": [
+      "gastric cancer"
+    ],
+    "condition_ids": [
+      "MONDO:0001056"
+    ],
+    "sequencing_type": [
+      "16s"
+    ],
+    "sample_size": [
+      54,
+      111,
+      114
+    ]
+  },
+  "28852182": {
+    "host_species": [
+      "homo sapiens"
+    ],
+    "body_site_labels": [
+      "feces"
+    ],
+    "body_site_ids": [
+      "UBERON:0001988"
+    ],
+    "condition_labels": [
+      "chronic constipation"
+    ],
+    "condition_ids": [
+      "HP:0012450"
+    ],
+    "sequencing_type": [
+      "16s",
+      "wms"
+    ],
+    "sample_size": [
+      147
+    ]
+  },
+  "29133803": {
+    "host_species": [
+      "homo sapiens"
+    ],
+    "body_site_labels": [
+      "external female genitalia"
+    ],
+    "body_site_ids": [
+      "UBERON:0005056"
+    ],
+    "condition_labels": [
+      "hiv infection",
+      "hsv2 virologic severity measurement"
+    ],
+    "condition_ids": [
+      "EFO:0009010",
+      "MONDO:0005109"
+    ],
+    "sequencing_type": [
+      "16s"
+    ],
+    "sample_size": [
+      48,
+      49
+    ]
+  },
+  "29172724": {
+    "host_species": [
+      "homo sapiens"
+    ],
+    "body_site_labels": [
+      "bulbar conjunctiva"
+    ],
+    "body_site_ids": [
+      "UBERON:0010306"
+    ],
+    "condition_labels": [
+      "type ii diabetes mellitus"
+    ],
+    "condition_ids": [
+      "MONDO:0005148"
+    ],
+    "sequencing_type": [
+      "16s"
+    ],
+    "sample_size": [
+      25
+    ]
+  },
+  "29462324": {
+    "host_species": [
+      "mus musculus"
+    ],
+    "body_site_labels": [
+      "feces"
+    ],
+    "body_site_ids": [
+      "UBERON:0001988"
+    ],
+    "condition_labels": [
+      "endometriosis"
+    ],
+    "condition_ids": [
+      "MONDO:0005133"
+    ],
+    "sequencing_type": [
+      "16s"
+    ],
+    "sample_size": [
+      8
+    ]
+  },
+  "29563617": {
+    "host_species": [
+      "homo sapiens"
+    ],
+    "body_site_labels": [
+      "uterine cervix"
+    ],
+    "body_site_ids": [
+      "UBERON:0000002"
+    ],
+    "condition_labels": [
+      "cervical glandular intraepithelial neoplasia"
+    ],
+    "condition_ids": [
+      "EFO:1000165"
+    ],
+    "sequencing_type": [
+      "16s"
+    ],
+    "sample_size": [
+      52
+    ]
+  },
+  "29624747": {
+    "host_species": [
+      "homo sapiens"
+    ],
+    "body_site_labels": [
+      "feces"
+    ],
+    "body_site_ids": [
+      "UBERON:0001988"
+    ],
+    "condition_labels": [
+      "age",
+      "food allergy"
+    ],
+    "condition_ids": [
+      "EFO:0000246",
+      "MONDO:0700226"
+    ],
+    "sequencing_type": [
+      "16s"
+    ],
+    "sample_size": [
+      43,
+      46,
+      47,
+      68
+    ]
+  },
+  "29665823": {
+    "host_species": [
+      "mus musculus"
+    ],
+    "body_site_labels": [
+      "feces"
+    ],
+    "body_site_ids": [
+      "UBERON:0001988"
+    ],
+    "condition_labels": [
+      "air pollution"
+    ],
+    "condition_ids": [
+      "ENVO:02500037"
+    ],
+    "sequencing_type": [
+      "16s"
+    ],
+    "sample_size": [
+      20
+    ]
+  },
+  "29791775": {
+    "host_species": [
+      "homo sapiens"
+    ],
+    "body_site_labels": [
+      "vagina"
+    ],
+    "body_site_ids": [
+      "UBERON:0000996"
+    ],
+    "condition_labels": [
+      "premature birth"
+    ],
+    "condition_ids": [
+      "EFO:0003917"
+    ],
+    "sequencing_type": [
+      "16s"
+    ],
+    "sample_size": [
+      382
+    ]
+  },
+  "29955075": {
+    "host_species": [
+      "homo sapiens"
+    ],
+    "body_site_labels": [
+      "mouth",
+      "placenta",
+      "uterine cervix"
+    ],
+    "body_site_ids": [
+      "UBERON:0000002",
+      "UBERON:0000165",
+      "UBERON:0001987"
+    ],
+    "condition_labels": [
+      "human papilloma virus infection"
+    ],
+    "condition_ids": [
+      "MONDO:0005161"
+    ],
+    "sequencing_type": [
+      "16s"
+    ],
+    "sample_size": [
+      39
+    ]
+  },
+  "30007242": {
+    "host_species": [
+      "homo sapiens"
+    ],
+    "body_site_labels": [
+      "feces"
+    ],
+    "body_site_ids": [
+      "UBERON:0001988"
+    ],
+    "condition_labels": [
+      "response to ketogenic diet"
+    ],
+    "condition_ids": [
+      "EFO:0009372"
+    ],
+    "sequencing_type": [
+      "16s"
+    ],
+    "sample_size": [
+      20,
+      40
+    ]
+  },
+  "30029052": {
+    "host_species": [
+      "homo sapiens"
+    ],
+    "body_site_labels": [
+      "feces"
+    ],
+    "body_site_ids": [
+      "UBERON:0001988"
+    ],
+    "condition_labels": [
+      "anxiety disorder"
+    ],
+    "condition_ids": [
+      "MONDO:0005618"
+    ],
+    "sequencing_type": [
+      "16s"
+    ],
+    "sample_size": [
+      29,
+      76
+    ]
+  },
+  "30267022": {
+    "host_species": [
+      "homo sapiens"
+    ],
+    "body_site_labels": [
+      "feces"
+    ],
+    "body_site_ids": [
+      "UBERON:0001988"
+    ],
+    "condition_labels": [
+      "obesity"
+    ],
+    "condition_ids": [
+      "MONDO:0011122"
+    ],
+    "sequencing_type": [
+      "16s"
+    ],
+    "sample_size": [
+      77
+    ]
+  },
+  "30301893": {
+    "host_species": [
+      "homo sapiens"
+    ],
+    "body_site_labels": [
+      "feces"
+    ],
+    "body_site_ids": [
+      "UBERON:0001988"
+    ],
+    "condition_labels": [
+      "breastfeeding duration"
+    ],
+    "condition_ids": [
+      "EFO:0006864"
+    ],
+    "sequencing_type": [
+      "16s"
+    ],
+    "sample_size": [
+      20,
+      48,
+      104,
+      134,
+      143,
+      218,
+      316
+    ]
+  },
+  "30674011": {
+    "host_species": [
+      "homo sapiens"
+    ],
+    "body_site_labels": [
+      "feces"
+    ],
+    "body_site_ids": [
+      "UBERON:0001988"
+    ],
+    "condition_labels": [
+      "graves ophthalmopathy"
+    ],
+    "condition_ids": [
+      "EFO:1001466"
+    ],
+    "sequencing_type": [
+      "16s"
+    ],
+    "sample_size": [
+      65
+    ]
+  },
+  "31067473": {
+    "host_species": [
+      "mus musculus"
+    ],
+    "body_site_labels": [
+      "colon",
+      "feces",
+      "ileum"
+    ],
+    "body_site_ids": [
+      "UBERON:0001155",
+      "UBERON:0001988",
+      "UBERON:0002116"
+    ],
+    "condition_labels": [
+      "phenotype"
+    ],
+    "condition_ids": [
+      "EFO:0000651"
+    ],
+    "sequencing_type": [
+      "16s"
+    ],
+    "sample_size": [
+      8,
+      19,
+      28,
+      30,
+      32
+    ]
+  },
+  "31100891": {
+    "host_species": [
+      "homo sapiens"
+    ],
+    "body_site_labels": [
+      "feces"
+    ],
+    "body_site_ids": [
+      "UBERON:0001988"
+    ],
+    "condition_labels": [
+      "rheumatoid arthritis"
+    ],
+    "condition_ids": [
+      "MONDO:0008383"
+    ],
+    "sequencing_type": [
+      "16s"
+    ],
+    "sample_size": [
+      54
+    ]
+  },
+  "31200089": {
+    "host_species": [
+      "homo sapiens"
+    ],
+    "body_site_labels": [
+      "feces"
+    ],
+    "body_site_ids": [
+      "UBERON:0001988"
+    ],
+    "condition_labels": [
+      "parkinson's disease"
+    ],
+    "condition_ids": [
+      "MONDO:0005180"
+    ],
+    "sequencing_type": [
+      "16s"
+    ],
+    "sample_size": [
+      20
+    ]
+  },
+  "31502207": {
+    "host_species": [
+      "homo sapiens"
+    ],
+    "body_site_labels": [
+      "nose",
+      "skin of cheek"
+    ],
+    "body_site_ids": [
+      "UBERON:0000004",
+      "UBERON:0008803"
+    ],
+    "condition_labels": [
+      "rosacea"
+    ],
+    "condition_ids": [
+      "MONDO:0006604"
+    ],
+    "sequencing_type": [
+      "16s"
+    ],
+    "sample_size": [
+      38
+    ]
+  },
+  "31583533": {
+    "host_species": [
+      "homo sapiens"
+    ],
+    "body_site_labels": [
+      "feces"
+    ],
+    "body_site_ids": [
+      "UBERON:0001988"
+    ],
+    "condition_labels": [
+      "antimicrobial agent"
+    ],
+    "condition_ids": [
+      "CHEBI:33281"
+    ],
+    "sequencing_type": [
+      "16s"
+    ],
+    "sample_size": [
+      84
+    ]
+  },
+  "31699813": {
+    "host_species": [
+      "homo sapiens"
+    ],
+    "body_site_labels": [
+      "feces"
+    ],
+    "body_site_ids": [
+      "UBERON:0001988"
+    ],
+    "condition_labels": [
+      "rheumatoid arthritis"
+    ],
+    "condition_ids": [
+      "MONDO:0008383"
+    ],
+    "sequencing_type": [
+      "wms"
+    ],
+    "sample_size": [
+      124
+    ]
+  },
+  "31719139": {
+    "host_species": [
+      "homo sapiens"
+    ],
+    "body_site_labels": [
+      "feces"
+    ],
+    "body_site_ids": [
+      "UBERON:0001988"
+    ],
+    "condition_labels": [
+      "colorectal cancer"
+    ],
+    "condition_ids": [
+      "MONDO:0005575"
+    ],
+    "sequencing_type": [
+      "wms"
+    ],
+    "sample_size": [
+      60
+    ]
+  },
+  "31794002": {
+    "host_species": [
+      "homo sapiens"
+    ],
+    "body_site_labels": [
+      "feces"
+    ],
+    "body_site_ids": [
+      "UBERON:0001988"
+    ],
+    "condition_labels": [
+      "nicotine dependence",
+      "smoking behavior"
+    ],
+    "condition_ids": [
+      "EFO:0004318",
+      "MONDO:0008575"
+    ],
+    "sequencing_type": [
+      "16s"
+    ],
+    "sample_size": [
+      213
+    ]
+  },
+  "31815177": {
+    "host_species": [
+      "homo sapiens"
+    ],
+    "body_site_labels": [
+      "feces"
+    ],
+    "body_site_ids": [
+      "UBERON:0001988"
+    ],
+    "condition_labels": [
+      "parkinson's disease",
+      "phenotypic sex"
+    ],
+    "condition_ids": [
+      "MONDO:0005180",
+      "PATO:0001894"
+    ],
+    "sequencing_type": [
+      "16s"
+    ],
+    "sample_size": [
+      25,
+      28,
+      31,
+      34,
+      35,
+      36,
+      39,
+      40,
+      41,
+      43,
+      49,
+      59
+    ]
+  },
+  "32024079": {
+    "host_species": [
+      "homo sapiens"
+    ],
+    "body_site_labels": [
+      "feces"
+    ],
+    "body_site_ids": [
+      "UBERON:0001988"
+    ],
+    "condition_labels": [
+      "renal transplant outcome measurement"
+    ],
+    "condition_ids": [
+      "EFO:0005199"
+    ],
+    "sequencing_type": [
+      "16s"
+    ],
+    "sample_size": [
+      244
+    ]
+  },
+  "32708743": {
+    "host_species": [
+      "homo sapiens"
+    ],
+    "body_site_labels": [
+      "feces"
+    ],
+    "body_site_ids": [
+      "UBERON:0001988"
+    ],
+    "condition_labels": [
+      "hiv infection"
+    ],
+    "condition_ids": [
+      "MONDO:0005109"
+    ],
+    "sequencing_type": [
+      "16s"
+    ],
+    "sample_size": [
+      33
+    ]
+  },
+  "32844256": {
+    "host_species": [
+      "homo sapiens"
+    ],
+    "body_site_labels": [
+      "breast"
+    ],
+    "body_site_ids": [
+      "UBERON:0000310"
+    ],
+    "condition_labels": [
+      "breast cancer"
+    ],
+    "condition_ids": [
+      "MONDO:0007254"
+    ],
+    "sequencing_type": [
+      "16s"
+    ],
+    "sample_size": [
+      46
+    ]
+  },
+  "33193081": {
+    "host_species": [
+      "homo sapiens"
+    ],
+    "body_site_labels": [
+      "placenta"
+    ],
+    "body_site_ids": [
+      "UBERON:0001987"
+    ],
+    "condition_labels": [
+      "gestational diabetes"
+    ],
+    "condition_ids": [
+      "MONDO:0005406"
+    ],
+    "sequencing_type": [
+      "16s"
+    ],
+    "sample_size": [
+      15
+    ]
+  },
+  "33220709": {
+    "host_species": [
+      "homo sapiens"
+    ],
+    "body_site_labels": [
+      "wall of vagina"
+    ],
+    "body_site_ids": [
+      "UBERON:0036523"
+    ],
+    "condition_labels": [
+      "vaginal inflammation"
+    ],
+    "condition_ids": [
+      "EFO:0005757"
+    ],
+    "sequencing_type": [
+      "16s"
+    ],
+    "sample_size": [
+      40
+    ]
+  },
+  "33273497": {
+    "host_species": [
+      "homo sapiens",
+      "mus musculus"
+    ],
+    "body_site_labels": [
+      "feces"
+    ],
+    "body_site_ids": [
+      "UBERON:0001988"
+    ],
+    "condition_labels": [
+      "aging",
+      "glioma",
+      "response to temozolomide"
+    ],
+    "condition_ids": [
+      "GO:0007568",
+      "GO:1990054",
+      "MONDO:0021042"
+    ],
+    "sequencing_type": [
+      "16s"
+    ],
+    "sample_size": [
+      6,
+      12,
+      14,
+      42,
+      60
+    ]
+  },
+  "33429936": {
+    "host_species": [
+      "homo sapiens"
+    ],
+    "body_site_labels": [
+      "feces"
+    ],
+    "body_site_ids": [
+      "UBERON:0001988"
+    ],
+    "condition_labels": [
+      "caffeine",
+      "irritable bowel syndrome"
+    ],
+    "condition_ids": [
+      "CHEBI:27732",
+      "MONDO:0005052"
+    ],
+    "sequencing_type": [
+      "16s"
+    ],
+    "sample_size": [
+      101
+    ]
+  },
+  "33517890": {
+    "host_species": [
+      "mus musculus"
+    ],
+    "body_site_labels": [
+      "feces"
+    ],
+    "body_site_ids": [
+      "UBERON:0001988"
+    ],
+    "condition_labels": [
+      "parkinson's disease"
+    ],
+    "condition_ids": [
+      "MONDO:0005180"
+    ],
+    "sequencing_type": [
+      "16s"
+    ],
+    "sample_size": [
+      15,
+      20
+    ]
+  },
+  "33536555": {
+    "host_species": [
+      "homo sapiens"
+    ],
+    "body_site_labels": [
+      "saliva"
+    ],
+    "body_site_ids": [
+      "UBERON:0001836"
+    ],
+    "condition_labels": [
+      "dental fluorosis"
+    ],
+    "condition_ids": [
+      "MONDO:0006722"
+    ],
+    "sequencing_type": [
+      "16s"
+    ],
+    "sample_size": [
+      28,
+      33
+    ]
+  },
+  "33552996": {
+    "host_species": [
+      "homo sapiens"
+    ],
+    "body_site_labels": [
+      "feces"
+    ],
+    "body_site_ids": [
+      "UBERON:0001988"
+    ],
+    "condition_labels": [
+      "chronic constipation"
+    ],
+    "condition_ids": [
+      "HP:0012450"
+    ],
+    "sequencing_type": [
+      "16s"
+    ],
+    "sample_size": [
+      59
+    ]
+  },
+  "33565055": {
+    "host_species": [
+      "homo sapiens"
+    ],
+    "body_site_labels": [
+      "cheek",
+      "forehead"
+    ],
+    "body_site_ids": [
+      "UBERON:0001567",
+      "UBERON:0008200"
+    ],
+    "condition_labels": [
+      "acne"
+    ],
+    "condition_ids": [
+      "MONDO:0011438"
+    ],
+    "sequencing_type": [
+      "16s"
+    ],
+    "sample_size": [
+      33
+    ]
+  },
+  "33619320": {
+    "host_species": [
+      "homo sapiens"
+    ],
+    "body_site_labels": [
+      "feces"
+    ],
+    "body_site_ids": [
+      "UBERON:0001988"
+    ],
+    "condition_labels": [
+      "survival time"
+    ],
+    "condition_ids": [
+      "EFO:0000714"
+    ],
+    "sequencing_type": [
+      "16s"
+    ],
+    "sample_size": [
+      55
+    ]
+  },
+  "33708251": {
+    "host_species": [
+      "mus musculus"
+    ],
+    "body_site_labels": [
+      "feces"
+    ],
+    "body_site_ids": [
+      "UBERON:0001988"
+    ],
+    "condition_labels": [
+      "colorectal cancer cell line"
+    ],
+    "condition_ids": [
+      "BTO:0001616"
+    ],
+    "sequencing_type": [
+      "16s"
+    ],
+    "sample_size": [
+      10
+    ]
+  },
+  "33732104": {
+    "host_species": [
+      "homo sapiens"
+    ],
+    "body_site_labels": [
+      "feces"
+    ],
+    "body_site_ids": [
+      "UBERON:0001988"
+    ],
+    "condition_labels": [
+      "alzheimer's disease"
+    ],
+    "condition_ids": [
+      "MONDO:0004975"
+    ],
+    "sequencing_type": [
+      "16s"
+    ],
+    "sample_size": [
+      77
+    ]
+  },
+  "33828220": {
+    "host_species": [
+      "homo sapiens"
+    ],
+    "body_site_labels": [
+      "feces"
+    ],
+    "body_site_ids": [
+      "UBERON:0001988"
+    ],
+    "condition_labels": [
+      "hiv infection",
+      "response to antiviral drug"
+    ],
+    "condition_ids": [
+      "EFO:0010123",
+      "MONDO:0005109"
+    ],
+    "sequencing_type": [
+      "16s"
+    ],
+    "sample_size": [
+      87,
+      169
+    ]
+  },
+  "33828910": {
+    "host_species": [
+      "homo sapiens"
+    ],
+    "body_site_labels": [
+      "feces"
+    ],
+    "body_site_ids": [
+      "UBERON:0001988"
+    ],
+    "condition_labels": [
+      "prediabetes syndrome",
+      "type ii diabetes mellitus"
+    ],
+    "condition_ids": [
+      "MONDO:0005148",
+      "MONDO:0006920"
+    ],
+    "sequencing_type": [
+      "16s"
+    ],
+    "sample_size": [
+      120
+    ]
+  },
+  "34168484": {
+    "host_species": [
+      "homo sapiens"
+    ],
+    "body_site_labels": [
+      "feces"
+    ],
+    "body_site_ids": [
+      "UBERON:0001988"
+    ],
+    "condition_labels": [
+      "covid-19"
+    ],
+    "condition_ids": [
+      "MONDO:0100096"
+    ],
+    "sequencing_type": [
+      "wms"
+    ],
+    "sample_size": [
+      31
+    ]
+  },
+  "34173452": {
+    "host_species": [
+      "homo sapiens"
+    ],
+    "body_site_labels": [
+      "feces"
+    ],
+    "body_site_ids": [
+      "UBERON:0001988"
+    ],
+    "condition_labels": [
+      "covid-19"
+    ],
+    "condition_ids": [
+      "MONDO:0100096"
+    ],
+    "sequencing_type": [
+      "16s"
+    ],
+    "sample_size": [
+      95,
+      102
+    ]
+  },
+  "34233092": {
+    "host_species": [
+      "homo sapiens"
+    ],
+    "body_site_labels": [
+      "buccal mucosa",
+      "margin of eyelid"
+    ],
+    "body_site_ids": [
+      "UBERON:0006956",
+      "UBERON:0034772"
+    ],
+    "condition_labels": [
+      "glaucoma"
+    ],
+    "condition_ids": [
+      "MONDO:0005041"
+    ],
+    "sequencing_type": [
+      "16s"
+    ],
+    "sample_size": [
+      96
+    ]
+  },
+  "34336726": {
+    "host_species": [
+      "homo sapiens"
+    ],
+    "body_site_labels": [
+      "feces"
+    ],
+    "body_site_ids": [
+      "UBERON:0001988"
+    ],
+    "condition_labels": [
+      "hepatocellular carcinoma"
+    ],
+    "condition_ids": [
+      "MONDO:0007256"
+    ],
+    "sequencing_type": [
+      "16s",
+      "wms"
+    ],
+    "sample_size": [
+      18,
+      36
+    ]
+  },
+  "34722781": {
+    "host_species": [
+      "homo sapiens"
+    ],
+    "body_site_labels": [
+      "subgingival dental plaque"
+    ],
+    "body_site_ids": [
+      "UBERON:0016484"
+    ],
+    "condition_labels": [
+      "chronic periodontitis"
+    ],
+    "condition_ids": [
+      "MONDO:0005593"
+    ],
+    "sequencing_type": [
+      "16s"
+    ],
+    "sample_size": [
+      17
+    ]
+  },
+  "34799562": {
+    "host_species": [
+      "homo sapiens"
+    ],
+    "body_site_labels": [
+      "feces"
+    ],
+    "body_site_ids": [
+      "UBERON:0001988"
+    ],
+    "condition_labels": [
+      "colorectal cancer"
+    ],
+    "condition_ids": [
+      "MONDO:0005575"
+    ],
+    "sequencing_type": [
+      "16s"
+    ],
+    "sample_size": [
+      292,
+      436
+    ]
+  },
+  "34809575": {
+    "host_species": [
+      "homo sapiens"
+    ],
+    "body_site_labels": [
+      "feces",
+      "saliva"
+    ],
+    "body_site_ids": [
+      "UBERON:0001836",
+      "UBERON:0001988"
+    ],
+    "condition_labels": [
+      "sample treatment protocol"
+    ],
+    "condition_ids": [
+      "EFO:0003809"
+    ],
+    "sequencing_type": [
+      "16s"
+    ],
+    "sample_size": [
+      125,
+      133,
+      139,
+      202
+    ]
+  },
+  "34923209": {
+    "host_species": [
+      "homo sapiens"
+    ],
+    "body_site_labels": [
+      "feces"
+    ],
+    "body_site_ids": [
+      "UBERON:0001988"
+    ],
+    "condition_labels": [
+      "clinical treatment",
+      "major depressive disorder",
+      "post-traumatic stress disorder"
+    ],
+    "condition_ids": [
+      "EFO:0007056",
+      "MONDO:0002009",
+      "MONDO:0005146"
+    ],
+    "sequencing_type": [
+      "16s"
+    ],
+    "sample_size": [
+      22,
+      27,
+      137
+    ]
+  },
+  "34931394": {
+    "host_species": [
+      "homo sapiens"
+    ],
+    "body_site_labels": [
+      "gingival groove",
+      "saliva"
+    ],
+    "body_site_ids": [
+      "UBERON:0001836",
+      "UBERON:0008805"
+    ],
+    "condition_labels": [
+      "alzheimer's disease"
+    ],
+    "condition_ids": [
+      "MONDO:0004975"
+    ],
+    "sequencing_type": [
+      "16s"
+    ],
+    "sample_size": [
+      26,
+      52
+    ]
+  },
+  "35003794": {
+    "host_species": [
+      "homo sapiens"
+    ],
+    "body_site_labels": [
+      "feces"
+    ],
+    "body_site_ids": [
+      "UBERON:0001988"
+    ],
+    "condition_labels": [
+      "lymph node metastatic carcinoma",
+      "thyroid carcinoma"
+    ],
+    "condition_ids": [
+      "MONDO:0005438",
+      "MONDO:0015075"
+    ],
+    "sequencing_type": [
+      "16s"
+    ],
+    "sample_size": [
+      90,
+      120
+    ]
+  },
+  "35188868": {
+    "host_species": [
+      "homo sapiens"
+    ],
+    "body_site_labels": [
+      "intestine"
+    ],
+    "body_site_ids": [
+      "UBERON:0000160"
+    ],
+    "condition_labels": [
+      "colorectal adenoma"
+    ],
+    "condition_ids": [
+      "MONDO:0005484"
+    ],
+    "sequencing_type": [
+      "16s"
+    ],
+    "sample_size": [
+      38,
+      64
+    ]
+  },
+  "35291914": {
+    "host_species": [
+      "homo sapiens"
+    ],
+    "body_site_labels": [
+      "feces"
+    ],
+    "body_site_ids": [
+      "UBERON:0001988"
+    ],
+    "condition_labels": [
+      "brain growth measurement",
+      "malignant glioma",
+      "meningioma"
+    ],
+    "condition_ids": [
+      "MONDO:0016642",
+      "MONDO:0100342",
+      "OBA:2045271"
+    ],
+    "sequencing_type": [
+      "16s"
+    ],
+    "sample_size": [
+      100
+    ]
+  },
+  "35298505": {
+    "host_species": [
+      "homo sapiens"
+    ],
+    "body_site_labels": [
+      "feces"
+    ],
+    "body_site_ids": [
+      "UBERON:0001988"
+    ],
+    "condition_labels": [
+      "delivery method",
+      "diet"
+    ],
+    "condition_ids": [
+      "EFO:0000395",
+      "EFO:0002755"
+    ],
+    "sequencing_type": [
+      "16s"
+    ],
+    "sample_size": [
+      28,
+      50
+    ]
+  },
+  "35701595": {
+    "host_species": [
+      "homo sapiens"
+    ],
+    "body_site_labels": [
+      "feces"
+    ],
+    "body_site_ids": [
+      "UBERON:0001988"
+    ],
+    "condition_labels": [
+      "colorectal cancer"
+    ],
+    "condition_ids": [
+      "MONDO:0005575"
+    ],
+    "sequencing_type": [
+      "16s"
+    ],
+    "sample_size": [
+      24,
+      37
+    ]
+  },
+  "35849580": {
+    "host_species": [
+      "homo sapiens"
+    ],
+    "body_site_labels": [
+      "dermis",
+      "skin epidermis"
+    ],
+    "body_site_ids": [
+      "UBERON:0001003",
+      "UBERON:0002067"
+    ],
+    "condition_labels": [
+      "lichen planopilaris"
+    ],
+    "condition_ids": [
+      "EFO:0009856"
+    ],
+    "sequencing_type": [
+      "16s"
+    ],
+    "sample_size": [
+      8,
+      26
+    ]
+  },
+  "36539569": {
+    "host_species": [
+      "homo sapiens",
+      "mus musculus"
+    ],
+    "body_site_labels": [
+      "feces"
+    ],
+    "body_site_ids": [
+      "UBERON:0001988"
+    ],
+    "condition_labels": [
+      "appendicitis"
+    ],
+    "condition_ids": [
+      "MONDO:0005649"
+    ],
+    "sequencing_type": [
+      "wms"
+    ],
+    "sample_size": [
+      314
+    ]
+  },
+  "36564826": {
+    "host_species": [
+      "homo sapiens"
+    ],
+    "body_site_labels": [
+      "feces"
+    ],
+    "body_site_ids": [
+      "UBERON:0001988"
+    ],
+    "condition_labels": [
+      "age",
+      "body mass index",
+      "colorectal neoplasm"
+    ],
+    "condition_ids": [
+      "EFO:0000246",
+      "EFO:0004340",
+      "MONDO:0005335"
+    ],
+    "sequencing_type": [
+      "wms"
+    ],
+    "sample_size": [
+      52,
+      58,
+      62,
+      172
+    ]
+  },
+  "36803868": {
+    "host_species": [
+      "homo sapiens"
+    ],
+    "body_site_labels": [
+      "sputum"
+    ],
+    "body_site_ids": [
+      "UBERON:0007311"
+    ],
+    "condition_labels": [
+      "azithromycin",
+      "response to antibiotic"
+    ],
+    "condition_ids": [
+      "CHEBI:2955",
+      "GO:0046677"
+    ],
+    "sequencing_type": [
+      "16s"
+    ],
+    "sample_size": [
+      240,
+      291,
+      304,
+      327,
+      348
+    ]
+  },
+  "37208728": {
+    "host_species": [
+      "homo sapiens"
+    ],
+    "body_site_labels": [
+      "feces"
+    ],
+    "body_site_ids": [
+      "UBERON:0001988"
+    ],
+    "condition_labels": [
+      "parkinson's disease"
+    ],
+    "condition_ids": [
+      "MONDO:0005180"
+    ],
+    "sequencing_type": [
+      "wms"
+    ],
+    "sample_size": [
+      59
+    ]
+  },
+  "37329328": {
+    "host_species": [
+      "homo sapiens"
+    ],
+    "body_site_labels": [
+      "feces"
+    ],
+    "body_site_ids": [
+      "UBERON:0001988"
+    ],
+    "condition_labels": [
+      "ischemic stroke"
+    ],
+    "condition_ids": [
+      "HP:0002140"
+    ],
+    "sequencing_type": [
+      "wms"
+    ],
+    "sample_size": [
+      89
+    ]
+  },
+  "37443082": {
+    "host_species": [
+      "mus musculus"
+    ],
+    "body_site_labels": [
+      "feces"
+    ],
+    "body_site_ids": [
+      "UBERON:0001988"
+    ],
+    "condition_labels": [
+      "polycystic ovary syndrome"
+    ],
+    "condition_ids": [
+      "MONDO:0008487"
+    ],
+    "sequencing_type": [
+      "16s"
+    ],
+    "sample_size": [
+      6
+    ]
+  },
+  "37750731": {
+    "host_species": [
+      "macaca mulatta"
+    ],
+    "body_site_labels": [
+      "axilla skin"
+    ],
+    "body_site_ids": [
+      "UBERON:0015474"
+    ],
+    "condition_labels": [
+      "sampling time",
+      "social interaction measurement"
+    ],
+    "condition_ids": [
+      "EFO:0000689",
+      "EFO:0009592"
+    ],
+    "sequencing_type": [
+      "16s"
+    ],
+    "sample_size": [
+      12,
+      20,
+      23,
+      51,
+      54,
+      55,
+      75
+    ]
+  },
+  "37832478": {
+    "host_species": [
+      "homo sapiens"
+    ],
+    "body_site_labels": [
+      "feces"
+    ],
+    "body_site_ids": [
+      "UBERON:0001988"
+    ],
+    "condition_labels": [
+      "tuberculosis"
+    ],
+    "condition_ids": [
+      "MONDO:0018076"
+    ],
+    "sequencing_type": [
+      "16s"
+    ],
+    "sample_size": [
+      53
+    ]
+  },
+  "37919319": {
+    "host_species": [
+      "homo sapiens"
+    ],
+    "body_site_labels": [
+      "mouth"
+    ],
+    "body_site_ids": [
+      "UBERON:0000165"
+    ],
+    "condition_labels": [
+      "smoking status measurement"
+    ],
+    "condition_ids": [
+      "EFO:0006527"
+    ],
+    "sequencing_type": [
+      "16s"
+    ],
+    "sample_size": [
+      1206,
+      1275
+    ]
+  },
+  "37924005": {
+    "host_species": [
+      "homo sapiens"
+    ],
+    "body_site_labels": [
+      "feces"
+    ],
+    "body_site_ids": [
+      "UBERON:0001988"
+    ],
+    "condition_labels": [
+      "coronary artery disease"
+    ],
+    "condition_ids": [
+      "MONDO:0005010"
+    ],
+    "sequencing_type": [
+      "16s"
+    ],
+    "sample_size": [
+      52
+    ]
+  },
+  "37978347": {
+    "host_species": [
+      "homo sapiens"
+    ],
+    "body_site_labels": [
+      "feces"
+    ],
+    "body_site_ids": [
+      "UBERON:0001988"
+    ],
+    "condition_labels": [
+      "colorectal carcinoma",
+      "leukopenia"
+    ],
+    "condition_ids": [
+      "HP:0001882",
+      "MONDO:0024331"
+    ],
+    "sequencing_type": [
+      "16s"
+    ],
+    "sample_size": [
+      55,
+      111
+    ]
+  },
+  "38113233": {
+    "host_species": [
+      "homo sapiens"
+    ],
+    "body_site_labels": [
+      "feces"
+    ],
+    "body_site_ids": [
+      "UBERON:0001988"
+    ],
+    "condition_labels": [
+      "gastroenteritis"
+    ],
+    "condition_ids": [
+      "MONDO:0002269"
+    ],
+    "sequencing_type": [
+      "wms"
+    ],
+    "sample_size": [
+      38
+    ]
+  },
+  "38369542": {
+    "host_species": [
+      "homo sapiens"
+    ],
+    "body_site_labels": [
+      "feces"
+    ],
+    "body_site_ids": [
+      "UBERON:0001988"
+    ],
+    "condition_labels": [
+      "colorectal cancer"
+    ],
+    "condition_ids": [
+      "MONDO:0005575"
+    ],
+    "sequencing_type": [
+      "wms"
+    ],
+    "sample_size": [
+      41
+    ]
+  },
+  "38381714": {
+    "host_species": [
+      "homo sapiens"
+    ],
+    "body_site_labels": [
+      "feces"
+    ],
+    "body_site_ids": [
+      "UBERON:0001988"
+    ],
+    "condition_labels": [
+      "health study participation"
+    ],
+    "condition_ids": [
+      "EFO:0010130"
+    ],
+    "sequencing_type": [
+      "pcr"
+    ],
+    "sample_size": [
+      32,
+      34
+    ]
+  },
+  "38383483": {
+    "host_species": [
+      "homo sapiens"
+    ],
+    "body_site_labels": [
+      "colon",
+      "feces",
+      "ileum"
+    ],
+    "body_site_ids": [
+      "UBERON:0001155",
+      "UBERON:0001988",
+      "UBERON:0002116"
+    ],
+    "condition_labels": [
+      "aging",
+      "hiv infection"
+    ],
+    "condition_ids": [
+      "GO:0007568",
+      "MONDO:0005109"
+    ],
+    "sequencing_type": [
+      "16s"
+    ],
+    "sample_size": [
+      48
+    ]
+  },
+  "38424099": {
+    "host_species": [
+      "homo sapiens"
+    ],
+    "body_site_labels": [
+      "feces"
+    ],
+    "body_site_ids": [
+      "UBERON:0001988"
+    ],
+    "condition_labels": [
+      "diet"
+    ],
+    "condition_ids": [
+      "EFO:0002755"
+    ],
+    "sequencing_type": [
+      "wms"
+    ],
+    "sample_size": [
+      66,
+      68,
+      70,
+      138
+    ]
+  },
+  "38481313": {
+    "host_species": [
+      "homo sapiens"
+    ],
+    "body_site_labels": [
+      "feces"
+    ],
+    "body_site_ids": [
+      "UBERON:0001988"
+    ],
+    "condition_labels": [
+      "diabetic foot",
+      "diabetic ketoacidosis",
+      "diabetic nephropathy",
+      "diabetic neuropathy",
+      "diabetic retinopathy",
+      "hypoglycemia"
+    ],
+    "condition_ids": [
+      "EFO:1001459",
+      "HP:0001943",
+      "MONDO:0005016",
+      "MONDO:0005266",
+      "MONDO:0006626",
+      "MONDO:0012819"
+    ],
+    "sequencing_type": [],
+    "sample_size": [
+      272290,
+      274660,
+      279149,
+      279658,
+      312650,
+      319046
+    ]
+  },
+  "38798019": {
+    "host_species": [
+      "homo sapiens"
+    ],
+    "body_site_labels": [
+      "feces"
+    ],
+    "body_site_ids": [
+      "UBERON:0001988"
+    ],
+    "condition_labels": [
+      "drug resistance"
+    ],
+    "condition_ids": [
+      "EFO:0020001"
+    ],
+    "sequencing_type": [
+      "16s"
+    ],
+    "sample_size": [
+      99,
+      101
+    ]
+  },
+  "38942886": {
+    "host_species": [
+      "homo sapiens"
+    ],
+    "body_site_labels": [
+      "feces"
+    ],
+    "body_site_ids": [
+      "UBERON:0001988"
+    ],
+    "condition_labels": [
+      "hormone replacement therapy"
+    ],
+    "condition_ids": [
+      "EFO:0003961"
+    ],
+    "sequencing_type": [
+      "wms"
+    ],
+    "sample_size": [
+      47
+    ]
+  },
+  "38980075": {
+    "host_species": [
+      "homo sapiens"
+    ],
+    "body_site_labels": [
+      "subgingival dental plaque"
+    ],
+    "body_site_ids": [
+      "UBERON:0016484"
+    ],
+    "condition_labels": [
+      "mucositis"
+    ],
+    "condition_ids": [
+      "EFO:1001898"
+    ],
+    "sequencing_type": [
+      "wms"
+    ],
+    "sample_size": [
+      30,
+      32
+    ]
+  },
+  "39599727": {
+    "host_species": [
+      "homo sapiens"
+    ],
+    "body_site_labels": [
+      "feces",
+      "skin of elbow",
+      "skin of forearm"
+    ],
+    "body_site_ids": [
+      "UBERON:0001517",
+      "UBERON:0001988",
+      "UBERON:0003403"
+    ],
+    "condition_labels": [
+      "food allergy"
+    ],
+    "condition_ids": [
+      "MONDO:0700226"
+    ],
+    "sequencing_type": [
+      "16s"
+    ],
+    "sample_size": [
+      23,
+      28,
+      29,
+      30,
+      31,
+      42,
+      44
+    ]
+  },
+  "39656003": {
+    "host_species": [
+      "homo sapiens"
+    ],
+    "body_site_labels": [
+      "feces"
+    ],
+    "body_site_ids": [
+      "UBERON:0001988"
+    ],
+    "condition_labels": [
+      "psoriasis"
+    ],
+    "condition_ids": [
+      "MONDO:0005083"
+    ],
+    "sequencing_type": [
+      "wms"
+    ],
+    "sample_size": [
+      100
+    ]
+  },
+  "39682194": {
+    "host_species": [
+      "homo sapiens"
+    ],
+    "body_site_labels": [
+      "colon",
+      "colorectal mucosa",
+      "rectum",
+      "sigmoid colon"
+    ],
+    "body_site_ids": [
+      "UBERON:0001052",
+      "UBERON:0001155",
+      "UBERON:0001159",
+      "UBERON:0013067"
+    ],
+    "condition_labels": [
+      "colon carcinoma",
+      "colorectal cancer",
+      "rectal carcinoma"
+    ],
+    "condition_ids": [
+      "MONDO:0002032",
+      "MONDO:0005575",
+      "MONDO:0044937"
+    ],
+    "sequencing_type": [
+      "16s"
+    ],
+    "sample_size": [
+      33,
+      34,
+      49,
+      128
+    ]
+  },
+  "39694919": {
+    "host_species": [
+      "homo sapiens",
+      "mus musculus"
+    ],
+    "body_site_labels": [
+      "feces"
+    ],
+    "body_site_ids": [
+      "UBERON:0001988"
+    ],
+    "condition_labels": [
+      "response to transplant",
+      "type ii diabetes mellitus"
+    ],
+    "condition_ids": [
+      "EFO:0007043",
+      "MONDO:0005148"
+    ],
+    "sequencing_type": [
+      "18s"
+    ],
+    "sample_size": [
+      16,
+      49
+    ]
+  },
+  "39818212": {
+    "host_species": [
+      "homo sapiens"
+    ],
+    "body_site_labels": [
+      "uterine cervix"
+    ],
+    "body_site_ids": [
+      "UBERON:0000002"
+    ],
+    "condition_labels": [
+      "chlamydia trachomatis",
+      "risk factor"
+    ],
+    "condition_ids": [
+      "EFO:0003919",
+      "NCBITAXON:813"
+    ],
+    "sequencing_type": [
+      "16s"
+    ],
+    "sample_size": [
+      374,
+      560
+    ]
+  },
+  "40259408": {
+    "host_species": [
+      "mus musculus"
+    ],
+    "body_site_labels": [
+      "feces"
+    ],
+    "body_site_ids": [
+      "UBERON:0001988"
+    ],
+    "condition_labels": [
+      "diet measurement",
+      "transplant outcome measurement"
+    ],
+    "condition_ids": [
+      "EFO:0005198",
+      "EFO:0008111"
+    ],
+    "sequencing_type": [
+      "16s"
+    ],
+    "sample_size": [
+      50,
+      52
+    ]
+  },
+  "40413726": {
+    "host_species": [
+      "homo sapiens",
+      "mus musculus"
+    ],
+    "body_site_labels": [
+      "feces"
+    ],
+    "body_site_ids": [
+      "UBERON:0001988"
+    ],
+    "condition_labels": [
+      "hepatic steatosis",
+      "high fat diet",
+      "non-alcoholic fatty liver disease",
+      "obesity"
+    ],
+    "condition_ids": [
+      "EFO:0002757",
+      "HP:0001397",
+      "MONDO:0011122",
+      "MONDO:0013209"
+    ],
+    "sequencing_type": [
+      "16s",
+      "wms"
+    ],
+    "sample_size": [
+      16,
+      159,
+      166,
+      194,
+      201,
+      240
+    ]
+  },
+  "40597612": {
+    "host_species": [
+      "homo sapiens"
+    ],
+    "body_site_labels": [
+      "sputum"
+    ],
+    "body_site_ids": [
+      "UBERON:0007311"
+    ],
+    "condition_labels": [
+      "tuberculosis"
+    ],
+    "condition_ids": [
+      "MONDO:0018076"
+    ],
+    "sequencing_type": [
+      "16s"
+    ],
+    "sample_size": [
+      28
+    ]
+  },
+  "40618036": {
+    "host_species": [
+      "mus musculus"
+    ],
+    "body_site_labels": [
+      "feces"
+    ],
+    "body_site_ids": [
+      "UBERON:0001988"
+    ],
+    "condition_labels": [
+      "diet",
+      "fasting",
+      "galactose",
+      "glucose"
+    ],
+    "condition_ids": [
+      "CHEBI:17234",
+      "CHEBI:28260",
+      "EFO:0002755",
+      "EFO:0002756"
+    ],
+    "sequencing_type": [
+      "16s"
+    ],
+    "sample_size": []
+  },
+  "40732984": {
+    "host_species": [
+      "homo sapiens"
+    ],
+    "body_site_labels": [
+      "feces"
+    ],
+    "body_site_ids": [
+      "UBERON:0001988"
+    ],
+    "condition_labels": [
+      "obesity"
+    ],
+    "condition_ids": [
+      "MONDO:0011122"
+    ],
+    "sequencing_type": [
+      "16s"
+    ],
+    "sample_size": [
+      58
+    ]
+  },
+  "40849619": {
+    "host_species": [
+      "homo sapiens"
+    ],
+    "body_site_labels": [
+      "alveolus of lung",
+      "feces"
+    ],
+    "body_site_ids": [
+      "UBERON:0001988",
+      "UBERON:0002299"
+    ],
+    "condition_labels": [
+      "lung carcinoma",
+      "response to immunochemotherapy",
+      "smoking status measurement"
+    ],
+    "condition_ids": [
+      "EFO:0006527",
+      "EFO:0007754",
+      "MONDO:0005138"
+    ],
+    "sequencing_type": [
+      "16s"
+    ],
+    "sample_size": [
+      10,
+      26,
+      34,
+      78,
+      184,
+      190,
+      238
+    ]
+  },
+  "41803199": {
+    "host_species": [
+      "mus musculus"
+    ],
+    "body_site_labels": [
+      "feces"
+    ],
+    "body_site_ids": [
+      "UBERON:0001988"
+    ],
+    "condition_labels": [
+      "body weight",
+      "fatty liver disease",
+      "high fat diet",
+      "insulin measurement",
+      "interleukin-6 measurement",
+      "ldl cholesterol change measurement",
+      "total cholesterol measurement",
+      "triglyceride measurement",
+      "tumor necrosis factor measurement"
+    ],
+    "condition_ids": [
+      "EFO:0002757",
+      "EFO:0004338",
+      "EFO:0004467",
+      "EFO:0004530",
+      "EFO:0004574",
+      "EFO:0004810",
+      "EFO:0007804",
+      "MONDO:0004790",
+      "OBA:VT0008752"
+    ],
+    "sequencing_type": [
+      "16s"
+    ],
+    "sample_size": [
+      24
+    ]
+  },
+  "41962594": {
+    "host_species": [
+      "rattus norvegicus"
+    ],
+    "body_site_labels": [
+      "feces"
+    ],
+    "body_site_ids": [
+      "UBERON:0001988"
+    ],
+    "condition_labels": [
+      "high fat diet"
+    ],
+    "condition_ids": [
+      "EFO:0002757"
+    ],
+    "sequencing_type": [
+      "16s"
+    ],
+    "sample_size": [
+      10
+    ]
+  }
+}
