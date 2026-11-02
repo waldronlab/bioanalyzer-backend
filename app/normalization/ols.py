@@ -16,6 +16,18 @@ OLS_TERMS_URL = "https://www.ebi.ac.uk/ols4/api/terms"
 OLS_ANCESTORS_URL_TMPL = "https://www.ebi.ac.uk/ols4/api/ontologies/{ontology}/terms/{iri}/hierarchicalAncestors"
 
 
+_MATCH_KEY_STRIP = re.compile(r"[^a-z0-9]+")
+
+
+def _match_key(text: str) -> str:
+    """Fold a term to the form used to decide whether a query *is* its name.
+
+    Lowercased with punctuation collapsed to single spaces, so "Parkinson's
+    disease" and "parkinson disease" compare equal.
+    """
+    return _MATCH_KEY_STRIP.sub(" ", (text or "").lower()).strip()
+
+
 def format_ontology_id(obo_id: str, default_prefix: str) -> str:
     """Convert OLS obo_id (e.g. EFO_0002508) to BugSigDB style (EFO:0002508)."""
     if not obo_id or not str(obo_id).strip():
@@ -41,7 +53,16 @@ def ols_search(
     *,
     mapping_confidence: float = 0.9,
 ) -> Optional[Tuple[str, str, float]]:
-    """Return (label, ontology_id, confidence) for the top OLS hit, or None.
+    """Return (label, ontology_id, confidence) for a *named* OLS hit, or None.
+
+    A candidate is accepted only when the query matches the term's own label
+    or one of its declared synonyms. OLS4 full-text search also ranks on
+    definitions, so the former "take docs[0]" behaviour confidently mapped
+    clean input to rare look-alikes - "chronic constipation" resolved to
+    Pitt-Hopkins-like syndrome 2 (MONDO:0013690), whose definition mentions
+    chronic constipation. Returning None instead lets the caller fall back,
+    which for conditions preserves the extracted text verbatim rather than
+    replacing it with a wrong-but-confident term.
 
     Successful resolutions are cached by (ontology, term) — see
     app.normalization.ontology_cache — since the same disease/body-site term
@@ -78,8 +99,8 @@ def ols_search(
         params = {
             "q": query.strip(),
             "ontology": ontology,
-            "fieldList": "label,obo_id",
-            "rows": 1,
+            "fieldList": "label,obo_id,synonym",
+            "rows": 10,
             "exact": "false",
         }
         response = requests.get(OLS_SEARCH_URL, params=params, timeout=5)
@@ -87,14 +108,23 @@ def ols_search(
         docs = response.json().get("response", {}).get("docs", [])
         if not docs:
             return None
-        label = (docs[0].get("label") or "").strip()
-        obo_id = format_ontology_id(docs[0].get("obo_id", ""), id_prefix)
-        if not label or not obo_id:
-            return None
-        if obo_id.split(":", 1)[0].upper() != id_prefix.upper():
-            return None
-        store_cached_term(ontology, query, label, obo_id, mapping_confidence)
-        return label, obo_id, mapping_confidence
+        wanted = _match_key(query)
+        for doc in docs:
+            label = (doc.get("label") or "").strip()
+            obo_id = format_ontology_id(doc.get("obo_id", ""), id_prefix)
+            if not label or not obo_id:
+                continue
+            if obo_id.split(":", 1)[0].upper() != id_prefix.upper():
+                continue
+            synonyms = doc.get("synonym") or []
+            if isinstance(synonyms, str):
+                synonyms = [synonyms]
+            names = [n for n in [label, *synonyms] if n]
+            if wanted not in {_match_key(n) for n in names}:
+                continue
+            store_cached_term(ontology, query, label, obo_id, mapping_confidence)
+            return label, obo_id, mapping_confidence
+        return None
     except (requests.exceptions.RequestException, ValueError):
         return None
 

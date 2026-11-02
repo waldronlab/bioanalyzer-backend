@@ -1,5 +1,6 @@
 """PubMed data retrieval service for metadata and full text extraction."""
 
+import os
 import requests
 import time
 import asyncio
@@ -18,6 +19,57 @@ from app.utils.credential_masking import mask_exception_message
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
+
+# Ceilings for the two NCBI fetches behind an analysis. Both previously timed
+# out hard (6s / 8s) and returned empty, which was survivable while only ~400
+# chars of body text ever reached the prompt; now that parsing.py budgets real
+# Methods/Results text, losing the full text loses the extraction, so the
+# full-text fetch gets the longer ceiling. Env-overridable for slow networks.
+METADATA_FETCH_TIMEOUT = float(os.getenv("NCBI_METADATA_TIMEOUT", "15"))
+FULLTEXT_FETCH_TIMEOUT = float(os.getenv("NCBI_FULLTEXT_TIMEOUT", "30"))
+
+
+def _local_tag(tag: str) -> str:
+    """Strip the XML namespace prefix from an ElementTree tag ('{ns}sec' -> 'sec')."""
+    return tag.split("}")[-1] if "}" in tag else tag
+
+
+def _all_text(node) -> str:
+    """All text under `node`, including inline markup, whitespace-collapsed.
+
+    `node.text` alone stops at the first child element, so a paragraph like
+    `<p>Patients with <italic>E. coli</italic> were enrolled.</p>` would yield
+    only "Patients with ".
+    """
+    return " ".join(" ".join(node.itertext()).split())
+
+
+def _body_section_blocks(body) -> List[str]:
+    """PMC `<body>` rendered as `Header: text` blocks, one per top-level `<sec>`.
+
+    The headers are what let bugsigdb_analyzer/parsing.py budget Methods and
+    Results separately instead of treating the whole body as one blob.
+    Paragraphs outside any `<sec>` fall back to a single "Full Text" block.
+    """
+    blocks: List[str] = []
+
+    for sec in (child for child in body if _local_tag(child.tag) == "sec"):
+        title = next((_all_text(c) for c in sec if _local_tag(c.tag) == "title"), "")
+        text = " ".join(
+            t
+            for t in (_all_text(p) for p in sec.iter() if _local_tag(p.tag) == "p")
+            if t
+        )
+        if text:
+            blocks.append(f"{title or 'Full Text'}: {text}")
+
+    loose = " ".join(
+        t for t in (_all_text(p) for p in body if _local_tag(p.tag) == "p") if t
+    )
+    if loose:
+        blocks.append(f"Full Text: {loose}")
+
+    return blocks
 
 
 class PubMedRetrieverError(Exception):
@@ -383,20 +435,16 @@ class PubMedRetriever:
                 full_text_parts.append(f"Title: {title}")
 
             # Get abstract
-            abstract = root.findtext(".//abstract")
-            if abstract:
-                full_text_parts.append(f"Abstract: {abstract}")
+            abstract = root.find(".//abstract")
+            if abstract is not None:
+                abstract_text = _all_text(abstract)
+                if abstract_text:
+                    full_text_parts.append(f"Abstract: {abstract_text}")
 
-            # Get body text
+            # Get body text, one labelled block per section
             body = root.find(".//body")
             if body is not None:
-                # Extract text from all paragraphs
-                paragraphs = []
-                for p in body.findall(".//p"):
-                    if p.text:
-                        paragraphs.append(p.text.strip())
-                if paragraphs:
-                    full_text_parts.append(f"Full Text: {' '.join(paragraphs)}")
+                full_text_parts.extend(_body_section_blocks(body))
 
             return "\n\n".join(full_text_parts)
 
@@ -478,7 +526,7 @@ class PubMedRetriever:
         async def fetch_metadata():
             try:
                 return await asyncio.wait_for(
-                    self.get_paper_metadata_async(pmid), timeout=6
+                    self.get_paper_metadata_async(pmid), timeout=METADATA_FETCH_TIMEOUT
                 )
             except asyncio.TimeoutError:
                 logger.error(f"Timeout fetching metadata for PMID {pmid}")
@@ -499,7 +547,7 @@ class PubMedRetriever:
         async def fetch_fulltext():
             try:
                 return await asyncio.wait_for(
-                    self.get_pmc_fulltext_async(pmid), timeout=8
+                    self.get_pmc_fulltext_async(pmid), timeout=FULLTEXT_FETCH_TIMEOUT
                 )
             except asyncio.TimeoutError:
                 logger.warning(f"Timeout fetching full text for PMID {pmid}")

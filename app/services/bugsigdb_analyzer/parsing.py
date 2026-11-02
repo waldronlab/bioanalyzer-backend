@@ -23,6 +23,33 @@ _SECTION_PATTERNS: List[Tuple[str, re.Pattern]] = [
 ]
 
 
+_LABELLED_BLOCK = re.compile(r"^([A-Za-z][^:\n]{0,80}):[ \t]*", re.M)
+
+
+def _parse_labelled_text(text: str) -> Dict[str, str]:
+    """Parse the `Header: text` blocks data_retrieval emits for PMC articles.
+
+    Falls back to {"FULL_TEXT": text} when no headers are present, so callers
+    still receive the whole body rather than nothing.
+    """
+    matches = list(_LABELLED_BLOCK.finditer(text))
+    if not matches:
+        return {"FULL_TEXT": text}
+
+    sections: Dict[str, List[str]] = {}
+    for i, match in enumerate(matches):
+        end = matches[i + 1].start() if i + 1 < len(matches) else len(text)
+        body = text[match.end() : end].strip()
+        if body:
+            sections.setdefault(_classify_section_title(match.group(1)), []).append(
+                body
+            )
+
+    return {key: "\n".join(vals) for key, vals in sections.items()} or {
+        "FULL_TEXT": text
+    }
+
+
 def _classify_section_title(title: str) -> str:
     if not title:
         return "OTHER"
@@ -42,7 +69,7 @@ def _parse_pmc_sections(xml_text: str) -> Dict[str, str]:
     if not xml_text or not xml_text.strip():
         return {}
     if not xml_text.lstrip().startswith("<"):
-        return {"FULL_TEXT": xml_text}
+        return _parse_labelled_text(xml_text)
     try:
         root = ElementTree.fromstring(xml_text)
     except ElementTree.ParseError:
@@ -109,6 +136,9 @@ _SECTION_BUDGETS: Dict[str, int] = {
     "INTRODUCTION": 800,
     "DISCUSSION": 600,
     "OTHER": 400,
+    # An unsectioned body is the entire paper; the old 400-char OTHER default
+    # meant Methods/Results never reached the model at all.
+    "FULL_TEXT": 6_000,
 }
 
 
@@ -145,7 +175,14 @@ def prepare_analysis_context(
     if abstract:
         sections["ABSTRACT"] = abstract
 
-    ordered_keys = ["ABSTRACT", "METHODS", "RESULTS", "INTRODUCTION", "DISCUSSION"]
+    ordered_keys = [
+        "ABSTRACT",
+        "METHODS",
+        "RESULTS",
+        "INTRODUCTION",
+        "DISCUSSION",
+        "FULL_TEXT",
+    ]
     remaining_keys = [k for k in sections if k not in ordered_keys]
     key_order = ordered_keys + remaining_keys
 
