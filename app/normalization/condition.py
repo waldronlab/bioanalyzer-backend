@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import Dict, Optional, Tuple
 
+from app.normalization import embedding_match
+from app.normalization.bugsigdb_vocabulary import BugSigDBVocabulary, get_vocabulary
+from app.normalization.local_lookup import _get_backend as local_lookup_backend
 from app.normalization.local_lookup import local_lookup
 from app.normalization.ols import ols_search
 from app.normalization.types import (
@@ -207,11 +211,10 @@ def _resolve_more_specific_override(
     return local_hit
 
 
-def normalize_condition(raw_text: str) -> NormalizedTerm:
-    """Return normalized condition label, EFO ID, status, and mapping confidence."""
-    if is_null_like(raw_text):
-        return NormalizedTerm.absent()
-
+def _ground_condition(raw_text: str) -> NormalizedTerm:
+    """Ground free text to an EFO/MONDO term: static dict -> local ontology
+    store -> live OLS. Labels here are the ontology's own; see
+    `normalize_condition()` for the BugSigDB-vocabulary steps applied after."""
     lowered = normalize_spelling(raw_text.lower())
     hit = _MATCHER.match_longest(lowered)
     if hit:
@@ -245,3 +248,191 @@ def normalize_condition(raw_text: str) -> NormalizedTerm:
 
     stripped = raw_text.strip()
     return NormalizedTerm(stripped, "", "PARTIALLY_PRESENT", 0.5)
+
+
+# Static-dict outcomes that deliberately carry no ontology ID ("healthy",
+# "antibiotic exposure"): never snap these to a vocabulary term.
+_NO_ID_LABELS = frozenset(
+    label.casefold() for label, curie in CONDITION_LOOKUP.values() if not curie
+)
+
+# Below this cosine, nearest vocabulary terms aren't even offered as
+# candidates - they're noise (e.g. "FGT inflammation" -> "gingivitis", 0.57).
+_CANDIDATE_FLOOR = 0.6
+
+
+def _bugsigdb_equivalent(curie: str, vocab: BugSigDBVocabulary) -> Optional[str]:
+    """A CURIE in BugSigDB's vocabulary that the local ontology store
+    declares equivalent to *curie* (an EFO<->MONDO cross-reference), or None.
+
+    Reused from metacurator's grounding audit, which treats a match in a
+    sibling ontology ("CROSS-ONTO") as the same concept rather than a
+    disagreement. Example: "posttraumatic stress disorder" is an exact EFO
+    synonym of EFO:0001358, while BugSigDB records MONDO:0005146 for the same
+    disease; MONDO:0005146 lists EFO:0001358 as a cross-reference."""
+    try:
+        backend = local_lookup_backend()
+        neighbours = list(backend.get_xrefs(curie.split(":")[0].lower(), curie))
+        neighbours += [c for _, c in backend.find_by_xref(curie)]
+    except Exception:
+        return None
+    for other in neighbours:
+        if (
+            other.split(":")[0].upper() in ("EFO", "MONDO")
+            and vocab.contains(other)
+            and _is_live(other)
+        ):
+            return other.upper()
+    return None
+
+
+def _is_live(curie: str) -> bool:
+    """False only when the local ontology store says *curie* is obsolete.
+
+    BugSigDB's own records still carry a few retired IDs - "SARS-CoV-2-related
+    disease" is MONDO:0100318, obsolete in MONDO with no replacement - so a
+    vocabulary term is never adopted on the vocabulary's word alone. IDs from
+    ontologies the store doesn't hold (OBA, GO, ...) can't be checked and are
+    allowed, as before."""
+    try:
+        prefix = curie.split(":")[0].lower()
+        return local_lookup_backend().is_obsolete(curie, prefix) is not True
+    except Exception:
+        return True
+
+
+def _retired_term_replacement(
+    raw_text: str, vocab: BugSigDBVocabulary
+) -> Optional[str]:
+    """When the text exactly names an *obsolete* EFO/MONDO term, the live
+    BugSigDB-vocabulary term that replaced it, or None.
+
+    metacurator's grounding rejects obsolete terms and surfaces `replaced_by`
+    rather than keeping a dead ID. EFO retired many disease terms in favour
+    of MONDO ones without filling `replaced_by` - "posttraumatic stress
+    disorder" is an exact synonym only of obsolete EFO:0001358, and "HPV
+    infection" only of obsolete EFO:0001668 - so the replacement is found
+    through the ontology's own cross-references too. Exact label/synonym
+    matches only, and the target must be live and one BugSigDB has used."""
+    cleaned = _extract_clean_disease_name(normalize_spelling(raw_text)) or raw_text
+    try:
+        backend = local_lookup_backend()
+        for ontology in ("efo", "mondo"):
+            for retired, replaced_by in backend.lookup_obsolete(cleaned, ontology):
+                targets = [replaced_by] if replaced_by else []
+                targets += backend.get_xrefs(ontology, retired)
+                targets += [c for _, c in backend.find_by_xref(retired)]
+                for target in targets:
+                    prefix = target.split(":")[0].lower()
+                    if prefix not in ("efo", "mondo") or not vocab.contains(target):
+                        continue
+                    if backend.is_obsolete(target, prefix) is not True:
+                        return target.upper()
+    except Exception:
+        return None
+    return None
+
+
+def _relabel(term: NormalizedTerm, vocab: BugSigDBVocabulary) -> NormalizedTerm:
+    """Swap the ontology's label for BugSigDB's label of the same ID, on the
+    term and its candidates. The ID itself never changes."""
+    label = vocab.label_for(term.ontology_id) or term.label
+    candidates = tuple(
+        (vocab.label_for(cid) or clabel, cid) for clabel, cid in term.candidates
+    )
+    if label == term.label and candidates == term.candidates:
+        return term
+    return replace(term, label=label, candidates=candidates)
+
+
+def normalize_condition(raw_text: str) -> NormalizedTerm:
+    """Return normalized condition label, ontology ID, status, and mapping
+    confidence, expressed in BugSigDB's own Condition vocabulary wherever
+    the paper's condition is one BugSigDB has curated before.
+
+    Steps, in order (each measured on the 2026-11-12 100-paper benchmark;
+    see CONDITION_FIELD_FINDINGS.md):
+
+    1. Ground to EFO/MONDO as before (`_ground_condition`).
+    2. Exact BugSigDB label: if the whole text *is* a BugSigDB label, that
+       curated label-to-ID pairing beats a keyword or search hit.
+    3. Cross-ontology equivalence: an EFO ID BugSigDB doesn't use is swapped
+       for the equivalent MONDO ID it does use, or vice versa (metacurator).
+    4. Embedding match: still nothing in BugSigDB's vocabulary - take the
+       nearest BugSigDB term by SapBERT cosine if it clears the threshold
+       (MetaHarmonizer stage 2); otherwise attach the nearest terms as
+       candidates for a curator (and for LLM disambiguation, see
+       app/services/bugsigdb_analyzer/condition_disambiguation.py).
+    5. Relabel: show BugSigDB's label for the final ID.
+
+    Steps 2-4 never produce mapping_confidence 1.0, so anything they decide
+    lands in "review" tier, never "auto".
+    """
+    if is_null_like(raw_text):
+        return NormalizedTerm.absent()
+
+    vocab = get_vocabulary()
+    term = _ground_condition(raw_text)
+    if len(vocab) == 0:
+        return term
+
+    exact = vocab.match_label(normalize_spelling(raw_text).strip())
+    if exact is None:
+        exact = vocab.match_label(
+            _extract_clean_disease_name(normalize_spelling(raw_text))
+        )
+    if (
+        exact is not None
+        and exact[1].upper() != term.ontology_id.upper()
+        and _is_live(exact[1])
+    ):
+        displaced = ((term.label, term.ontology_id),) if term.ontology_id else ()
+        term = NormalizedTerm(exact[0], exact[1], "PRESENT", 0.95, candidates=displaced)
+
+    if not term.ontology_id:
+        replacement = _retired_term_replacement(raw_text, vocab)
+        if replacement is not None:
+            term = NormalizedTerm(
+                vocab.label_for(replacement) or "", replacement, "PRESENT", 0.85
+            )
+
+    if term.ontology_id and not vocab.contains(term.ontology_id):
+        equivalent = _bugsigdb_equivalent(term.ontology_id, vocab)
+        if equivalent:
+            term = replace(
+                term,
+                ontology_id=equivalent,
+                mapping_confidence=min(term.mapping_confidence, 0.9),
+            )
+
+    needs_vocab_term = not term.ontology_id or not vocab.contains(term.ontology_id)
+    if needs_vocab_term and term.label.casefold() not in _NO_ID_LABELS:
+        neighbours = [
+            n
+            for n in embedding_match.nearest(term.label, k=5, vocab=vocab)
+            if _is_live(n[1])
+        ]
+        if neighbours and neighbours[0][2] >= embedding_match.threshold():
+            best_label, best_curie, score = neighbours[0]
+            others = [(lbl, cid) for lbl, cid, _ in neighbours[1:]]
+            if term.ontology_id:
+                others.insert(0, (term.label, term.ontology_id))
+            term = NormalizedTerm(
+                best_label,
+                best_curie,
+                "PRESENT",
+                min(round(score, 3), 0.85),
+                candidates=tuple(others[:4]),
+            )
+        elif neighbours and neighbours[0][2] >= _CANDIDATE_FLOOR:
+            extra = tuple(
+                (lbl, cid)
+                for lbl, cid, _ in neighbours
+                if cid.upper() != term.ontology_id.upper()
+            )
+            term = replace(term, candidates=tuple(term.candidates) + extra)
+
+    term = _relabel(term, vocab)
+    if term.label.strip() != raw_text.strip() and not term.raw:
+        term = replace(term, raw=raw_text.strip())
+    return term

@@ -51,7 +51,7 @@ STATUS_COLUMNS: Tuple[str, ...] = (
 ESSENTIAL_FIELDS: Dict[str, str] = {
     "host_species": "What host species is being studied in this research?",
     "body_site": "What body site or anatomical location was sampled for microbiome analysis?",
-    "condition": "What disease, treatment, or condition is being studied?",
+    "condition": "What condition (a disease, or another factor such as diet, exposure, or treatment) distinguishes the groups being compared?",
     "sequencing_type": "What sequencing method or molecular technique was used?",
     "sample_size": "How many samples or participants were included in the study?",
 }
@@ -84,7 +84,7 @@ Extract the following fields and return as a single JSON object:
 {{
   "host_species_raw":                "<species as written in the paper, e.g. 'Homo sapiens' or 'mice and rats'>",
   "body_site_raw":                   "<anatomical sample site(s) as written, e.g. 'faeces' or 'gut and oral cavity'>",
-  "condition_raw":                   "<disease or condition name only, stripped of clinical preamble>",
+  "condition_raw":                   "<the condition the compared groups differ by: a disease name, or another factor such as a diet, exposure, treatment or measurement>",
   "sequencing_type_raw":             "<sequencing or molecular method name only>",
   "sample_size_raw":                 <integer total participants/samples, or null if not stated>,
   "has_differential_abundance":      <true if specific microbial taxa are reported as statistically more/less abundant between groups>,
@@ -96,7 +96,16 @@ Rules:
   If no species is named anywhere in the text, return null — do NOT default to "Homo sapiens" just because the study concerns a human disease or clinical condition.
 - body_site_raw      : Give the anatomical sample site(s) as written. Prefer METHODS or ABSTRACT if sections are present, otherwise extract from any available text. If multiple sites, join with " and ".
   If no sample site is stated, return null — do NOT guess a typical site (e.g. "gut") just because the paper is about microbiome research.
-- condition_raw      : Give the MOST SPECIFIC disease/condition name stated in the paper — never a broader parent category.
+- condition_raw      : BugSigDB records the condition that DISTINGUISHES THE GROUPS BEING COMPARED (cases vs controls,
+  exposed vs unexposed, before vs after) — an experimental factor from the EFO ontology. Decide what the comparison is first.
+  (a) If a disease/disorder group is compared with controls or with another group, the condition is that disease.
+  (b) If the groups do NOT differ by a disease — e.g. everyone has the same disease, or the participants are healthy —
+      give the factor that does distinguish them, as a short generic phrase in EFO style, NOT the cohort's disease.
+      Examples: "diet", "high fat diet", "delivery method", "breastfeeding duration", "antimicrobial agent",
+      "response to antibiotic", "response to immunochemotherapy", "smoking status measurement", "air pollution",
+      "age", "survival time", "sampling site", "time".
+  Rules for (a):
+  Give the MOST SPECIFIC disease/condition name stated in the paper — never a broader parent category.
   Example: the paper studies "colorectal cancer" → return "colorectal cancer", NOT just "cancer".
   Example: the paper studies "type 2 diabetes" → return "type 2 diabetes", NOT just "diabetes".
   Example: the paper studies "Crohn's disease" → return "Crohn's disease", NOT just "inflammatory bowel disease" or "IBD".
@@ -106,7 +115,8 @@ Rules:
   disease/condition name (e.g. "Parkinson's disease") — never "healthy". "Healthy" only describes the
   comparator group, not what the study is about; returning it instead of the disease name is a critical
   extraction error even though the word "healthy" literally appears in the text.
-  If the study is on healthy subjects only, with no disease/condition group at all, return null — do NOT invent a condition.
+  If the study is on healthy subjects only, use rule (b): give the factor the groups differ by.
+  Return null only if the paper compares no groups at all — do NOT invent a condition.
 - sequencing_type_raw: Give the sequencing or molecular method name only. Prefer METHODS if sections are present, otherwise extract from any available text. Give the method name exactly as written
   (e.g. "16S rRNA gene sequencing of the V4 region", "shotgun metagenomic sequencing", "ITS2 amplicon sequencing", "qPCR").
   BugSigDB records one of: 16S (16S rRNA amplicon), 18S (18S rRNA amplicon), WMS (whole-metagenome shotgun),

@@ -64,6 +64,7 @@ from app.normalization.grounding.backend import (
     GroundingDecision,
 )
 from app.normalization.grounding.ols_backend import OLSBackend
+from app.normalization.bugsigdb_vocabulary import get_vocabulary
 from app.normalization.grounding.roots import ROOTS, prefix_of
 from app.normalization.types import NormalizedTerm
 
@@ -228,6 +229,13 @@ def ground(
             candidates=candidates,
         )
     label_similarity = _label_similarity(term.label, check.label)
+    # BugSigDB's own label for this exact ID (e.g. "Major depressive disorder"
+    # vs. BugSigDB's minority "Unipolar depression", or "Obesity" vs. MONDO's
+    # "obesity disorder") was looked up *by* the ID, so it can't be the
+    # transposed-identifier case this check exists to catch.
+    vocab_label = get_vocabulary().label_for(term.ontology_id)
+    if vocab_label and vocab_label.casefold() == term.label.strip().casefold():
+        label_similarity = 1.0
     if label_similarity < _LABEL_MISMATCH_THRESHOLD:
         return GroundingDecision(
             tier=TIER_REVIEW,

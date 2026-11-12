@@ -9,6 +9,20 @@ services:
     environment:
       UVICORN_RELOAD: "false"
       LOG_LEVEL: "info"
+      # Condition embedding model (SapBERT, ~440MB) downloads once into the
+      # bind-mounted ./cache instead of on every container recreate.
+      HF_HOME: "/app/cache/huggingface"
+      # Benchmarking only: point at a held-out vocabulary built with
+      # scripts/build_bugsigdb_condition_vocabulary.py --exclude-pmids.
+      # Empty = the shipped app/normalization/data vocabulary.
+      BUGSIGDB_CONDITION_VOCAB_PATH: "${BUGSIGDB_CONDITION_VOCAB_PATH:-}"
+      # Set to 0 to skip the LLM's pick among Condition candidates (one
+      # extra short LLM call for papers whose condition isn't yet a
+      # BugSigDB term - see condition_disambiguation.py).
+      CONDITION_LLM_DISAMBIGUATION: "${CONDITION_LLM_DISAMBIGUATION:-1}"
+      # Set to 0 to skip SapBERT nearest-term matching for Condition
+      # (app/normalization/embedding_match.py).
+      CONDITION_EMBEDDING_MATCH: "${CONDITION_EMBEDDING_MATCH:-1}"
     ports:
       - "8000:8000"
     volumes:

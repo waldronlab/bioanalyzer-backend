@@ -358,14 +358,16 @@ def _postprocess_field_results(
     condition = dict(out.get("condition") or {})
     disease = _find_disease_phrase(text)
     if disease:
-        current_value = str(condition.get("value") or "")
-        # Fill a gap (ABSENT) outright; only overwrite an existing PRESENT
-        # value when the newly found phrase is more specific (longer) than
-        # what's already there - otherwise an unrelated "patients with X"
-        # mention elsewhere in a long paper (e.g. a comorbidity aside) could
-        # clobber a perfectly good LLM extraction with something worse.
-        should_apply = condition.get("status") == "ABSENT" or len(disease) > len(
-            current_value
+        current_value = str(condition.get("value") or "").strip()
+        # Fill a gap (ABSENT) outright; only overwrite an existing value when
+        # the newly found phrase is a more specific version of it ("cancer" ->
+        # "colorectal cancer"). Being merely longer isn't enough: BugSigDB's
+        # Condition is the factor the compared groups differ by, which is
+        # often not a disease ("Diet", "Delivery method"), and an unrelated
+        # "patients with X" phrase anywhere in the paper used to overwrite it.
+        should_apply = condition.get("status") == "ABSENT" or (
+            len(disease) > len(current_value)
+            and current_value.casefold() in disease.casefold()
         )
         if should_apply:
             cond_term = normalize_condition(disease)

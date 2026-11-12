@@ -13,6 +13,7 @@ import app.services.bugsigdb_analyzer as _pkg
 from app.utils.credential_masking import mask_exception_message
 from app.utils.config import ANALYSIS_TIMEOUT, GEMINI_API_KEY
 
+from .condition_disambiguation import disambiguate_condition
 from .constants import _current_timestamp
 from .field_extraction import (
     _avg_confidence,
@@ -158,6 +159,14 @@ async def analyze_paper_with_rag(
             _field_results_from_unified_payload, payload
         )
         field_results = _postprocess_field_results(field_results, analysis_text)
+        if "condition" in field_results:
+            field_results["condition"] = await disambiguate_condition(
+                field_results["condition"],
+                title=title,
+                abstract=abstract,
+                unified_qa=_pkg.get_unified_qa(),
+                pmid=pmid,
+            )
         has_diff_abund, diff_abund_conf = _resolve_diff_abundance(
             payload, analysis_text
         )

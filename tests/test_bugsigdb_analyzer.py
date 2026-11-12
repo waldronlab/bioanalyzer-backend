@@ -448,7 +448,8 @@ class TestPostprocessFieldResults:
         result = _postprocess_field_results(
             field_results, "patients with rheumatoid arthritis were enrolled"
         )
-        assert result["condition"]["value"] == "rheumatoid arthritis"
+        # BugSigDB's label for MONDO:0008383 (bugsigdb_vocabulary.py)
+        assert result["condition"]["value"] == "Rheumatoid arthritis"
         assert result["condition"]["status"] != "ABSENT"
 
     def test_does_not_clobber_a_present_condition_with_a_shorter_unrelated_phrase(
@@ -485,7 +486,23 @@ class TestPostprocessFieldResults:
         result = _postprocess_field_results(
             field_results, "patients with colorectal cancer were recruited"
         )
-        assert result["condition"]["value"] == "colorectal cancer"
+        assert result["condition"]["value"] == "Colorectal cancer"
+
+    def test_does_not_replace_a_non_disease_condition_with_an_unrelated_disease(
+        self,
+    ):
+        """BugSigDB's Condition is the factor the compared groups differ by,
+        often not a disease. A "patients with X" phrase elsewhere in the
+        paper is not a more specific version of "diet" and must not
+        replace it, even though it is longer."""
+        field_results = {
+            "condition": {"value": "diet", "status": "PRESENT", "confidence": 0.8}
+        }
+        result = _postprocess_field_results(
+            field_results,
+            "Patients with ulcerative colitis were randomised to two diets.",
+        )
+        assert result["condition"]["value"] == "diet"
 
     def test_condition_upgrade_recomputes_mapping_tier_not_stale_auto(self):
         """CRITICAL-adjacent regression: this branch swaps in a NEW
