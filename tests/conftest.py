@@ -24,6 +24,11 @@ import requests
 PROJECT_ROOT = Path(__file__).parent.parent.resolve()
 PROJECT_ROOT_STR = str(PROJECT_ROOT)
 
+# Condition normalization's embedding step (app/normalization/embedding_match.py)
+# downloads a ~440MB SapBERT model on first use. Keep the suite offline and
+# deterministic: off unless a test turns it on (its own tests use a fake model).
+os.environ.setdefault("CONDITION_EMBEDDING_MATCH", "0")
+
 IS_DOCKER = Path("/app").is_dir()
 
 DOCKER_PATHS = ["/app"]

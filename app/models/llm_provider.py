@@ -146,35 +146,129 @@ class LLMProviderManager:
 
         # Configure LiteLLM settings
         litellm.set_verbose = os.getenv("LITELLM_VERBOSE", "false").lower() == "true"
+        self._supported_params_cache: Optional[List[str]] = None
+
+    # ------------------------------------------------------------------
+    # Per-provider capability checks
+    # ------------------------------------------------------------------
+
+    def _supported_params(self) -> Optional[List[str]]:
+        """OpenAI-style request params LiteLLM will forward for this
+        provider/model, or None when LiteLLM can't tell us (unknown model,
+        old LiteLLM). Cached per manager; the answer never changes."""
+        if self._supported_params_cache is not None:
+            return self._supported_params_cache
+        try:
+            from litellm.utils import get_supported_openai_params
+
+            params = get_supported_openai_params(
+                model=self.model, custom_llm_provider=self.provider.value
+            )
+        except Exception as e:
+            logger.debug(
+                "Could not query LiteLLM for supported params of %s: %s",
+                self.model,
+                mask_exception_message(e),
+            )
+            params = None
+        self._supported_params_cache = list(params) if params else None
+        return self._supported_params_cache
+
+    def supports_seed(self) -> bool:
+        """True when the provider honours a ``seed`` (OpenAI, Ollama,
+        llamafile). Gemini and Anthropic do not; sending it would be
+        rejected unless dropped."""
+        params = self._supported_params()
+        return bool(params) and "seed" in params
+
+    def supports_json_mode(self) -> bool:
+        """True when ``response_format={"type": "json_object"}`` is a native
+        request parameter for this provider (Gemini, OpenAI, Ollama,
+        llamafile).
+
+        Anthropic is deliberately excluded: LiteLLM *accepts* response_format
+        for Claude but emulates it with a forced tool call (or, on newer
+        models, ``output_format``), which changes the response shape and has
+        bitten the JSON-parsing path before. The extraction prompt already
+        demands JSON, so Claude keeps the prompt-only contract.
+        """
+        if self.provider == LLMProvider.ANTHROPIC:
+            return False
+        params = self._supported_params()
+        return bool(params) and "response_format" in params
+
+    def _build_sampling_kwargs(
+        self,
+        *,
+        temperature: Optional[float],
+        seed: Optional[int],
+        json_mode: bool,
+    ) -> Dict[str, Any]:
+        """Resolve temperature/seed/JSON-mode into LiteLLM kwargs, sending
+        each only where the provider accepts it."""
+        # Imported lazily (same reason as resolve_provider_and_model): picks
+        # up values patched on the config module and avoids an import cycle.
+        from app.utils.config import LLM_SEED, LLM_TEMPERATURE
+
+        if temperature is None:
+            temperature = LLM_TEMPERATURE
+        if seed is None:
+            seed = LLM_SEED
+
+        kwargs: Dict[str, Any] = {"temperature": float(temperature)}
+        if seed is not None and self.supports_seed():
+            kwargs["seed"] = int(seed)
+        if json_mode and self.supports_json_mode():
+            kwargs["response_format"] = {"type": "json_object"}
+        return kwargs
 
     async def chat(
         self,
         messages: List[Dict[str, str]],
-        temperature: float = 0.7,
+        temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
         timeout: float = 60.0,
+        *,
+        json_mode: bool = False,
+        seed: Optional[int] = None,
     ) -> Dict[str, Any]:
         """
         Send a chat completion request using LiteLLM.
 
         Args:
             messages: List of message dicts with 'role' and 'content' keys
-            temperature: Sampling temperature (0.0 to 2.0)
+            temperature: Sampling temperature (0.0 to 2.0). None uses the
+                configured ``LLM_TEMPERATURE`` (default 0.0 - extraction is
+                a classification task and must be reproducible). Callers
+                that want creativity (summarization) pass their own value.
             max_tokens: Maximum tokens to generate
             timeout: Request timeout in seconds
+            json_mode: Ask the provider for a JSON object response
+                (``response_format``). Only sent to providers that support
+                it natively; see supports_json_mode().
+            seed: Sampling seed. None uses ``LLM_SEED`` (default 0). Only
+                sent to providers that accept one; see supports_seed().
 
         Returns:
             Response dict with 'text' and 'confidence' keys
         """
         import asyncio
 
+        sampling = self._build_sampling_kwargs(
+            temperature=temperature, seed=seed, json_mode=json_mode
+        )
+
         try:
             response = await asyncio.wait_for(
                 litellm.acompletion(
                     model=self.model,
                     messages=messages,
-                    temperature=temperature,
                     max_tokens=max_tokens,
+                    # Belt and braces: if a provider's supported-param list
+                    # is stale, let LiteLLM drop what it can't forward
+                    # instead of failing the whole extraction.
+                    drop_params=True,
+                    **sampling,
                 ),
                 timeout=timeout,
             )

@@ -13,13 +13,34 @@ from xml.etree.ElementTree import Element as ETElement
 # PMC XML section parser
 # ---------------------------------------------------------------------------
 
+# Checked in order; the first pattern that matches a section title wins.
+#
+# SUPPLEMENTARY is tested before METHODS on purpose: "Supplementary
+# Material" contains "material" and used to be filed under METHODS, where it
+# ate Methods budget with figure/media stubs. The pattern is anchored to
+# "supplementary"/"supplemental" so a real Methods subsection such as
+# "Probiotic supplementation" is not swept up.
+#
+# METHODS covers the headings microbiome papers actually use for the study
+# population and design ("Participants", "Subjects", "Study population",
+# "Study design", "Cohort", "Enrolment/Recruitment", "Sample collection",
+# "Ethics statement"). Before this, those sections fell into OTHER and its
+# 400-char budget, so the model usually never saw who was studied.
 _SECTION_PATTERNS: List[Tuple[str, re.Pattern]] = [
     ("ABSTRACT", re.compile(r"abstract", re.I)),
     ("INTRODUCTION", re.compile(r"intro(?:duction)?|background", re.I)),
-    ("METHODS", re.compile(r"method|material|patient|protocol|statistical", re.I)),
+    ("SUPPLEMENTARY", re.compile(r"supplementa(?:ry|l)\b|appendix", re.I)),
+    (
+        "METHODS",
+        re.compile(
+            r"method|material|patient|protocol|statistical|participant|subject"
+            r"|population|cohort|study\s+design|enrol|recruit|sample\s+collection"
+            r"|ethic",
+            re.I,
+        ),
+    ),
     ("RESULTS", re.compile(r"result|finding", re.I)),
     ("DISCUSSION", re.compile(r"discussion|conclusion|summary", re.I)),
-    ("SUPPLEMENTARY", re.compile(r"supplement|appendix", re.I)),
 ]
 
 
@@ -127,18 +148,22 @@ def _parse_pmc_sections(xml_text: str) -> Dict[str, str]:
 # Text preparation
 # ---------------------------------------------------------------------------
 
-_CONTEXT_CHAR_LIMIT = 8_000
+# ~24k chars is roughly 6k tokens: comfortably inside every supported
+# model's context and still cheap, versus the previous 8k cap that cut most
+# Methods sections (where host, body site, cohort and sample size live)
+# after 3k chars.
+_CONTEXT_CHAR_LIMIT = 24_000
 
 _SECTION_BUDGETS: Dict[str, int] = {
-    "ABSTRACT": 1_200,
-    "METHODS": 3_000,
-    "RESULTS": 2_000,
-    "INTRODUCTION": 800,
-    "DISCUSSION": 600,
-    "OTHER": 400,
+    "ABSTRACT": 2_500,
+    "METHODS": 9_000,
+    "RESULTS": 6_000,
+    "INTRODUCTION": 1_500,
+    "DISCUSSION": 1_500,
+    "OTHER": 1_000,
     # An unsectioned body is the entire paper; the old 400-char OTHER default
     # meant Methods/Results never reached the model at all.
-    "FULL_TEXT": 6_000,
+    "FULL_TEXT": 20_000,
 }
 
 
