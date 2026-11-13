@@ -132,3 +132,59 @@ async def test_disabled_by_env(monkeypatch):
         == field
     )
     qa.chat.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_context_excerpt_is_bounded_and_included_in_prompt():
+    qa = _qa('{"curie": null, "reason": "none fit"}')
+    await disambiguate_condition(
+        _field(), title="T", abstract="A", unified_qa=qa, context="M" * 10000
+    )
+    prompt = qa.chat.call_args[0][0]
+    assert "Methods" in prompt
+    assert prompt.count("M") >= 4000
+    assert "M" * 4001 not in prompt
+
+
+@pytest.mark.asyncio
+async def test_no_context_block_when_context_empty():
+    qa = _qa('{"curie": null}')
+    await disambiguate_condition(_field(), title="T", abstract="A", unified_qa=qa)
+    assert "Paper text excerpt" not in qa.chat.call_args[0][0]
+
+
+@pytest.mark.asyncio
+async def test_new_reply_format_stores_reason_and_stays_review():
+    qa = _qa(
+        '{"curie": "MONDO:0004972", "reason": "colorectal study", "confidence": 0.99}'
+    )
+    out = await disambiguate_condition(_field(), title="T", abstract="A", unified_qa=qa)
+    assert out["ontology_id"] == "MONDO:0004972"
+    assert out["disambiguation_reason"] == "colorectal study"
+    assert out["mapping_tier"] == "review"
+    assert out["mapping_confidence"] == 0.85  # clamped, never reaches 1.0
+
+
+@pytest.mark.asyncio
+async def test_old_reply_format_still_parses_with_default_confidence():
+    qa = _qa('{"curie": "MONDO:0004972"}')
+    out = await disambiguate_condition(_field(), title="T", abstract="A", unified_qa=qa)
+    assert out["ontology_id"] == "MONDO:0004972"
+    assert out["mapping_confidence"] == 0.8
+    assert out["disambiguation_reason"] == ""
+
+
+@pytest.mark.asyncio
+async def test_prompt_allows_broader_standard_entity_for_qualified_subtype():
+    qa = _qa('{"curie": null}')
+    await disambiguate_condition(_field(), title="T", abstract="A", unified_qa=qa)
+    prompt = qa.chat.call_args[0][0]
+    assert "qualified" in prompt and "IS acceptable" in prompt
+    assert "Never pick a broader category" in prompt
+
+
+@pytest.mark.asyncio
+async def test_choice_outside_allowed_set_still_rejected():
+    qa = _qa('{"curie": "MONDO:9999999", "reason": "x"}')
+    out = await disambiguate_condition(_field(), title="T", abstract="A", unified_qa=qa)
+    assert out["ontology_id"] == ""

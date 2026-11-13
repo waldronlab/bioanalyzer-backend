@@ -23,6 +23,16 @@ services:
       # Set to 0 to skip SapBERT nearest-term matching for Condition
       # (app/normalization/embedding_match.py).
       CONDITION_EMBEDDING_MATCH: "${CONDITION_EMBEDDING_MATCH:-1}"
+      # SapBERT weights for Condition matching. Defaults to the local copy
+      # of cambridgeltl/SapBERT-from-PubMedBERT-fulltext under the
+      # bind-mounted ./cache (cache/models/sapbert on the host), so the
+      # container never needs Hugging Face at runtime. Set to the Hub id
+      # to download instead.
+      CONDITION_EMBEDDING_MODEL: "${CONDITION_EMBEDDING_MODEL:-/app/cache/models/sapbert}"
+      # Deterministic extraction: greedy sampling, fixed seed where the
+      # provider accepts one (see app/models/llm_provider.py).
+      LLM_TEMPERATURE: "${LLM_TEMPERATURE:-0}"
+      LLM_SEED: "${LLM_SEED:-0}"
     ports:
       - "8000:8000"
     volumes:

@@ -73,6 +73,148 @@ def _find_disease_phrase(lower_text: str) -> Optional[str]:
 
 
 # ---------------------------------------------------------------------------
+# Field provenance and the trust gate on the "auto" tier
+# ---------------------------------------------------------------------------
+
+# field["source"]: where a field's value came from. "auto" (no curator review)
+# is only ever earned by an LLM extraction backed by evidence - see
+# _apply_condition_evidence_gate.
+SOURCE_LLM = "llm"
+SOURCE_HEURISTIC = "heuristic"  # _heuristic_payload_from_text regex fallback
+SOURCE_REGEX = "regex"  # _postprocess_field_results deterministic override
+
+# Below this self-reported condition_confidence (see EXTRACTION_PROMPT: 0.4 =
+# ambiguous, 0.2 = guessed) the condition is never auto-accepted.
+MIN_AUTO_CONDITION_CONFIDENCE = 0.5
+# The prompt asks for <= 200 characters; leave slack for the section prefix
+# and models that overshoot, but keep a runaway answer out of the results.
+_EVIDENCE_MAX_CHARS = 300
+
+# Qualifiers the prompt tells the model to DROP from a disease name
+# ("severe periodontitis" -> "periodontitis"). The post-LLM regex override
+# must not add them back by treating "severe X" as "a more specific X".
+# "chronic"/"acute" are deliberately absent: they are often part of the
+# disease entity itself.
+_DISEASE_QUALIFIER_WORDS = frozenset(
+    {
+        "severe",
+        "mild",
+        "moderate",
+        "refractory",
+        "active",
+        "inactive",
+        "quiescent",
+        "early",
+        "late",
+        "onset",
+        "advanced",
+        "stage",
+        "grade",
+        "drug",
+        "treatment",
+        "therapy",
+        "multidrug",
+        "resistant",
+        "resistance",
+        "generalized",
+        "generalised",
+        "localized",
+        "localised",
+        "recurrent",
+        "persistent",
+        "uncomplicated",
+        "complicated",
+    }
+)
+
+
+def _only_adds_qualifiers(current_value: str, new_phrase: str) -> bool:
+    """True when *new_phrase* is *current_value* plus only severity/stage/
+    resistance/activity qualifiers (e.g. "periodontitis" -> "severe
+    periodontitis") - i.e. not a genuinely more specific disease entity."""
+    current = set(re.split(r"[\s\-]+", current_value.casefold()))
+    extra = [
+        w for w in re.split(r"[\s\-]+", new_phrase.casefold()) if w and w not in current
+    ]
+    if not extra:
+        return True
+    staged = "stage" in extra or "grade" in extra
+    return all(
+        w in _DISEASE_QUALIFIER_WORDS
+        or (staged and re.fullmatch(r"[ivx]+|\d+[a-c]?", w) is not None)
+        for w in extra
+    )
+
+
+def _cap_tier_at_review(field: Dict[str, Any]) -> None:
+    """Never let *field* skip curator review."""
+    if field.get("mapping_tier") == TIER_AUTO:
+        field["mapping_tier"] = TIER_REVIEW
+
+
+def _clean_str(value: Any) -> str:
+    return value.strip() if isinstance(value, str) else ""
+
+
+def _parse_unit_float(value: Any) -> Optional[float]:
+    """A float in [0, 1], or None for a missing/invalid value."""
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    if number != number:  # NaN
+        return None
+    return max(0.0, min(1.0, number))
+
+
+def _condition_list(payload: Dict[str, Any]) -> List[str]:
+    """The LLM's "conditions" list (most important first) as plain, de-duplicated
+    strings, with condition_raw first if the model left it out of the list."""
+    raw_list = payload.get("conditions")
+    if isinstance(raw_list, str):
+        raw_list = [raw_list]
+    if not isinstance(raw_list, list):
+        raw_list = []
+    out: List[str] = []
+    seen = set()
+    primary = _clean_str(payload.get("condition_raw"))
+    for item in ([primary] if primary else []) + raw_list:
+        text = _clean_str(item)
+        if text and text.casefold() not in seen:
+            seen.add(text.casefold())
+            out.append(text)
+    return out
+
+
+def _apply_condition_evidence_gate(
+    condition: Dict[str, Any], payload: Dict[str, Any], conditions: List[str]
+) -> None:
+    """Attach the LLM's comparison/evidence/confidence to the condition field
+    and cap its tier at "review" unless the extraction is backed by a quoted
+    evidence sentence and a confidence >= MIN_AUTO_CONDITION_CONFIDENCE.
+
+    Every key is optional in the payload: a model (or an older cached payload)
+    that omits them yields empty values and a "review" cap, never an error.
+    """
+    evidence = _clean_str(payload.get("condition_evidence"))
+    if len(evidence) > _EVIDENCE_MAX_CHARS:
+        evidence = evidence[: _EVIDENCE_MAX_CHARS - 3].rstrip() + "..."
+    llm_confidence = _parse_unit_float(payload.get("condition_confidence"))
+    condition["comparison"] = _clean_str(payload.get("condition_comparison"))
+    condition["evidence"] = evidence
+    condition["alternatives"] = list(conditions)
+    condition["llm_confidence"] = llm_confidence
+    if (
+        not evidence
+        or llm_confidence is None
+        or llm_confidence < MIN_AUTO_CONDITION_CONFIDENCE
+    ):
+        _cap_tier_at_review(condition)
+
+
+# ---------------------------------------------------------------------------
 # FieldResult builders
 # ---------------------------------------------------------------------------
 
@@ -350,6 +492,7 @@ def _postprocess_field_results(
                 "mapping_confidence": 1.0,
                 "confidence": max(float(host.get("confidence", 0.0) or 0.0), 0.75),
                 "reason_if_missing": "",
+                "source": SOURCE_REGEX,
             }
         )
         out["host_species"] = host
@@ -365,9 +508,15 @@ def _postprocess_field_results(
         # Condition is the factor the compared groups differ by, which is
         # often not a disease ("Diet", "Delivery method"), and an unrelated
         # "patients with X" phrase anywhere in the paper used to overwrite it.
+        #
+        # Adding only a severity/stage/resistance/activity qualifier is not
+        # "more specific" in BugSigDB's sense: curators record the disease
+        # entity ("periodontitis", not "severe periodontitis"), and the
+        # extraction prompt tells the LLM to drop such qualifiers.
         should_apply = condition.get("status") == "ABSENT" or (
             len(disease) > len(current_value)
             and current_value.casefold() in disease.casefold()
+            and not _only_adds_qualifiers(current_value, disease)
         )
         if should_apply:
             cond_term = normalize_condition(disease)
@@ -379,7 +528,13 @@ def _postprocess_field_results(
                 # a different ID that tier_for() never actually graded (the
                 # same "auto" safety invariant this field guards elsewhere -
                 # see app.normalization.grounding.tier_for).
+                #
+                # A regex phrase match never went through the LLM's
+                # comparison/evidence step, so it is capped at "review" like
+                # the heuristic fallback, and marked source="regex".
                 tier = tier_for(cond_term)
+                if tier == TIER_AUTO:
+                    tier = TIER_REVIEW
                 condition.update(
                     {
                         "value": cond_term.label,
@@ -399,6 +554,7 @@ def _postprocess_field_results(
                             if tier != TIER_AUTO
                             else []
                         ),
+                        "source": SOURCE_REGEX,
                     }
                 )
                 out["condition"] = condition
@@ -444,9 +600,19 @@ def _field_results_from_unified_payload(
 
     Keys used here MUST match FIELD_KEYS and the column names expected by data.R.
     """
+    source = (
+        SOURCE_HEURISTIC if payload.get("_source") == SOURCE_HEURISTIC else SOURCE_LLM
+    )
+    # condition_raw is conditions[0] per the prompt; fall back to the list if
+    # the model filled "conditions" but left condition_raw empty.
+    conditions = _condition_list(payload)
+    condition_raw = payload.get("condition_raw")
+    if not _clean_str(condition_raw) and conditions:
+        condition_raw = conditions[0]
+
     host_term = normalize_host_species(payload.get("host_species_raw"))
     body_term = normalize_body_site(payload.get("body_site_raw"))
-    cond_term = normalize_condition(payload.get("condition_raw"))
+    cond_term = normalize_condition(condition_raw)
     seq_term = normalize_sequencing_type(payload.get("sequencing_type_raw"))
     samp_term = normalize_sample_size(payload.get("sample_size_raw"))
 
@@ -457,9 +623,13 @@ def _field_results_from_unified_payload(
         "sequencing_type": _build_field_result_from_term(seq_term),
         "sample_size": _build_field_result_from_term(samp_term),
     }
+    for field in field_results.values():
+        field["source"] = source
+
+    _apply_condition_evidence_gate(field_results["condition"], payload, conditions)
 
     # Heuristic payloads get a confidence cap — they are less reliable
-    if payload.get("_source") == "heuristic":
+    if source == SOURCE_HEURISTIC:
         for key in FIELD_KEYS:
             field = field_results.get(key, {})
             status = field.get("status")
@@ -476,8 +646,7 @@ def _field_results_from_unified_payload(
             # app.normalization.grounding.tier_for) - a heuristic-sourced
             # field must never skip curator review just because its raw
             # guess happened to be an exact static-dict match.
-            if field.get("mapping_tier") == TIER_AUTO:
-                field["mapping_tier"] = TIER_REVIEW
+            _cap_tier_at_review(field)
 
     return field_results
 

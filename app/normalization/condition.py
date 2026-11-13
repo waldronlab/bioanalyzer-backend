@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import replace
 from typing import Dict, Optional, Tuple
 
@@ -58,6 +59,41 @@ CONDITION_LOOKUP: Dict[str, Tuple[str, str]] = {
         "MONDO:0013209",
     ),
     "nafld": (
+        "metabolic dysfunction-associated steatotic liver disease",
+        "MONDO:0013209",
+    ),
+    # MAFLD / MASLD are renamings of NAFLD: BugSigDB curates all of them as
+    # MONDO:0013209. Without these keys, word-dropping lands on the parent
+    # "fatty liver disease" (MONDO:0004790). Longer keys win in match_longest.
+    "mafld": (
+        "metabolic dysfunction-associated steatotic liver disease",
+        "MONDO:0013209",
+    ),
+    "masld": (
+        "metabolic dysfunction-associated steatotic liver disease",
+        "MONDO:0013209",
+    ),
+    "metabolic associated fatty liver disease": (
+        "metabolic dysfunction-associated steatotic liver disease",
+        "MONDO:0013209",
+    ),
+    "metabolic dysfunction associated fatty liver disease": (
+        "metabolic dysfunction-associated steatotic liver disease",
+        "MONDO:0013209",
+    ),
+    "metabolic dysfunction associated steatotic liver disease": (
+        "metabolic dysfunction-associated steatotic liver disease",
+        "MONDO:0013209",
+    ),
+    "metabolic-associated fatty liver disease": (
+        "metabolic dysfunction-associated steatotic liver disease",
+        "MONDO:0013209",
+    ),
+    "metabolic dysfunction-associated fatty liver disease": (
+        "metabolic dysfunction-associated steatotic liver disease",
+        "MONDO:0013209",
+    ),
+    "metabolic dysfunction-associated steatotic liver disease": (
         "metabolic dysfunction-associated steatotic liver disease",
         "MONDO:0013209",
     ),
@@ -211,6 +247,95 @@ def _resolve_more_specific_override(
     return local_hit
 
 
+# Leading qualifiers that describe a subtype/severity/course of a condition
+# rather than naming a different one. Stripped only when the full phrase has
+# no exact ontology match (so "chronic kidney disease" and "acute myeloid
+# leukemia", which do match exactly, are never touched).
+_QUALIFIER_WORDS = frozenset(
+    {
+        "severe",
+        "mild",
+        "moderate",
+        "refractory",
+        "generalized",
+        "generalised",
+        "uncontrolled",
+        "active",
+        "recurrent",
+        "chronic",
+        "acute",
+        "early-onset",
+        "late-onset",
+        "early onset",
+        "late onset",
+        "advanced",
+    }
+)
+_RESISTANT_RE = re.compile(r"^[\w-]+-resistant$")
+
+# Confidence for a match reached through the fallbacks below; < 1.0, so the
+# result is always "review" tier.
+_FALLBACK_CONFIDENCE = 0.8
+
+
+def _exact_live_hit(query: str) -> Optional[NormalizedTerm]:
+    """An exact (label/synonym) local EFO/MONDO hit for *query* that is not
+    obsolete, else None."""
+    hit = local_lookup(query, ("efo", "mondo"))
+    if hit is None or not hit.ontology_id or hit.status == "ABSENT":
+        return None
+    if not _is_live(hit.ontology_id):
+        return None
+    return hit
+
+
+def _strip_leading_qualifiers(query: str) -> str:
+    words = query.split()
+    while len(words) > 1:
+        two = " ".join(words[:2]).lower()
+        if two in _QUALIFIER_WORDS:
+            words = words[2:]
+        elif words[0].lower() in _QUALIFIER_WORDS or _RESISTANT_RE.match(
+            words[0].lower()
+        ):
+            words = words[1:]
+        else:
+            break
+    return " ".join(words)
+
+
+def _exact_fallback(query: str, raw_text: str) -> Optional[NormalizedTerm]:
+    """Last offline resorts before a live search / giving up, both exact
+    lookups against live ontology terms:
+
+    (a) EFO names many traits "<X> measurement" ("smoking status measurement"),
+        so a near-synonym like "smoking status" finds it by appending that.
+    (b) A leading severity/course qualifier ("severe periodontitis") is
+        dropped and the bare entity looked up. The original phrase stays in
+        `raw` so a curator sees what was dropped.
+
+    Both cap mapping_confidence below 1.0 (review tier)."""
+    query = (query or "").strip()
+    if not query:
+        return None
+    raw = raw_text.strip()
+    candidates = []
+    stripped = _strip_leading_qualifiers(query)
+    if not query.lower().endswith("measurement"):
+        candidates.append(f"{query} measurement")
+    if stripped and stripped != query:
+        candidates.append(stripped)
+    for candidate in candidates:
+        hit = _exact_live_hit(candidate)
+        if hit is not None:
+            return replace(
+                hit,
+                mapping_confidence=min(hit.mapping_confidence, _FALLBACK_CONFIDENCE),
+                raw=raw,
+            )
+    return None
+
+
 def _ground_condition(raw_text: str) -> NormalizedTerm:
     """Ground free text to an EFO/MONDO term: static dict -> local ontology
     store -> live OLS. Labels here are the ontology's own; see
@@ -237,6 +362,10 @@ def _ground_condition(raw_text: str) -> NormalizedTerm:
         local_hit = local_lookup(candidate, ("efo", "mondo"))
         if local_hit:
             return local_hit
+
+    fallback = _exact_fallback(query, raw_text)
+    if fallback is not None:
+        return fallback
 
     for candidate in _progressive_queries(query):
         hit = ols_search(candidate, "efo", "EFO", mapping_confidence=0.9)
@@ -421,7 +550,7 @@ def normalize_condition(raw_text: str) -> NormalizedTerm:
                 best_label,
                 best_curie,
                 "PRESENT",
-                min(round(score, 3), 0.85),
+                min(round(score, 3), embedding_match.MAX_SNAP_CONFIDENCE),
                 candidates=tuple(others[:4]),
             )
         elif neighbours and neighbours[0][2] >= _CANDIDATE_FLOOR:

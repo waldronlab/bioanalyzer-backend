@@ -34,6 +34,7 @@ from .field_extraction import _parse_json_object
 logger = logging.getLogger(__name__)
 
 _ABSTRACT_CHARS = 3000
+_CONTEXT_CHARS = 4000
 _TIMEOUT_SECONDS = 60
 
 DISAMBIGUATION_PROMPT = """\
@@ -43,16 +44,24 @@ each study's "condition": the factor that distinguishes the groups being compare
 
 An automatic reader extracted this condition from the paper: {value!r}
 It is not one of BugSigDB's controlled terms. Choose the ONE candidate below that
-names the same condition the paper's groups are compared by, or null if none does.
-Prefer null to a candidate that is broader, narrower, or a different condition.
+BugSigDB curators would record for this paper, or null if none fits.
+
+Rules:
+- Curators use the standard disease entity. When the extracted term is a qualified
+  subtype of a standard entity (e.g. "severe X", "refractory X", "X in children"),
+  the broader standard candidate "X" IS acceptable.
+- Never pick a broader category when the paper names a specific, distinct disease
+  (e.g. do not replace a named cancer or infection with a generic parent class), and
+  never pick a sibling or different condition.
+- If no candidate is the condition itself or its standard parent entity, answer null.
 
 Title: {title}
 Abstract: {abstract}
-
+{context_block}
 Candidates:
 {listing}
 
-Return ONLY a JSON object: {{"curie": "<one CURIE from the list above>"}} or {{"curie": null}}
+Return ONLY a JSON object: {{"curie": "<one CURIE from the list above or null>", "reason": "<short reason>"}}
 """
 
 
@@ -65,6 +74,14 @@ def enabled() -> bool:
     )
 
 
+def _confidence(model_conf: Optional[float]) -> float:
+    """0.8 by default; a model-stated confidence is honoured but clamped to
+    [0.5, 0.85] so a choice here can never reach "auto" (>= 1.0)."""
+    if model_conf is None:
+        return 0.8
+    return round(max(0.5, min(model_conf, 0.85)), 2)
+
+
 async def disambiguate_condition(
     field: Dict[str, Any],
     *,
@@ -72,6 +89,7 @@ async def disambiguate_condition(
     abstract: str,
     unified_qa: Any,
     pmid: str = "",
+    context: str = "",
 ) -> Dict[str, Any]:
     """Return *field* (the result["fields"]["condition"] dict), updated to
     the candidate the model chose, or unchanged."""
@@ -96,6 +114,11 @@ async def disambiguate_condition(
         value=field["value"],
         title=title or "",
         abstract=(abstract or "")[:_ABSTRACT_CHARS],
+        context_block=(
+            f"Paper text excerpt (including Methods):\n{context.strip()[:_CONTEXT_CHARS]}\n"
+            if context and context.strip()
+            else ""
+        ),
         listing="\n".join(f"- {curie} : {label}" for curie, label in allowed.items()),
     )
     try:
@@ -105,9 +128,13 @@ async def disambiguate_condition(
             if asyncio.iscoroutine(call)
             else call
         )
-        choice: Optional[str] = _parse_json_object(
-            (response or {}).get("text", "")
-        ).get("curie")
+        parsed = _parse_json_object((response or {}).get("text", ""))
+        choice: Optional[str] = parsed.get("curie")
+        reason = str(parsed.get("reason") or "").strip()[:300]
+        try:
+            model_conf = float(parsed.get("confidence"))
+        except (TypeError, ValueError):
+            model_conf = None
     except Exception as e:
         logger.warning(
             "Condition disambiguation failed for PMID %s: %s",
@@ -141,7 +168,8 @@ async def disambiguate_condition(
             "value": allowed[choice],
             "ontology_id": choice,
             "status": "PRESENT",
-            "mapping_confidence": 0.8,
+            "mapping_confidence": _confidence(model_conf),
+            "disambiguation_reason": reason,
             "mapping_tier": "review",
             "raw": field.get("raw") or field["value"],
             "mapping_candidates": [

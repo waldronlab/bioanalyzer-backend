@@ -29,6 +29,7 @@ from __future__ import annotations
 import logging
 import os
 import threading
+from pathlib import Path
 from typing import List, Optional, Tuple
 
 from app.normalization.bugsigdb_vocabulary import BugSigDBVocabulary, get_vocabulary
@@ -37,6 +38,9 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_MODEL = "cambridgeltl/SapBERT-from-PubMedBERT-fulltext"
 DEFAULT_THRESHOLD = 0.8
+# A snapped term is a guess, never a certainty: normalize_condition() caps
+# mapping_confidence at this value, and tiering sends anything < 1.0 to "review".
+MAX_SNAP_CONFIDENCE = 0.85
 
 _lock = threading.Lock()
 _model = None
@@ -68,10 +72,8 @@ def _get_model():
         if _model is not None or _model_failed:
             return _model
         try:
-            from sentence_transformers import SentenceTransformer
-
             name = os.getenv("CONDITION_EMBEDDING_MODEL", DEFAULT_MODEL)
-            _model = SentenceTransformer(name, device="cpu")
+            _model = _load_model(name)
             logger.info("Loaded condition embedding model %s", name)
         except Exception as e:  # missing package, no network, bad model name
             _model_failed = True
@@ -80,6 +82,28 @@ def _get_model():
                 type(e).__name__,
             )
     return _model
+
+
+def _load_model(name: str):
+    """Build the SentenceTransformer for *name* (a hub id or a local dir).
+
+    A plain Hugging Face BERT directory (no sentence-transformers config, as
+    for SapBERT) would otherwise get *mean* pooling automatically, but SapBERT
+    is trained with the [CLS] vector, so for such a directory the model is
+    assembled explicitly with CLS pooling. Directories that already carry
+    sentence-transformers metadata, and hub ids, load as-is."""
+    from sentence_transformers import SentenceTransformer
+
+    path = Path(name)
+    if path.is_dir() and not (path / "modules.json").exists():
+        from sentence_transformers import models
+
+        transformer = models.Transformer(str(path), max_seq_length=64)
+        pooling = models.Pooling(
+            transformer.get_word_embedding_dimension(), pooling_mode="cls"
+        )
+        return SentenceTransformer(modules=[transformer, pooling], device="cpu")
+    return SentenceTransformer(name, device="cpu")
 
 
 def _get_index(vocab: BugSigDBVocabulary, model):

@@ -1,10 +1,17 @@
 # app/models/unified_qa.py
+import inspect
 import logging
 import os
 import asyncio
 from typing import Dict, List, Optional, Union
 
-from app.utils.config import GEMINI_API_KEY, GEMINI_TIMEOUT, LLM_MODEL, LLM_PROVIDER
+from app.utils.config import (
+    GEMINI_API_KEY,
+    GEMINI_TIMEOUT,
+    LLM_MODEL,
+    LLM_PROVIDER,
+    LLM_TEMPERATURE,
+)
 from app.utils.credential_masking import mask_exception_message
 
 # Try to import LiteLLM provider manager first
@@ -149,8 +156,42 @@ class UnifiedQA:
                 "UnifiedQA: QA system not initialized (no API keys). Chat functionality will be limited."
             )
 
-    async def chat(self, prompt: str) -> dict:
-        """Chat with the QA system. Returns dict with 'text' and 'confidence' keys."""
+    @staticmethod
+    async def _chat_with(qa_system, prompt: str, json_mode: bool) -> dict:
+        """Call a QA backend's chat(); GeminiQA understands json_mode, Paper-QA
+        does not, so only pass it when the backend's signature accepts it."""
+        accepts_json_mode = False
+        try:
+            accepts_json_mode = (
+                "json_mode" in inspect.signature(qa_system.chat).parameters
+            )
+        except (TypeError, ValueError):
+            pass
+        if accepts_json_mode:
+            return await qa_system.chat(prompt, json_mode=json_mode)
+        return await qa_system.chat(prompt)
+
+    async def chat(
+        self,
+        prompt: str,
+        *,
+        json_mode: bool = False,
+        temperature: Optional[float] = None,
+    ) -> dict:
+        """Chat with the QA system. Returns dict with 'text' and 'confidence' keys.
+
+        Args:
+            prompt: The user prompt.
+            json_mode: Ask the provider for a JSON object (``response_format``)
+                where it supports that natively; the field-extraction and
+                single-field callers set this. Plain chat callers leave it
+                False.
+            temperature: Sampling temperature; None means the configured
+                ``LLM_TEMPERATURE`` (default 0.0, deterministic extraction).
+        """
+        if temperature is None:
+            temperature = LLM_TEMPERATURE
+
         if self.use_paperqa and self.qa_system:
             try:
                 response = await self.qa_system.chat(prompt)
@@ -161,7 +202,7 @@ class UnifiedQA:
                     logger.warning(
                         f"Paper-QA returned error, falling back to GeminiQA: {response.get('text')}"
                     )
-                    return await self._fallback_to_gemini(prompt)
+                    return await self._fallback_to_gemini(prompt, json_mode=json_mode)
                 return response
             except Exception as e:
                 safe_error = mask_exception_message(e)
@@ -172,7 +213,9 @@ class UnifiedQA:
             try:
                 response = await self.llm_manager.chat(
                     messages=[{"role": "user", "content": prompt}],
+                    temperature=temperature,
                     timeout=GEMINI_TIMEOUT,
+                    json_mode=json_mode,
                 )
                 return response
             except Exception as e:
@@ -185,15 +228,17 @@ class UnifiedQA:
                 "confidence": 0.0,
             }
         try:
-            response = await self.qa_system.chat(prompt)
+            response = await self._chat_with(self.qa_system, prompt, json_mode)
             return response
         except Exception as e:
             safe_error = mask_exception_message(e)
             logger.error(f"UnifiedQA.chat error: {safe_error}")
             logger.info("Attempting fallback to GeminiQA after error")
-            return await self._fallback_to_gemini(prompt)
+            return await self._fallback_to_gemini(prompt, json_mode=json_mode)
 
-    async def _fallback_to_gemini(self, prompt: str) -> dict:
+    async def _fallback_to_gemini(
+        self, prompt: str, *, json_mode: bool = False
+    ) -> dict:
         """Fallback to Gemini API when Paper-QA fails."""
         try:
             from .gemini_qa import GeminiQA
@@ -206,7 +251,7 @@ class UnifiedQA:
                 }
 
             gemini_qa = GeminiQA(api_key=api_key)
-            response = await gemini_qa.chat(prompt)
+            response = await gemini_qa.chat(prompt, json_mode=json_mode)
             logger.info("Fallback to GeminiQA successful")
             return response
         except Exception as e:
