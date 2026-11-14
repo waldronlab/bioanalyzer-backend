@@ -13,12 +13,36 @@ from app.models.gemini_response_parsing import (
     extract_found_terms as _extract_found_terms,
     parse_enhanced_analysis as _parse_enhanced_analysis,
 )
-from app.utils.config import GEMINI_TIMEOUT
+from app.utils.config import GEMINI_TIMEOUT, LLM_TEMPERATURE
 from app.utils.credential_masking import mask_string, mask_exception_message
 import asyncio
 import time
 
 logger = logging.getLogger(__name__)
+
+# The extraction JSON (five fields, each with a value, status, confidence
+# and a reason) does not fit the 300-token budget the conversational chat
+# path uses; a truncated object is unparseable and silently degrades to the
+# regex heuristic.
+_CHAT_MAX_OUTPUT_TOKENS = 300
+_JSON_MAX_OUTPUT_TOKENS = 1024
+
+
+def _chat_generation_config(json_mode: bool = False):
+    """GenerationConfig for GeminiQA.chat(): configured LLM_TEMPERATURE (0.0
+    by default, matching the LiteLLM path), and Gemini's native JSON mode
+    (``response_mime_type``) when the caller wants a JSON object."""
+    kwargs = {
+        "temperature": LLM_TEMPERATURE,
+        "max_output_tokens": (
+            _JSON_MAX_OUTPUT_TOKENS if json_mode else _CHAT_MAX_OUTPUT_TOKENS
+        ),
+        "top_p": 0.9,
+        "top_k": 40,
+    }
+    if json_mode:
+        kwargs["response_mime_type"] = "application/json"
+    return genai.types.GenerationConfig(**kwargs)
 
 
 class GeminiQA:
@@ -168,7 +192,10 @@ Please provide a detailed analysis in the following structured format:
             response = await model.generate_content_async(
                 f"{prompt}\n\nAnalyze this paper:\n{content}",
                 generation_config=genai.types.GenerationConfig(
-                    temperature=0.1, max_output_tokens=500, top_p=0.8, top_k=20
+                    temperature=LLM_TEMPERATURE,
+                    max_output_tokens=500,
+                    top_p=0.8,
+                    top_k=20,
                 ),
                 safety_settings=[
                     {
@@ -362,7 +389,10 @@ Please provide a detailed analysis in the following structured format:
                     lambda: model.generate_content(
                         enhanced_structured_prompt,
                         generation_config=genai.types.GenerationConfig(
-                            temperature=0.1, max_output_tokens=500, top_p=0.7, top_k=10
+                            temperature=LLM_TEMPERATURE,
+                            max_output_tokens=500,
+                            top_p=0.7,
+                            top_k=10,
                         ),
                     ),
                 ),
@@ -642,19 +672,27 @@ Please provide a detailed analysis in the following structured format:
         else:
             return f"Missing {len(missing_fields)} fields: {', '.join(missing_fields)}. Paper requires significant review before curation."
 
-    async def chat(self, prompt: str) -> dict:
+    async def chat(self, prompt: str, *, json_mode: bool = False) -> dict:
+        """Chat with Gemini directly (fallback path behind UnifiedQA.chat).
+
+        json_mode asks Gemini for a JSON object via response_mime_type and
+        lifts the output-token cap so a full extraction payload fits.
+        """
         try:
             chat_prompt = (
                 "You are a helpful scientific assistant. Answer the user's question or message conversationally. "
                 "If the user provides a paper context, use it to inform your answer."
             )
+            if json_mode:
+                chat_prompt = (
+                    "You are a careful scientific assistant. Respond with a single "
+                    "JSON object only - no prose, no markdown fences."
+                )
             model = genai.GenerativeModel(self.model)
             response = await asyncio.wait_for(
                 model.generate_content_async(
                     f"{chat_prompt}\nUser: {prompt}",
-                    generation_config=genai.types.GenerationConfig(
-                        temperature=0.3, max_output_tokens=300, top_p=0.9, top_k=40
-                    ),
+                    generation_config=_chat_generation_config(json_mode),
                     safety_settings=[
                         {
                             "category": "HARM_CATEGORY_HARASSMENT",

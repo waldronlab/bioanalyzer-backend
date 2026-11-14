@@ -71,7 +71,17 @@ jobs:
           dst.write_text("\n".join(out) + "\n")
           print(f"Created {dst} (torch packages removed)")
           PY
-          pip-audit -r requirements.audit.txt --ignore-vuln CVE-2025-68463
+          # litellm advisories ignored below affect only the LiteLLM *proxy server*
+          # (/sso/debug/callback, /utils/transform_request, proxy request routing).
+          # BioAnalyzer imports litellm as a client library and never runs the
+          # proxy. The fixed releases (>=1.95.1) cannot be installed yet: paper-qa
+          # depends on fhlmi, and fhlmi (up to 1.11.0) requires litellm<=1.84.1.
+          # Remove these ignores once fhlmi allows litellm>=1.95.1.
+          pip-audit -r requirements.audit.txt \
+            --ignore-vuln CVE-2025-68463 \
+            --ignore-vuln PYSEC-2026-4066 \
+            --ignore-vuln GHSA-hhww-mrg2-969h \
+            --ignore-vuln GHSA-g5ff-637f-6q2m
       - name: Check Dockerfile base image tag hygiene
         if: hashFiles('Dockerfile') != ''
         run: |

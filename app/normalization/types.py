@@ -168,6 +168,18 @@ _BRITISH_TO_AMERICAN = (
     (re.compile(r"gynaecolog", re.IGNORECASE), "gynecolog"),
     (re.compile(r"diarrhoea", re.IGNORECASE), "diarrhea"),
     (re.compile(r"colour", re.IGNORECASE), "color"),
+    # Stems (no word-boundary) so inflected forms follow: ischaemic,
+    # anaemic, oedematous, diarrhoeal, leukaemic, paediatrics, haemolytic...
+    (re.compile(r"ischaem", re.IGNORECASE), "ischem"),
+    (re.compile(r"anaem", re.IGNORECASE), "anem"),
+    (re.compile(r"oedem", re.IGNORECASE), "edem"),
+    (re.compile(r"diarrhoe", re.IGNORECASE), "diarrhe"),
+    (re.compile(r"leukaem", re.IGNORECASE), "leukem"),
+    (re.compile(r"oestr(?=ogen|adiol|one|ous|us)", re.IGNORECASE), "estr"),
+    (re.compile(r"paediatr", re.IGNORECASE), "pediatr"),
+    (re.compile(r"caesarean", re.IGNORECASE), "cesarean"),
+    (re.compile(r"haemo", re.IGNORECASE), "hemo"),
+    (re.compile(r"haemat", re.IGNORECASE), "hemat"),
 )
 
 

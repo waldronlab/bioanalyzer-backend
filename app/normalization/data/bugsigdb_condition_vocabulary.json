@@ -1,0 +1,3717 @@
+{
+ "source": "BugSigDB 2026-08-09_12:03_UTC, License: Creative Commons Attribution 4.0 International, URL: https://bugsigdb.org",
+ "built_from_rows": 14042,
+ "excluded_pmids": 0,
+ "dropped_obsolete_ids": [
+  "MONDO:0016667",
+  "MONDO:0100318"
+ ],
+ "terms": {
+  "BTO:0001616": {
+   "label": "Colorectal cancer cell line",
+   "rows": 2
+  },
+  "CHEBI:15343": {
+   "label": "Acetaldehyde",
+   "rows": 2
+  },
+  "CHEBI:15366": {
+   "label": "Acetic acid",
+   "rows": 2
+  },
+  "CHEBI:153671": {
+   "label": "Endothelin-1",
+   "rows": 2
+  },
+  "CHEBI:15377": {
+   "label": "Water",
+   "rows": 2
+  },
+  "CHEBI:15379": {
+   "label": "Oxygen",
+   "rows": 9
+  },
+  "CHEBI:16113": {
+   "label": "Cholesterol",
+   "rows": 4
+  },
+  "CHEBI:16737": {
+   "label": "Creatinine",
+   "rows": 3
+  },
+  "CHEBI:16990": {
+   "label": "Bilirubin",
+   "rows": 1
+  },
+  "CHEBI:17026": {
+   "label": "Progesterone",
+   "rows": 2
+  },
+  "CHEBI:17234": {
+   "label": "Glucose",
+   "rows": 11
+  },
+  "CHEBI:17855": {
+   "label": "Triglyceride",
+   "rows": 4
+  },
+  "CHEBI:18154": {
+   "label": "Polysaccharide",
+   "rows": 1
+  },
+  "CHEBI:18248": {
+   "label": "Iron",
+   "rows": 6
+  },
+  "CHEBI:24621": {
+   "label": "Hormone",
+   "rows": 9
+  },
+  "CHEBI:24852": {
+   "label": "Insecticide",
+   "rows": 9
+  },
+  "CHEBI:25212": {
+   "label": "Metabolite",
+   "rows": 4
+  },
+  "CHEBI:26708": {
+   "label": "Sodium",
+   "rows": 5
+  },
+  "CHEBI:27226": {
+   "label": "Uric acid",
+   "rows": 1
+  },
+  "CHEBI:27300": {
+   "label": "Vitamin D",
+   "rows": 6
+  },
+  "CHEBI:27732": {
+   "label": "Caffeine",
+   "rows": 1
+  },
+  "CHEBI:28260": {
+   "label": "Galactose",
+   "rows": 2
+  },
+  "CHEBI:28790": {
+   "label": "Serotonin",
+   "rows": 2
+  },
+  "CHEBI:2955": {
+   "label": "Azithromycin",
+   "rows": 5
+  },
+  "CHEBI:33281": {
+   "label": "Antimicrobial agent",
+   "rows": 139
+  },
+  "CHEBI:34741": {
+   "label": "Equol",
+   "rows": 1
+  },
+  "CHEBI:35476": {
+   "label": "Antipsychotic drug",
+   "rows": 1
+  },
+  "CHEBI:35703": {
+   "label": "Xenobiotic",
+   "rows": 24
+  },
+  "CHEBI:3962": {
+   "label": "Curcumin",
+   "rows": 6
+  },
+  "CHEBI:47775": {
+   "label": "HDL cholesterol",
+   "rows": 4
+  },
+  "CHEBI:48218": {
+   "label": "Antiseptic drug",
+   "rows": 5
+  },
+  "CHEBI:50112": {
+   "label": "Sex hormone",
+   "rows": 6
+  },
+  "CHEBI:50733": {
+   "label": "Nutraceutical",
+   "rows": 6
+  },
+  "CHEBI:51050": {
+   "label": "Titanium dioxide nanoparticle",
+   "rows": 2
+  },
+  "CHEBI:5931": {
+   "label": "Insulin",
+   "rows": 7
+  },
+  "CHEBI:6716": {
+   "label": "Medroxyprogesterone acetate",
+   "rows": 7
+  },
+  "CHEBI:6801": {
+   "label": "Metformin",
+   "rows": 2
+  },
+  "CL:0000037": {
+   "label": "Hematopoietic stem cell",
+   "rows": 12
+  },
+  "CL:0000233": {
+   "label": "Platelet",
+   "rows": 4
+  },
+  "CL:0000738": {
+   "label": "Leukocyte",
+   "rows": 2
+  },
+  "CL:0000767": {
+   "label": "Basophil",
+   "rows": 2
+  },
+  "CL:0000771": {
+   "label": "Eosinophil",
+   "rows": 1
+  },
+  "CL:0000775": {
+   "label": "Neutrophil",
+   "rows": 2
+  },
+  "CL:2000032": {
+   "label": "Peripheral neuron",
+   "rows": 14
+  },
+  "EFO:0000180": {
+   "label": "HIV-1 infection",
+   "rows": 5
+  },
+  "EFO:0000195": {
+   "label": "Metabolic syndrome",
+   "rows": 12
+  },
+  "EFO:0000246": {
+   "label": "Age",
+   "rows": 100
+  },
+  "EFO:0000264": {
+   "label": "Antibody",
+   "rows": 6
+  },
+  "EFO:0000369": {
+   "label": "Compound based treatment",
+   "rows": 20
+  },
+  "EFO:0000395": {
+   "label": "Delivery method",
+   "rows": 43
+  },
+  "EFO:0000399": {
+   "label": "Developmental stage",
+   "rows": 2
+  },
+  "EFO:0000410": {
+   "label": "Disease staging",
+   "rows": 7
+  },
+  "EFO:0000469": {
+   "label": "Environmental factor",
+   "rows": 61
+  },
+  "EFO:0000470": {
+   "label": "Environmental stress treatment",
+   "rows": 4
+  },
+  "EFO:0000483": {
+   "label": "Exercise",
+   "rows": 53
+  },
+  "EFO:0000487": {
+   "label": "Exposure",
+   "rows": 56
+  },
+  "EFO:0000490": {
+   "label": "Extraction protocol",
+   "rows": 133
+  },
+  "EFO:0000523": {
+   "label": "Growth condition",
+   "rows": 8
+  },
+  "EFO:0000568": {
+   "label": "Light",
+   "rows": 5
+  },
+  "EFO:0000651": {
+   "label": "Phenotype",
+   "rows": 39
+  },
+  "EFO:0000688": {
+   "label": "Sampling site",
+   "rows": 46
+  },
+  "EFO:0000689": {
+   "label": "Sampling time",
+   "rows": 24
+  },
+  "EFO:0000714": {
+   "label": "Survival time",
+   "rows": 2
+  },
+  "EFO:0000721": {
+   "label": "Time",
+   "rows": 24
+  },
+  "EFO:0000724": {
+   "label": "Timepoint",
+   "rows": 24
+  },
+  "EFO:0000727": {
+   "label": "Treatment",
+   "rows": 67
+  },
+  "EFO:0000768": {
+   "label": "Idiopathic pulmonary fibrosis",
+   "rows": 3
+  },
+  "EFO:0001072": {
+   "label": "Memory impairment",
+   "rows": 3
+  },
+  "EFO:0001271": {
+   "label": "Mixed sex population",
+   "rows": 2
+  },
+  "EFO:0001355": {
+   "label": "Infant",
+   "rows": 5
+  },
+  "EFO:0001382": {
+   "label": "Puberty",
+   "rows": 2
+  },
+  "EFO:0001702": {
+   "label": "Temperature",
+   "rows": 4
+  },
+  "EFO:0001746": {
+   "label": "Development or differentiation design",
+   "rows": 4
+  },
+  "EFO:0001750": {
+   "label": "Organism part comparison design",
+   "rows": 6
+  },
+  "EFO:0001752": {
+   "label": "Sex design",
+   "rows": 8
+  },
+  "EFO:0001753": {
+   "label": "Species design",
+   "rows": 87
+  },
+  "EFO:0001762": {
+   "label": "Stimulus or stress design",
+   "rows": 14
+  },
+  "EFO:0001784": {
+   "label": "Genotyping design",
+   "rows": 14
+  },
+  "EFO:0001799": {
+   "label": "Ethnic group",
+   "rows": 74
+  },
+  "EFO:0002460": {
+   "label": "Hypertrophy",
+   "rows": 9
+  },
+  "EFO:0002721": {
+   "label": "Postmenopausal",
+   "rows": 1
+  },
+  "EFO:0002755": {
+   "label": "Diet",
+   "rows": 463
+  },
+  "EFO:0002756": {
+   "label": "Fasting",
+   "rows": 13
+  },
+  "EFO:0002757": {
+   "label": "High fat diet",
+   "rows": 31
+  },
+  "EFO:0002904": {
+   "label": "Weight percent",
+   "rows": 2
+  },
+  "EFO:0002944": {
+   "label": "Nucleic acid extraction protocol",
+   "rows": 8
+  },
+  "EFO:0002947": {
+   "label": "Parous",
+   "rows": 1
+  },
+  "EFO:0002950": {
+   "label": "Pregnancy",
+   "rows": 49
+  },
+  "EFO:0003015": {
+   "label": "Aggressive behavior",
+   "rows": 3
+  },
+  "EFO:0003786": {
+   "label": "Cytokine",
+   "rows": 2
+  },
+  "EFO:0003788": {
+   "label": "Gene expression protocol",
+   "rows": 4
+  },
+  "EFO:0003791": {
+   "label": "Interleukin (Homo sapiens)",
+   "rows": 1
+  },
+  "EFO:0003809": {
+   "label": "Sample treatment protocol",
+   "rows": 10
+  },
+  "EFO:0003917": {
+   "label": "Premature birth",
+   "rows": 25
+  },
+  "EFO:0003919": {
+   "label": "Risk factor",
+   "rows": 8
+  },
+  "EFO:0003924": {
+   "label": "Hair color",
+   "rows": 2
+  },
+  "EFO:0003939": {
+   "label": "Energy intake",
+   "rows": 6
+  },
+  "EFO:0003940": {
+   "label": "Physical activity",
+   "rows": 19
+  },
+  "EFO:0003961": {
+   "label": "Hormone replacement therapy",
+   "rows": 6
+  },
+  "EFO:0004134": {
+   "label": "Tumor size",
+   "rows": 6
+  },
+  "EFO:0004195": {
+   "label": "LDL cholesterol",
+   "rows": 4
+  },
+  "EFO:0004297": {
+   "label": "Clinical laboratory measurement",
+   "rows": 2
+  },
+  "EFO:0004307": {
+   "label": "Glucose tolerance test",
+   "rows": 8
+  },
+  "EFO:0004309": {
+   "label": "Platelet count",
+   "rows": 1
+  },
+  "EFO:0004316": {
+   "label": "Exploratory behavior",
+   "rows": 4
+  },
+  "EFO:0004318": {
+   "label": "Smoking behavior",
+   "rows": 123
+  },
+  "EFO:0004329": {
+   "label": "Alcohol drinking",
+   "rows": 32
+  },
+  "EFO:0004330": {
+   "label": "Coffee consumption",
+   "rows": 22
+  },
+  "EFO:0004338": {
+   "label": "Body weight",
+   "rows": 15
+  },
+  "EFO:0004340": {
+   "label": "Body mass index",
+   "rows": 51
+  },
+  "EFO:0004341": {
+   "label": "Body fat distribution",
+   "rows": 18
+  },
+  "EFO:0004343": {
+   "label": "Waist-hip ratio",
+   "rows": 5
+  },
+  "EFO:0004344": {
+   "label": "Birth weight",
+   "rows": 1
+  },
+  "EFO:0004357": {
+   "label": "Electroencephalogram measurement",
+   "rows": 2
+  },
+  "EFO:0004444": {
+   "label": "Environmental history",
+   "rows": 4
+  },
+  "EFO:0004445": {
+   "label": "Cohort",
+   "rows": 4
+  },
+  "EFO:0004458": {
+   "label": "C-reactive protein measurement",
+   "rows": 8
+  },
+  "EFO:0004459": {
+   "label": "Ferritin measurement",
+   "rows": 2
+  },
+  "EFO:0004461": {
+   "label": "Iron biomarker measurement",
+   "rows": 12
+  },
+  "EFO:0004467": {
+   "label": "Insulin measurement",
+   "rows": 3
+  },
+  "EFO:0004468": {
+   "label": "Glucose measurement",
+   "rows": 6
+  },
+  "EFO:0004471": {
+   "label": "Insulin sensitivity measurement",
+   "rows": 13
+  },
+  "EFO:0004501": {
+   "label": "HOMA-IR",
+   "rows": 1
+  },
+  "EFO:0004509": {
+   "label": "Hemoglobin measurement",
+   "rows": 4
+  },
+  "EFO:0004530": {
+   "label": "Triglyceride measurement",
+   "rows": 15
+  },
+  "EFO:0004532": {
+   "label": "Serum gamma-glutamyl transferase measurement",
+   "rows": 4
+  },
+  "EFO:0004536": {
+   "label": "Total blood protein measurement",
+   "rows": 2
+  },
+  "EFO:0004541": {
+   "label": "HbA1c measurement",
+   "rows": 3
+  },
+  "EFO:0004566": {
+   "label": "Body weight gain",
+   "rows": 2
+  },
+  "EFO:0004570": {
+   "label": "Bilirubin measurement",
+   "rows": 6
+  },
+  "EFO:0004574": {
+   "label": "Total cholesterol measurement",
+   "rows": 21
+  },
+  "EFO:0004586": {
+   "label": "Complete blood cell count",
+   "rows": 2
+  },
+  "EFO:0004587": {
+   "label": "Lymphocyte count",
+   "rows": 1
+  },
+  "EFO:0004595": {
+   "label": "HIV mother to child transmission",
+   "rows": 18
+  },
+  "EFO:0004599": {
+   "label": "Acute graft vs. host disease",
+   "rows": 14
+  },
+  "EFO:0004611": {
+   "label": "Low density lipoprotein cholesterol measurement",
+   "rows": 17
+  },
+  "EFO:0004612": {
+   "label": "High density lipoprotein cholesterol measurement",
+   "rows": 9
+  },
+  "EFO:0004618": {
+   "label": "Vitamin K measurement",
+   "rows": 2
+  },
+  "EFO:0004620": {
+   "label": "Vitamin B12 measurement",
+   "rows": 1
+  },
+  "EFO:0004621": {
+   "label": "Vitamin B6 measurement",
+   "rows": 1
+  },
+  "EFO:0004645": {
+   "label": "Response to vaccine",
+   "rows": 39
+  },
+  "EFO:0004696": {
+   "label": "Sex hormone-binding globulin measurement",
+   "rows": 4
+  },
+  "EFO:0004697": {
+   "label": "Estradiol measurement",
+   "rows": 28
+  },
+  "EFO:0004703": {
+   "label": "Age at menarche",
+   "rows": 2
+  },
+  "EFO:0004723": {
+   "label": "Coronary artery calcification",
+   "rows": 4
+  },
+  "EFO:0004725": {
+   "label": "Metabolite measurement",
+   "rows": 1
+  },
+  "EFO:0004730": {
+   "label": "Hormone measurement",
+   "rows": 2
+  },
+  "EFO:0004736": {
+   "label": "Aspartate aminotransferase measurement",
+   "rows": 9
+  },
+  "EFO:0004747": {
+   "label": "Protein measurement",
+   "rows": 1
+  },
+  "EFO:0004750": {
+   "label": "Interleukin 10 measurement",
+   "rows": 6
+  },
+  "EFO:0004754": {
+   "label": "Interleukin 1 receptor antagonist measurement",
+   "rows": 1
+  },
+  "EFO:0004761": {
+   "label": "Uric acid measurement",
+   "rows": 2
+  },
+  "EFO:0004768": {
+   "label": "Follicle stimulating hormone measurement",
+   "rows": 3
+  },
+  "EFO:0004774": {
+   "label": "Chewing tobacco behavior",
+   "rows": 1
+  },
+  "EFO:0004784": {
+   "label": "Self reported educational attainment",
+   "rows": 2
+  },
+  "EFO:0004810": {
+   "label": "Interleukin-6 measurement",
+   "rows": 8
+  },
+  "EFO:0004811": {
+   "label": "Interleukin 8 measurement",
+   "rows": 5
+  },
+  "EFO:0004812": {
+   "label": "Interleukin-1 beta measurement",
+   "rows": 7
+  },
+  "EFO:0004843": {
+   "label": "Vitamin B measurement",
+   "rows": 3
+  },
+  "EFO:0004866": {
+   "label": "Autoantibody measurement",
+   "rows": 10
+  },
+  "EFO:0004872": {
+   "label": "Inflammatory biomarker measurement",
+   "rows": 1
+  },
+  "EFO:0004908": {
+   "label": "Testosterone measurement",
+   "rows": 10
+  },
+  "EFO:0004925": {
+   "label": "Tumor stage",
+   "rows": 12
+  },
+  "EFO:0004930": {
+   "label": "M1 distant metastasis stage",
+   "rows": 2
+  },
+  "EFO:0004952": {
+   "label": "Disease recurrence",
+   "rows": 18
+  },
+  "EFO:0004980": {
+   "label": "Appendicular lean mass",
+   "rows": 2
+  },
+  "EFO:0004982": {
+   "label": "Microbiome",
+   "rows": 14
+  },
+  "EFO:0004983": {
+   "label": "Complement C3 measurement",
+   "rows": 1
+  },
+  "EFO:0004984": {
+   "label": "Complement C4 measurement",
+   "rows": 2
+  },
+  "EFO:0004995": {
+   "label": "Lean body mass",
+   "rows": 7
+  },
+  "EFO:0004998": {
+   "label": "Carbohydrate measurement",
+   "rows": 2
+  },
+  "EFO:0005035": {
+   "label": "Hippocampal volume",
+   "rows": 9
+  },
+  "EFO:0005043": {
+   "label": "Cardiac troponin T measurement",
+   "rows": 1
+  },
+  "EFO:0005057": {
+   "label": "Myoglobin measurement",
+   "rows": 1
+  },
+  "EFO:0005109": {
+   "label": "Energy expenditure",
+   "rows": 2
+  },
+  "EFO:0005112": {
+   "label": "Gestational age",
+   "rows": 9
+  },
+  "EFO:0005117": {
+   "label": "CCL5 measurement",
+   "rows": 2
+  },
+  "EFO:0005121": {
+   "label": "Freeze dried specimen",
+   "rows": 1
+  },
+  "EFO:0005135": {
+   "label": "Strain",
+   "rows": 6
+  },
+  "EFO:0005187": {
+   "label": "C-peptide measurement",
+   "rows": 2
+  },
+  "EFO:0005197": {
+   "label": "Beta-2 microglobulin measurement",
+   "rows": 1
+  },
+  "EFO:0005198": {
+   "label": "Transplant outcome measurement",
+   "rows": 37
+  },
+  "EFO:0005199": {
+   "label": "Renal transplant outcome measurement",
+   "rows": 2
+  },
+  "EFO:0005238": {
+   "label": "Breed",
+   "rows": 33
+  },
+  "EFO:0005420": {
+   "label": "Grey matter volume measurement",
+   "rows": 8
+  },
+  "EFO:0005512": {
+   "label": "Estrogen receptor status",
+   "rows": 1
+  },
+  "EFO:0005518": {
+   "label": "Sample collection protocol",
+   "rows": 16
+  },
+  "EFO:0005607": {
+   "label": "Breast cancer stage",
+   "rows": 2
+  },
+  "EFO:0005689": {
+   "label": "Non-high density lipoprotein cholesterol measurement",
+   "rows": 2
+  },
+  "EFO:0005756": {
+   "label": "Skin wound",
+   "rows": 3
+  },
+  "EFO:0005757": {
+   "label": "Vaginal inflammation",
+   "rows": 2
+  },
+  "EFO:0005844": {
+   "label": "Response to dietary antigen",
+   "rows": 12
+  },
+  "EFO:0005935": {
+   "label": "Overweight body mass index status",
+   "rows": 8
+  },
+  "EFO:0005941": {
+   "label": "Mammographic density measurement",
+   "rows": 2
+  },
+  "EFO:0006335": {
+   "label": "Systolic blood pressure",
+   "rows": 8
+  },
+  "EFO:0006336": {
+   "label": "Diastolic blood pressure",
+   "rows": 11
+  },
+  "EFO:0006340": {
+   "label": "Mean arterial pressure",
+   "rows": 1
+  },
+  "EFO:0006341": {
+   "label": "Transferrin measurement",
+   "rows": 1
+  },
+  "EFO:0006514": {
+   "label": "Alzheimer's disease biomarker measurement",
+   "rows": 2
+  },
+  "EFO:0006527": {
+   "label": "Smoking status measurement",
+   "rows": 39
+  },
+  "EFO:0006796": {
+   "label": "Very long-chain saturated fatty acid measurement",
+   "rows": 1
+  },
+  "EFO:0006820": {
+   "label": "Complicated disease course",
+   "rows": 2
+  },
+  "EFO:0006821": {
+   "label": "Trans fatty acid measurement",
+   "rows": 1
+  },
+  "EFO:0006832": {
+   "label": "Disposition index measurement",
+   "rows": 6
+  },
+  "EFO:0006864": {
+   "label": "Breastfeeding duration",
+   "rows": 36
+  },
+  "EFO:0006876": {
+   "label": "Seasonality measurement",
+   "rows": 6
+  },
+  "EFO:0006917": {
+   "label": "Spontaneous preterm birth",
+   "rows": 46
+  },
+  "EFO:0006918": {
+   "label": "Female fertility",
+   "rows": 1
+  },
+  "EFO:0006921": {
+   "label": "Birth measurement",
+   "rows": 11
+  },
+  "EFO:0006922": {
+   "label": "Delivery measurement",
+   "rows": 22
+  },
+  "EFO:0006927": {
+   "label": "Severe aplastic anemia",
+   "rows": 4
+  },
+  "EFO:0007001": {
+   "label": "Dehydroepiandrosterone sulphate measurement",
+   "rows": 1
+  },
+  "EFO:0007005": {
+   "label": "Free androgen index",
+   "rows": 1
+  },
+  "EFO:0007006": {
+   "label": "Depressive symptom measurement",
+   "rows": 4
+  },
+  "EFO:0007010": {
+   "label": "Drug use measurement",
+   "rows": 6
+  },
+  "EFO:0007041": {
+   "label": "Obese body mass index status",
+   "rows": 7
+  },
+  "EFO:0007043": {
+   "label": "Response to transplant",
+   "rows": 189
+  },
+  "EFO:0007044": {
+   "label": "Response to allogeneic hematopoietic stem cell transplant",
+   "rows": 27
+  },
+  "EFO:0007056": {
+   "label": "Clinical treatment",
+   "rows": 43
+  },
+  "EFO:0007248": {
+   "label": "Egg allergy",
+   "rows": 3
+  },
+  "EFO:0007369": {
+   "label": "Milk allergic reaction",
+   "rows": 16
+  },
+  "EFO:0007382": {
+   "label": "Multiple chemical sensitivity",
+   "rows": 2
+  },
+  "EFO:0007560": {
+   "label": "Gene deletion library",
+   "rows": 1
+  },
+  "EFO:0007585": {
+   "label": "Cannabis use",
+   "rows": 8
+  },
+  "EFO:0007621": {
+   "label": "Bone mineral content measurement",
+   "rows": 19
+  },
+  "EFO:0007629": {
+   "label": "Hemoglobin A1 measurement",
+   "rows": 1
+  },
+  "EFO:0007637": {
+   "label": "Traditional Chinese medicine type",
+   "rows": 58
+  },
+  "EFO:0007652": {
+   "label": "Health trait",
+   "rows": 4
+  },
+  "EFO:0007658": {
+   "label": "Carrier status",
+   "rows": 4
+  },
+  "EFO:0007678": {
+   "label": "Total fat intake measurement",
+   "rows": 1
+  },
+  "EFO:0007681": {
+   "label": "Triglyceride change measurement",
+   "rows": 2
+  },
+  "EFO:0007684": {
+   "label": "Response to high fat food intake",
+   "rows": 1
+  },
+  "EFO:0007698": {
+   "label": "GBA carrier status",
+   "rows": 4
+  },
+  "EFO:0007710": {
+   "label": "Cognitive decline measurement",
+   "rows": 3
+  },
+  "EFO:0007753": {
+   "label": "Seasonal gut microbiome measurement",
+   "rows": 2
+  },
+  "EFO:0007754": {
+   "label": "Response to immunochemotherapy",
+   "rows": 28
+  },
+  "EFO:0007768": {
+   "label": "Response to exercise",
+   "rows": 5
+  },
+  "EFO:0007780": {
+   "label": "Periodontal measurement",
+   "rows": 6
+  },
+  "EFO:0007785": {
+   "label": "Femoral neck bone mineral density",
+   "rows": 1
+  },
+  "EFO:0007797": {
+   "label": "Language measurement",
+   "rows": 1
+  },
+  "EFO:0007800": {
+   "label": "Body fat percentage",
+   "rows": 9
+  },
+  "EFO:0007804": {
+   "label": "LDL cholesterol change measurement",
+   "rows": 1
+  },
+  "EFO:0007813": {
+   "label": "Cotinine measurement",
+   "rows": 2
+  },
+  "EFO:0007829": {
+   "label": "Eating behaviour",
+   "rows": 3
+  },
+  "EFO:0007840": {
+   "label": "Pesticide exposure measurement",
+   "rows": 2
+  },
+  "EFO:0007863": {
+   "label": "Illness severity status",
+   "rows": 5
+  },
+  "EFO:0007874": {
+   "label": "Gut microbiome measurement",
+   "rows": 9
+  },
+  "EFO:0007882": {
+   "label": "Microbiome measurement",
+   "rows": 2
+  },
+  "EFO:0007918": {
+   "label": "Response to anti-tuberculosis drug",
+   "rows": 62
+  },
+  "EFO:0007927": {
+   "label": "Schizophrenia symptom severity measurement",
+   "rows": 3
+  },
+  "EFO:0007936": {
+   "label": "Disease prognosis measurement",
+   "rows": 4
+  },
+  "EFO:0007943": {
+   "label": "Response to platinum-based neoadjuvant chemotherapy",
+   "rows": 6
+  },
+  "EFO:0007948": {
+   "label": "HIV-associated neurocognitive disorder",
+   "rows": 4
+  },
+  "EFO:0007965": {
+   "label": "Response to combination chemotherapy",
+   "rows": 5
+  },
+  "EFO:0007972": {
+   "label": "Androstenedione measurement",
+   "rows": 1
+  },
+  "EFO:0007979": {
+   "label": "Childhood trauma measurement",
+   "rows": 2
+  },
+  "EFO:0007990": {
+   "label": "Neutrophil percentage of leukocytes",
+   "rows": 2
+  },
+  "EFO:0007998": {
+   "label": "Cognitive impairment measurement",
+   "rows": 18
+  },
+  "EFO:0007999": {
+   "label": "Lower body strength measurement",
+   "rows": 2
+  },
+  "EFO:0008002": {
+   "label": "Physical activity measurement",
+   "rows": 2
+  },
+  "EFO:0008007": {
+   "label": "Age at assessment",
+   "rows": 6
+  },
+  "EFO:0008056": {
+   "label": "C-X-C motif chemokine 10 measurement",
+   "rows": 1
+  },
+  "EFO:0008111": {
+   "label": "Diet measurement",
+   "rows": 149
+  },
+  "EFO:0008165": {
+   "label": "Interferon gamma measurement",
+   "rows": 3
+  },
+  "EFO:0008174": {
+   "label": "Interleukin 17 measurement",
+   "rows": 3
+  },
+  "EFO:0008184": {
+   "label": "Interleukin 4 measurement",
+   "rows": 5
+  },
+  "EFO:0008231": {
+   "label": "Metalloproteinase inhibitor 3 measurement",
+   "rows": 3
+  },
+  "EFO:0008320": {
+   "label": "White matter volume measurement",
+   "rows": 9
+  },
+  "EFO:0008331": {
+   "label": "Interleukin 2 measurement",
+   "rows": 1
+  },
+  "EFO:0008336": {
+   "label": "Disease progression measurement",
+   "rows": 9
+  },
+  "EFO:0008344": {
+   "label": "Response to placebo",
+   "rows": 2
+  },
+  "EFO:0008354": {
+   "label": "Cognitive function measurement",
+   "rows": 9
+  },
+  "EFO:0008360": {
+   "label": "Environmental exposure measurement",
+   "rows": 22
+  },
+  "EFO:0008380": {
+   "label": "Perceived unattractiveness to mosquitos measurement",
+   "rows": 2
+  },
+  "EFO:0008383": {
+   "label": "Treatment outcome measurement",
+   "rows": 38
+  },
+  "EFO:0008386": {
+   "label": "Body odor measurement",
+   "rows": 14
+  },
+  "EFO:0008393": {
+   "label": "Reaction time measurement",
+   "rows": 4
+  },
+  "EFO:0008421": {
+   "label": "Non-alcoholic fatty liver disease severity measurement",
+   "rows": 3
+  },
+  "EFO:0008435": {
+   "label": "Gestational weight gain measurement",
+   "rows": 5
+  },
+  "EFO:0008454": {
+   "label": "Short physical performance battery score measurement",
+   "rows": 2
+  },
+  "EFO:0008460": {
+   "label": "Colorectal health",
+   "rows": 4
+  },
+  "EFO:0008465": {
+   "label": "Glucagon-like peptide-1 measurement",
+   "rows": 2
+  },
+  "EFO:0008493": {
+   "label": "Cerebral small vessel disease",
+   "rows": 6
+  },
+  "EFO:0008505": {
+   "label": "Hepatitis virus-related hepatocellular carcinoma",
+   "rows": 5
+  },
+  "EFO:0008517": {
+   "label": "Oral lichen planus",
+   "rows": 17
+  },
+  "EFO:0008541": {
+   "label": "Response to opioid",
+   "rows": 12
+  },
+  "EFO:0008562": {
+   "label": "Postpartum",
+   "rows": 18
+  },
+  "EFO:0008572": {
+   "label": "Malnutrition",
+   "rows": 6
+  },
+  "EFO:0008574": {
+   "label": "Gangrene",
+   "rows": 15
+  },
+  "EFO:0008696": {
+   "label": "COPRO-seq",
+   "rows": 10
+  },
+  "EFO:0009010": {
+   "label": "HSV2 virologic severity measurement",
+   "rows": 1
+  },
+  "EFO:0009054": {
+   "label": "Pulmonary arterial hypertension associated with congenital heart disease",
+   "rows": 8
+  },
+  "EFO:0009105": {
+   "label": "High altitude adaptation",
+   "rows": 7
+  },
+  "EFO:0009115": {
+   "label": "Tobacco smoke exposure measurement",
+   "rows": 7
+  },
+  "EFO:0009116": {
+   "label": "Vitamin supplement exposure measurement",
+   "rows": 2
+  },
+  "EFO:0009130": {
+   "label": "Clostridium difficile infection",
+   "rows": 24
+  },
+  "EFO:0009157": {
+   "label": "Susceptibility to malaria",
+   "rows": 2
+  },
+  "EFO:0009371": {
+   "label": "Ketogenic diet",
+   "rows": 11
+  },
+  "EFO:0009372": {
+   "label": "Response to ketogenic diet",
+   "rows": 42
+  },
+  "EFO:0009374": {
+   "label": "Energy intake measurement",
+   "rows": 2
+  },
+  "EFO:0009412": {
+   "label": "Interleukin 1 alpha measurement",
+   "rows": 1
+  },
+  "EFO:0009444": {
+   "label": "Hypoxia",
+   "rows": 24
+  },
+  "EFO:0009458": {
+   "label": "Alcohol use disorder measurement",
+   "rows": 46
+  },
+  "EFO:0009505": {
+   "label": "Head injury",
+   "rows": 2
+  },
+  "EFO:0009520": {
+   "label": "Contraception",
+   "rows": 9
+  },
+  "EFO:0009573": {
+   "label": "High-risk pregnancy",
+   "rows": 5
+  },
+  "EFO:0009583": {
+   "label": "Place of residence measurement",
+   "rows": 8
+  },
+  "EFO:0009592": {
+   "label": "Social interaction measurement",
+   "rows": 15
+  },
+  "EFO:0009603": {
+   "label": "Stroke outcome severity measurement",
+   "rows": 3
+  },
+  "EFO:0009636": {
+   "label": "Cesarean section",
+   "rows": 42
+  },
+  "EFO:0009658": {
+   "label": "Adverse effect",
+   "rows": 9
+  },
+  "EFO:0009695": {
+   "label": "Household income",
+   "rows": 1
+  },
+  "EFO:0009696": {
+   "label": "Social deprivation",
+   "rows": 3
+  },
+  "EFO:0009697": {
+   "label": "Pathological complete response",
+   "rows": 11
+  },
+  "EFO:0009705": {
+   "label": "Small intestine enteropathy",
+   "rows": 6
+  },
+  "EFO:0009713": {
+   "label": "Number of siblings",
+   "rows": 1
+  },
+  "EFO:0009714": {
+   "label": "Chronic disease",
+   "rows": 2
+  },
+  "EFO:0009744": {
+   "label": "Surgical resection",
+   "rows": 1
+  },
+  "EFO:0009756": {
+   "label": "Autoimmune type 1 diabetes",
+   "rows": 7
+  },
+  "EFO:0009765": {
+   "label": "Alanine measurement",
+   "rows": 2
+  },
+  "EFO:0009771": {
+   "label": "Methionine measurement",
+   "rows": 2
+  },
+  "EFO:0009785": {
+   "label": "Remission",
+   "rows": 4
+  },
+  "EFO:0009856": {
+   "label": "Lichen planopilaris",
+   "rows": 3
+  },
+  "EFO:0009857": {
+   "label": "Ruminative stress response",
+   "rows": 2
+  },
+  "EFO:0009909": {
+   "label": "Stage 5 chronic kidney disease",
+   "rows": 1
+  },
+  "EFO:0009937": {
+   "label": "Opioid use measurement",
+   "rows": 7
+  },
+  "EFO:0009948": {
+   "label": "Chorioamnionitis",
+   "rows": 1
+  },
+  "EFO:0009951": {
+   "label": "Response to surgery",
+   "rows": 11
+  },
+  "EFO:0010060": {
+   "label": "Chronic human papillomavirus infection",
+   "rows": 1
+  },
+  "EFO:0010063": {
+   "label": "Therapeutic Procedure",
+   "rows": 3
+  },
+  "EFO:0010078": {
+   "label": "Dentures",
+   "rows": 4
+  },
+  "EFO:0010088": {
+   "label": "Beverage consumption measurement",
+   "rows": 15
+  },
+  "EFO:0010091": {
+   "label": "Tea consumption measurement",
+   "rows": 2
+  },
+  "EFO:0010097": {
+   "label": "Sugar sweetened beverage consumption measurement",
+   "rows": 5
+  },
+  "EFO:0010098": {
+   "label": "Stress-related disorder",
+   "rows": 15
+  },
+  "EFO:0010105": {
+   "label": "CD4-positive T-lymphocyte count",
+   "rows": 2
+  },
+  "EFO:0010119": {
+   "label": "Omega-3 polyunsaturated fatty acid measurement",
+   "rows": 10
+  },
+  "EFO:0010123": {
+   "label": "Response to antiviral drug",
+   "rows": 69
+  },
+  "EFO:0010125": {
+   "label": "Viral load",
+   "rows": 16
+  },
+  "EFO:0010130": {
+   "label": "Health study participation",
+   "rows": 112
+  },
+  "EFO:0010134": {
+   "label": "Kidney transplant",
+   "rows": 2
+  },
+  "EFO:0010158": {
+   "label": "Sugar consumption measurement",
+   "rows": 1
+  },
+  "EFO:0010232": {
+   "label": "Osteocalcin measurement",
+   "rows": 1
+  },
+  "EFO:0010235": {
+   "label": "Response to proton-pump inhibitor",
+   "rows": 4
+  },
+  "EFO:0010240": {
+   "label": "Dehydroepiandrosterone measurement",
+   "rows": 1
+  },
+  "EFO:0010270": {
+   "label": "Menstrual disorder",
+   "rows": 4
+  },
+  "EFO:0010282": {
+   "label": "Gastrointestinal disease",
+   "rows": 3
+  },
+  "EFO:0010283": {
+   "label": "Blood disease",
+   "rows": 2
+  },
+  "EFO:0010498": {
+   "label": "Hydroxyproline measurement",
+   "rows": 12
+  },
+  "EFO:0010517": {
+   "label": "Oxalate measurement",
+   "rows": 18
+  },
+  "EFO:0010520": {
+   "label": "Peptide measurement",
+   "rows": 5
+  },
+  "EFO:0010552": {
+   "label": "Social environment measurement",
+   "rows": 5
+  },
+  "EFO:0010576": {
+   "label": "Liver fibrosis measurement",
+   "rows": 13
+  },
+  "EFO:0010587": {
+   "label": "Interleukin-2 receptor subunit alpha measurement",
+   "rows": 1
+  },
+  "EFO:0010596": {
+   "label": "Monocyte chemotactic protein 1 measurement",
+   "rows": 4
+  },
+  "EFO:0010638": {
+   "label": "Atopic asthma",
+   "rows": 30
+  },
+  "EFO:0010685": {
+   "label": "Menopausal or post-menopausal disease",
+   "rows": 2
+  },
+  "EFO:0010690": {
+   "label": "Renal dialysis",
+   "rows": 2
+  },
+  "EFO:0010703": {
+   "label": "Trauma exposure measurement",
+   "rows": 3
+  },
+  "EFO:0010721": {
+   "label": "Lung transplantation",
+   "rows": 8
+  },
+  "EFO:0010724": {
+   "label": "Lifestyle measurement",
+   "rows": 109
+  },
+  "EFO:0010729": {
+   "label": "Sun exposure measurement",
+   "rows": 6
+  },
+  "EFO:0010731": {
+   "label": "Response to low calorie diet",
+   "rows": 4
+  },
+  "EFO:0010733": {
+   "label": "Polyunsaturated fatty acid measurement",
+   "rows": 5
+  },
+  "EFO:0010743": {
+   "label": "Sperm measurement",
+   "rows": 4
+  },
+  "EFO:0010757": {
+   "label": "Response to diet",
+   "rows": 177
+  },
+  "EFO:0010761": {
+   "label": "Adenosine deaminase measurement",
+   "rows": 1
+  },
+  "EFO:0010778": {
+   "label": "CXCL10 measurement",
+   "rows": 2
+  },
+  "EFO:0010809": {
+   "label": "Fat intake measurement",
+   "rows": 7
+  },
+  "EFO:0010810": {
+   "label": "Protein intake measurement",
+   "rows": 22
+  },
+  "EFO:0010811": {
+   "label": "Carbohydrate intake measurement",
+   "rows": 4
+  },
+  "EFO:0010821": {
+   "label": "Liver fat measurement",
+   "rows": 1
+  },
+  "EFO:0010934": {
+   "label": "Aspartate aminotransferase to alanine aminotransferase ratio",
+   "rows": 1
+  },
+  "EFO:0010966": {
+   "label": "Pneumonia severity measurement",
+   "rows": 1
+  },
+  "EFO:0011005": {
+   "label": "Urea measurement",
+   "rows": 1
+  },
+  "EFO:0011014": {
+   "label": "Health-related quality of life measurement",
+   "rows": 22
+  },
+  "EFO:0011018": {
+   "label": "Brain-derived neurotrophic factor measurement",
+   "rows": 2
+  },
+  "EFO:0011024": {
+   "label": "Response to liver transplant",
+   "rows": 16
+  },
+  "EFO:0011046": {
+   "label": "Carcinogenicity",
+   "rows": 11
+  },
+  "EFO:0011054": {
+   "label": "Metabolic toxicity",
+   "rows": 53
+  },
+  "EFO:0020001": {
+   "label": "Drug resistance",
+   "rows": 4
+  },
+  "EFO:0030016": {
+   "label": "Sample splitting",
+   "rows": 1
+  },
+  "EFO:0600011": {
+   "label": "Parkinson's disease symptom measurement",
+   "rows": 4
+  },
+  "EFO:0600019": {
+   "label": "COVID-19 symptoms measurement",
+   "rows": 6
+  },
+  "EFO:0600023": {
+   "label": "Response to immune checkpoint inhibitor",
+   "rows": 13
+  },
+  "EFO:1000165": {
+   "label": "Cervical glandular intraepithelial neoplasia",
+   "rows": 55
+  },
+  "EFO:1000273": {
+   "label": "Gastric Metaplasia",
+   "rows": 4
+  },
+  "EFO:1000636": {
+   "label": "Inflammatory skin disease",
+   "rows": 6
+  },
+  "EFO:1000653": {
+   "label": "Sarcopenia",
+   "rows": 9
+  },
+  "EFO:1000739": {
+   "label": "Neonatal jaundice",
+   "rows": 4
+  },
+  "EFO:1000846": {
+   "label": "Brain hypoxia-Ischemia",
+   "rows": 8
+  },
+  "EFO:1000965": {
+   "label": "Henoch-Schoenlein purpura",
+   "rows": 6
+  },
+  "EFO:1001255": {
+   "label": "Spontaneous abortion",
+   "rows": 4
+  },
+  "EFO:1001390": {
+   "label": "Peri-Implantitis",
+   "rows": 21
+  },
+  "EFO:1001393": {
+   "label": "Periodontal Pocket",
+   "rows": 3
+  },
+  "EFO:1001459": {
+   "label": "Diabetic foot",
+   "rows": 2
+  },
+  "EFO:1001466": {
+   "label": "Graves ophthalmopathy",
+   "rows": 14
+  },
+  "EFO:1001478": {
+   "label": "Systemic inflammatory response syndrome",
+   "rows": 40
+  },
+  "EFO:1001480": {
+   "label": "Metastatic colorectal cancer",
+   "rows": 12
+  },
+  "EFO:1001488": {
+   "label": "Influenza A (H1N1)",
+   "rows": 8
+  },
+  "EFO:1001491": {
+   "label": "Abortion",
+   "rows": 2
+  },
+  "EFO:1001494": {
+   "label": "Psoriasis vulgaris",
+   "rows": 25
+  },
+  "EFO:1001787": {
+   "label": "Experimental arthritis",
+   "rows": 10
+  },
+  "EFO:1001891": {
+   "label": "Gastrointestinal mucositis",
+   "rows": 4
+  },
+  "EFO:1001898": {
+   "label": "Mucositis",
+   "rows": 15
+  },
+  "EFO:1001904": {
+   "label": "Oral mucositis",
+   "rows": 32
+  },
+  "EFO:1001905": {
+   "label": "Oxidative Stress",
+   "rows": 21
+  },
+  "EFO:1002029": {
+   "label": "Chronic rhinosinusitis with nasal polyps",
+   "rows": 6
+  },
+  "ENVO:02500037": {
+   "label": "Air pollution",
+   "rows": 52
+  },
+  "EXO:0000114": {
+   "label": "Socioeconomic status",
+   "rows": 34
+  },
+  "GO:0001775": {
+   "label": "Cell activation",
+   "rows": 2
+  },
+  "GO:0005975": {
+   "label": "Carbohydrate metabolic process",
+   "rows": 1
+  },
+  "GO:0006810": {
+   "label": "Transport",
+   "rows": 6
+  },
+  "GO:0006950": {
+   "label": "Response to stress",
+   "rows": 13
+  },
+  "GO:0007568": {
+   "label": "Aging",
+   "rows": 69
+  },
+  "GO:0007610": {
+   "label": "Behavior",
+   "rows": 15
+  },
+  "GO:0008152": {
+   "label": "Metabolic process",
+   "rows": 9
+  },
+  "GO:0009314": {
+   "label": "Response to radiation",
+   "rows": 6
+  },
+  "GO:0009408": {
+   "label": "Response to heat",
+   "rows": 2
+  },
+  "GO:0009410": {
+   "label": "Response to drug",
+   "rows": 19
+  },
+  "GO:0010226": {
+   "label": "Response to lithium ion",
+   "rows": 3
+  },
+  "GO:0012506": {
+   "label": "Vesicle membrane",
+   "rows": 10
+  },
+  "GO:0019538": {
+   "label": "Cellular protein metabolic process",
+   "rows": 2
+  },
+  "GO:0033273": {
+   "label": "Response to vitamin",
+   "rows": 4
+  },
+  "GO:0036211": {
+   "label": "Protein modification process",
+   "rows": 2
+  },
+  "GO:0036276": {
+   "label": "Response to antidepressant",
+   "rows": 7
+  },
+  "GO:0042697": {
+   "label": "Menopause",
+   "rows": 8
+  },
+  "GO:0044419": {
+   "label": "Interspecies interaction between organisms",
+   "rows": 9
+  },
+  "GO:0046677": {
+   "label": "Response to antibiotic",
+   "rows": 106
+  },
+  "GO:0050913": {
+   "label": "Sensory perception of bitter taste",
+   "rows": 6
+  },
+  "GO:0051384": {
+   "label": "Response to glucocorticoid",
+   "rows": 1
+  },
+  "GO:0051701": {
+   "label": "Interaction with host",
+   "rows": 2
+  },
+  "GO:0097332": {
+   "label": "Response to antipsychotic drug",
+   "rows": 1
+  },
+  "GO:0097336": {
+   "label": "Response to risperidone",
+   "rows": 7
+  },
+  "GO:0097338": {
+   "label": "Response to clozapine",
+   "rows": 2
+  },
+  "GO:1901558": {
+   "label": "Response to metformin",
+   "rows": 13
+  },
+  "GO:1990054": {
+   "label": "Response to temozolomide",
+   "rows": 2
+  },
+  "GO:2000292": {
+   "label": "Regulation of defecation",
+   "rows": 6
+  },
+  "GO:2000294": {
+   "label": "Positive regulation of defecation",
+   "rows": 1
+  },
+  "GSSO:000707": {
+   "label": "Male homosexuality",
+   "rows": 25
+  },
+  "GSSO:001787": {
+   "label": "HIV/AIDS pre-exposure prophylaxis",
+   "rows": 3
+  },
+  "HP:0000016": {
+   "label": "Urinary retention",
+   "rows": 2
+  },
+  "HP:0000112": {
+   "label": "Nephropathy",
+   "rows": 4
+  },
+  "HP:0000155": {
+   "label": "Oral ulcer",
+   "rows": 3
+  },
+  "HP:0000225": {
+   "label": "Gingival bleeding",
+   "rows": 2
+  },
+  "HP:0000545": {
+   "label": "Myopia",
+   "rows": 2
+  },
+  "HP:0000739": {
+   "label": "Anxiety",
+   "rows": 5
+  },
+  "HP:0000855": {
+   "label": "Insulin resistance",
+   "rows": 5
+  },
+  "HP:0000964": {
+   "label": "Eczema",
+   "rows": 26
+  },
+  "HP:0000989": {
+   "label": "Pruritus",
+   "rows": 2
+  },
+  "HP:0001279": {
+   "label": "Syncope",
+   "rows": 1
+  },
+  "HP:0001395": {
+   "label": "Hepatic fibrosis",
+   "rows": 22
+  },
+  "HP:0001397": {
+   "label": "Hepatic steatosis",
+   "rows": 21
+  },
+  "HP:0001508": {
+   "label": "Failure to thrive",
+   "rows": 4
+  },
+  "HP:0001510": {
+   "label": "Growth delay",
+   "rows": 2
+  },
+  "HP:0001518": {
+   "label": "Small for gestational age",
+   "rows": 16
+  },
+  "HP:0001643": {
+   "label": "Patent ductus arteriosus",
+   "rows": 2
+  },
+  "HP:0001788": {
+   "label": "Premature rupture of membranes",
+   "rows": 2
+  },
+  "HP:0001882": {
+   "label": "Leukopenia",
+   "rows": 2
+  },
+  "HP:0001891": {
+   "label": "Iron deficiency anemia",
+   "rows": 10
+  },
+  "HP:0001943": {
+   "label": "Hypoglycemia",
+   "rows": 3
+  },
+  "HP:0001974": {
+   "label": "Leukocytosis",
+   "rows": 1
+  },
+  "HP:0002014": {
+   "label": "Diarrhea",
+   "rows": 58
+  },
+  "HP:0002017": {
+   "label": "Nausea and vomiting",
+   "rows": 2
+  },
+  "HP:0002019": {
+   "label": "Constipation",
+   "rows": 137
+  },
+  "HP:0002086": {
+   "label": "Abnormality of the respiratory system",
+   "rows": 2
+  },
+  "HP:0002140": {
+   "label": "Ischemic stroke",
+   "rows": 17
+  },
+  "HP:0002745": {
+   "label": "Oral leukoplakia",
+   "rows": 4
+  },
+  "HP:0003074": {
+   "label": "Hyperglycemia",
+   "rows": 7
+  },
+  "HP:0003124": {
+   "label": "Hypercholesterolemia",
+   "rows": 2
+  },
+  "HP:0003270": {
+   "label": "Abdominal distention",
+   "rows": 3
+  },
+  "HP:0003565": {
+   "label": "Elevated erythrocyte sedimentation rate",
+   "rows": 2
+  },
+  "HP:0003811": {
+   "label": "Neonatal death",
+   "rows": 2
+  },
+  "HP:0004322": {
+   "label": "Short stature",
+   "rows": 4
+  },
+  "HP:0004323": {
+   "label": "Abnormality of body weight",
+   "rows": 1
+  },
+  "HP:0004324": {
+   "label": "Increased body weight",
+   "rows": 2
+  },
+  "HP:0004326": {
+   "label": "Cachexia",
+   "rows": 2
+  },
+  "HP:0008897": {
+   "label": "Postnatal growth retardation",
+   "rows": 5
+  },
+  "HP:0011015": {
+   "label": "Abnormal blood glucose concentration",
+   "rows": 2
+  },
+  "HP:0011024": {
+   "label": "Abnormality of the gastrointestinal tract",
+   "rows": 8
+  },
+  "HP:0011968": {
+   "label": "Feeding difficulties",
+   "rows": 1
+  },
+  "HP:0012115": {
+   "label": "Hepatitis",
+   "rows": 2
+  },
+  "HP:0012207": {
+   "label": "Reduced sperm motility",
+   "rows": 1
+  },
+  "HP:0012378": {
+   "label": "Fatigue",
+   "rows": 5
+  },
+  "HP:0012450": {
+   "label": "Chronic constipation",
+   "rows": 108
+  },
+  "HP:0012649": {
+   "label": "Increased inflammatory response",
+   "rows": 4
+  },
+  "HP:0012758": {
+   "label": "Neurodevelopmental delay",
+   "rows": 9
+  },
+  "HP:0012864": {
+   "label": "Abnormal sperm morphology",
+   "rows": 5
+  },
+  "HP:0030828": {
+   "label": "Wheezing",
+   "rows": 4
+  },
+  "HP:0030878": {
+   "label": "Abnormality on pulmonary function testing",
+   "rows": 2
+  },
+  "HP:0031217": {
+   "label": "Hot flashes",
+   "rows": 7
+  },
+  "HP:0031456": {
+   "label": "Ectopic pregnancy",
+   "rows": 2
+  },
+  "HP:0031685": {
+   "label": "Abnormal stool composition",
+   "rows": 10
+  },
+  "HP:0040187": {
+   "label": "Neonatal sepsis",
+   "rows": 2
+  },
+  "HP:0100543": {
+   "label": "Cognitive impairment",
+   "rows": 55
+  },
+  "HP:0100607": {
+   "label": "Dysmenorrhea",
+   "rows": 11
+  },
+  "HP:0100738": {
+   "label": "Abnormal eating behavior",
+   "rows": 1
+  },
+  "HP:0100806": {
+   "label": "Sepsis",
+   "rows": 4
+  },
+  "HP:0100812": {
+   "label": "Halitosis",
+   "rows": 2
+  },
+  "HP:0410204": {
+   "label": "Increased intestinal transit time",
+   "rows": 25
+  },
+  "IDOMAL:0001254": {
+   "label": "Population",
+   "rows": 130
+  },
+  "MONDO:0000270": {
+   "label": "Lower respiratory tract disease",
+   "rows": 4
+  },
+  "MONDO:0000314": {
+   "label": "Primary bacterial infectious disease",
+   "rows": 4
+  },
+  "MONDO:0000368": {
+   "label": "Extrapulmonary tuberculosis",
+   "rows": 5
+  },
+  "MONDO:0000607": {
+   "label": "Cutaneous T-cell lymphoma",
+   "rows": 4
+  },
+  "MONDO:0000709": {
+   "label": "Crohn ileitis",
+   "rows": 1
+  },
+  "MONDO:0000837": {
+   "label": "Bone resorption disease",
+   "rows": 1
+  },
+  "MONDO:0000922": {
+   "label": "Pelvic Inflammatory Disease",
+   "rows": 2
+  },
+  "MONDO:0000984": {
+   "label": "Thalassemia",
+   "rows": 4
+  },
+  "MONDO:0001056": {
+   "label": "Gastric cancer",
+   "rows": 118
+  },
+  "MONDO:0001165": {
+   "label": "Tongue disease",
+   "rows": 2
+  },
+  "MONDO:0001208": {
+   "label": "Acute respiratory failure",
+   "rows": 14
+  },
+  "MONDO:0001247": {
+   "label": "Social anxiety disorder",
+   "rows": 2
+  },
+  "MONDO:0001475": {
+   "label": "Neutropenia",
+   "rows": 8
+  },
+  "MONDO:0001517": {
+   "label": "Infectious diarrheal disease",
+   "rows": 8
+  },
+  "MONDO:0001577": {
+   "label": "Respiratory Syncytial Virus Infection",
+   "rows": 14
+  },
+  "MONDO:0001627": {
+   "label": "Dementia",
+   "rows": 13
+  },
+  "MONDO:0001673": {
+   "label": "Diarrheal disease",
+   "rows": 2
+  },
+  "MONDO:0001751": {
+   "label": "Cholestasis",
+   "rows": 2
+  },
+  "MONDO:0001770": {
+   "label": "Gastrin secretion abnormality",
+   "rows": 1
+  },
+  "MONDO:0002009": {
+   "label": "Major depressive disorder",
+   "rows": 62,
+   "other_labels": [
+    "Unipolar depression"
+   ]
+  },
+  "MONDO:0002021": {
+   "label": "Gingival disease",
+   "rows": 3
+  },
+  "MONDO:0002025": {
+   "label": "Psychiatric disorder",
+   "rows": 2
+  },
+  "MONDO:0002032": {
+   "label": "Colon carcinoma",
+   "rows": 31
+  },
+  "MONDO:0002038": {
+   "label": "Head and neck carcinoma",
+   "rows": 7
+  },
+  "MONDO:0002039": {
+   "label": "Cognitive disorder",
+   "rows": 4
+  },
+  "MONDO:0002041": {
+   "label": "Fungal infectious disease",
+   "rows": 24
+  },
+  "MONDO:0002050": {
+   "label": "Depressive disorder",
+   "rows": 36
+  },
+  "MONDO:0002169": {
+   "label": "Rectal adenocarcinoma",
+   "rows": 5
+  },
+  "MONDO:0002234": {
+   "label": "Vaginitis",
+   "rows": 2
+  },
+  "MONDO:0002263": {
+   "label": "Female reproductive system disease",
+   "rows": 1
+  },
+  "MONDO:0002269": {
+   "label": "Gastroenteritis",
+   "rows": 8
+  },
+  "MONDO:0002280": {
+   "label": "Anemia",
+   "rows": 5
+  },
+  "MONDO:0002406": {
+   "label": "Dermatitis",
+   "rows": 7
+  },
+  "MONDO:0002428": {
+   "label": "Protozoa infectious disease",
+   "rows": 8
+  },
+  "MONDO:0002494": {
+   "label": "Substance-related disorder",
+   "rows": 4
+  },
+  "MONDO:0002508": {
+   "label": "Gingivitis",
+   "rows": 54
+  },
+  "MONDO:0002516": {
+   "label": "Digestive system cancer",
+   "rows": 2
+  },
+  "MONDO:0002602": {
+   "label": "Central nervous system disease",
+   "rows": 1
+  },
+  "MONDO:0002654": {
+   "label": "Uterine disease",
+   "rows": 6
+  },
+  "MONDO:0002679": {
+   "label": "Cerebral infarction",
+   "rows": 2
+  },
+  "MONDO:0002974": {
+   "label": "Cervical cancer",
+   "rows": 25
+  },
+  "MONDO:0003233": {
+   "label": "Essential tremor",
+   "rows": 3
+  },
+  "MONDO:0003778": {
+   "label": "Primary immunodeficiency disease",
+   "rows": 10
+  },
+  "MONDO:0004277": {
+   "label": "Gonorrhea",
+   "rows": 3
+  },
+  "MONDO:0004335": {
+   "label": "Digestive system disease",
+   "rows": 1
+  },
+  "MONDO:0004508": {
+   "label": "Periapical Periodontitis",
+   "rows": 4
+  },
+  "MONDO:0004514": {
+   "label": "Chronic rhinitis",
+   "rows": 4
+  },
+  "MONDO:0004565": {
+   "label": "Intestinal obstruction",
+   "rows": 5
+  },
+  "MONDO:0004664": {
+   "label": "Helminthiasis",
+   "rows": 31
+  },
+  "MONDO:0004768": {
+   "label": "Keratoconjunctivitis",
+   "rows": 3
+  },
+  "MONDO:0004784": {
+   "label": "Allergic asthma",
+   "rows": 2
+  },
+  "MONDO:0004785": {
+   "label": "Blepharitis",
+   "rows": 8
+  },
+  "MONDO:0004790": {
+   "label": "Fatty liver disease",
+   "rows": 1
+  },
+  "MONDO:0004796": {
+   "label": "Infectious meningitis",
+   "rows": 2
+  },
+  "MONDO:0004822": {
+   "label": "Bronchiectasis",
+   "rows": 9
+  },
+  "MONDO:0004880": {
+   "label": "Bowel dysfunction",
+   "rows": 9
+  },
+  "MONDO:0004950": {
+   "label": "Gastric carcinoma",
+   "rows": 2
+  },
+  "MONDO:0004958": {
+   "label": "Oral squamous cell carcinoma",
+   "rows": 30
+  },
+  "MONDO:0004967": {
+   "label": "Acute lymphoblastic leukemia",
+   "rows": 33
+  },
+  "MONDO:0004975": {
+   "label": "Alzheimer's disease",
+   "rows": 144
+  },
+  "MONDO:0004976": {
+   "label": "Amyotrophic lateral sclerosis",
+   "rows": 3
+  },
+  "MONDO:0004979": {
+   "label": "Asthma",
+   "rows": 73
+  },
+  "MONDO:0004980": {
+   "label": "Atopic eczema",
+   "rows": 133
+  },
+  "MONDO:0004981": {
+   "label": "Atrial fibrillation",
+   "rows": 4
+  },
+  "MONDO:0004985": {
+   "label": "Bipolar disorder",
+   "rows": 21
+  },
+  "MONDO:0004986": {
+   "label": "Bladder carcinoma",
+   "rows": 2
+  },
+  "MONDO:0004989": {
+   "label": "Breast carcinoma",
+   "rows": 8
+  },
+  "MONDO:0004992": {
+   "label": "Cancer",
+   "rows": 4
+  },
+  "MONDO:0004995": {
+   "label": "Cardiovascular disease",
+   "rows": 8
+  },
+  "MONDO:0005002": {
+   "label": "Chronic obstructive pulmonary disease",
+   "rows": 36
+  },
+  "MONDO:0005003": {
+   "label": "Chronic pancreatitis",
+   "rows": 1
+  },
+  "MONDO:0005008": {
+   "label": "Colorectal adenocarcinoma",
+   "rows": 11
+  },
+  "MONDO:0005010": {
+   "label": "Coronary artery disease",
+   "rows": 2
+  },
+  "MONDO:0005011": {
+   "label": "Crohn's disease",
+   "rows": 82
+  },
+  "MONDO:0005012": {
+   "label": "Cutaneous melanoma",
+   "rows": 9
+  },
+  "MONDO:0005015": {
+   "label": "Diabetes mellitus",
+   "rows": 19
+  },
+  "MONDO:0005016": {
+   "label": "Diabetic nephropathy",
+   "rows": 9
+  },
+  "MONDO:0005023": {
+   "label": "Breast ductal carcinoma in situ",
+   "rows": 6
+  },
+  "MONDO:0005027": {
+   "label": "Epilepsy",
+   "rows": 21
+  },
+  "MONDO:0005028": {
+   "label": "Esophageal adenocarcinoma",
+   "rows": 17
+  },
+  "MONDO:0005029": {
+   "label": "Essential thrombocythemia",
+   "rows": 8
+  },
+  "MONDO:0005030": {
+   "label": "Fetal growth restriction",
+   "rows": 3
+  },
+  "MONDO:0005036": {
+   "label": "Gastric adenocarcinoma",
+   "rows": 14
+  },
+  "MONDO:0005041": {
+   "label": "Glaucoma",
+   "rows": 27
+  },
+  "MONDO:0005044": {
+   "label": "Hypertension",
+   "rows": 48
+  },
+  "MONDO:0005046": {
+   "label": "Immune system disease",
+   "rows": 2
+  },
+  "MONDO:0005047": {
+   "label": "Infertility",
+   "rows": 2
+  },
+  "MONDO:0005052": {
+   "label": "Irritable bowel syndrome",
+   "rows": 153
+  },
+  "MONDO:0005059": {
+   "label": "Leukemia",
+   "rows": 6
+  },
+  "MONDO:0005068": {
+   "label": "Myocardial infarction",
+   "rows": 20
+  },
+  "MONDO:0005070": {
+   "label": "Neoplasm",
+   "rows": 4
+  },
+  "MONDO:0005075": {
+   "label": "Papillary thyroid carcinoma",
+   "rows": 19
+  },
+  "MONDO:0005076": {
+   "label": "Periodontitis",
+   "rows": 134
+  },
+  "MONDO:0005081": {
+   "label": "Preeclampsia",
+   "rows": 15
+  },
+  "MONDO:0005083": {
+   "label": "Psoriasis",
+   "rows": 38
+  },
+  "MONDO:0005084": {
+   "label": "Mental or behavioural disorder",
+   "rows": 2
+  },
+  "MONDO:0005087": {
+   "label": "Respiratory system disease",
+   "rows": 2
+  },
+  "MONDO:0005090": {
+   "label": "Schizophrenia",
+   "rows": 71
+  },
+  "MONDO:0005096": {
+   "label": "Squamous cell carcinoma",
+   "rows": 20
+  },
+  "MONDO:0005098": {
+   "label": "Stroke",
+   "rows": 44
+  },
+  "MONDO:0005100": {
+   "label": "Systemic scleroderma",
+   "rows": 10
+  },
+  "MONDO:0005101": {
+   "label": "Ulcerative colitis",
+   "rows": 58
+  },
+  "MONDO:0005105": {
+   "label": "Melanoma",
+   "rows": 8
+  },
+  "MONDO:0005108": {
+   "label": "Viral disease",
+   "rows": 17
+  },
+  "MONDO:0005109": {
+   "label": "HIV infection",
+   "rows": 123
+  },
+  "MONDO:0005113": {
+   "label": "Bacterial disease",
+   "rows": 6
+  },
+  "MONDO:0005130": {
+   "label": "Celiac disease",
+   "rows": 12
+  },
+  "MONDO:0005131": {
+   "label": "Cervical carcinoma",
+   "rows": 2
+  },
+  "MONDO:0005133": {
+   "label": "Endometriosis",
+   "rows": 64
+  },
+  "MONDO:0005134": {
+   "label": "Experimental autoimmune encephalomyelitis",
+   "rows": 3
+  },
+  "MONDO:0005135": {
+   "label": "Parasitic infection",
+   "rows": 2
+  },
+  "MONDO:0005138": {
+   "label": "Lung carcinoma",
+   "rows": 12
+  },
+  "MONDO:0005146": {
+   "label": "Post-traumatic stress disorder",
+   "rows": 3
+  },
+  "MONDO:0005147": {
+   "label": "Type I diabetes mellitus",
+   "rows": 24
+  },
+  "MONDO:0005148": {
+   "label": "Type II diabetes mellitus",
+   "rows": 165
+  },
+  "MONDO:0005150": {
+   "label": "Age-related macular degeneration",
+   "rows": 24
+  },
+  "MONDO:0005155": {
+   "label": "Cirrhosis of liver",
+   "rows": 6
+  },
+  "MONDO:0005157": {
+   "label": "Lymphoid neoplasm",
+   "rows": 2
+  },
+  "MONDO:0005159": {
+   "label": "Prostate carcinoma",
+   "rows": 2
+  },
+  "MONDO:0005161": {
+   "label": "Human papilloma virus infection",
+   "rows": 84
+  },
+  "MONDO:0005163": {
+   "label": "Simian immunodeficiency virus infection",
+   "rows": 30
+  },
+  "MONDO:0005180": {
+   "label": "Parkinson's disease",
+   "rows": 410
+  },
+  "MONDO:0005184": {
+   "label": "Pancreatic ductal adenocarcinoma",
+   "rows": 4
+  },
+  "MONDO:0005192": {
+   "label": "Pancreatic carcinoma",
+   "rows": 37
+  },
+  "MONDO:0005229": {
+   "label": "Bacteriemia",
+   "rows": 2
+  },
+  "MONDO:0005233": {
+   "label": "Non-small cell lung carcinoma",
+   "rows": 4
+  },
+  "MONDO:0005240": {
+   "label": "Kidney disease",
+   "rows": 2
+  },
+  "MONDO:0005249": {
+   "label": "Pneumonia",
+   "rows": 13
+  },
+  "MONDO:0005252": {
+   "label": "Heart failure",
+   "rows": 18
+  },
+  "MONDO:0005258": {
+   "label": "Autism spectrum disorder",
+   "rows": 82
+  },
+  "MONDO:0005260": {
+   "label": "Autism",
+   "rows": 14
+  },
+  "MONDO:0005265": {
+   "label": "Inflammatory bowel disease",
+   "rows": 28
+  },
+  "MONDO:0005266": {
+   "label": "Diabetic retinopathy",
+   "rows": 12
+  },
+  "MONDO:0005269": {
+   "label": "Carotid artery disease",
+   "rows": 2
+  },
+  "MONDO:0005275": {
+   "label": "Lung disease",
+   "rows": 2
+  },
+  "MONDO:0005276": {
+   "label": "Dental caries",
+   "rows": 25
+  },
+  "MONDO:0005283": {
+   "label": "Retinopathy",
+   "rows": 4
+  },
+  "MONDO:0005288": {
+   "label": "Intestinal polyp",
+   "rows": 10
+  },
+  "MONDO:0005292": {
+   "label": "Colitis",
+   "rows": 19
+  },
+  "MONDO:0005298": {
+   "label": "Osteoporosis",
+   "rows": 14
+  },
+  "MONDO:0005300": {
+   "label": "Chronic kidney disease",
+   "rows": 51
+  },
+  "MONDO:0005301": {
+   "label": "Multiple sclerosis",
+   "rows": 91
+  },
+  "MONDO:0005306": {
+   "label": "Ankylosing spondylitis",
+   "rows": 2
+  },
+  "MONDO:0005313": {
+   "label": "Necrotizing enterocolitis",
+   "rows": 4
+  },
+  "MONDO:0005314": {
+   "label": "Relapsing-remitting multiple sclerosis",
+   "rows": 6
+  },
+  "MONDO:0005316": {
+   "label": "Bacterial vaginosis",
+   "rows": 21
+  },
+  "MONDO:0005335": {
+   "label": "Colorectal neoplasm",
+   "rows": 2
+  },
+  "MONDO:0005338": {
+   "label": "Open-angle glaucoma",
+   "rows": 8
+  },
+  "MONDO:0005346": {
+   "label": "Gallstones",
+   "rows": 2
+  },
+  "MONDO:0005347": {
+   "label": "Hypertriglyceridemia",
+   "rows": 7
+  },
+  "MONDO:0005351": {
+   "label": "Anorexia nervosa",
+   "rows": 11
+  },
+  "MONDO:0005354": {
+   "label": "Chronic hepatitis C virus infection",
+   "rows": 6
+  },
+  "MONDO:0005364": {
+   "label": "Graves disease",
+   "rows": 38
+  },
+  "MONDO:0005366": {
+   "label": "Chronic hepatitis B virus infection",
+   "rows": 12
+  },
+  "MONDO:0005371": {
+   "label": "Mood disorder",
+   "rows": 5
+  },
+  "MONDO:0005387": {
+   "label": "Primary ovarian insufficiency",
+   "rows": 6
+  },
+  "MONDO:0005391": {
+   "label": "Restless legs syndrome",
+   "rows": 2
+  },
+  "MONDO:0005404": {
+   "label": "Chronic fatigue syndrome",
+   "rows": 17
+  },
+  "MONDO:0005406": {
+   "label": "Gestational diabetes",
+   "rows": 104
+  },
+  "MONDO:0005414": {
+   "label": "Treatment refractory schizophrenia",
+   "rows": 6
+  },
+  "MONDO:0005419": {
+   "label": "Methamphetamine dependence",
+   "rows": 8
+  },
+  "MONDO:0005420": {
+   "label": "Hypothyroidism",
+   "rows": 11
+  },
+  "MONDO:0005429": {
+   "label": "Prion disease",
+   "rows": 2
+  },
+  "MONDO:0005438": {
+   "label": "Lymph node metastatic carcinoma",
+   "rows": 2
+  },
+  "MONDO:0005459": {
+   "label": "Human african trypanosomiasis",
+   "rows": 2
+  },
+  "MONDO:0005473": {
+   "label": "Temporomandibular joint disorder",
+   "rows": 2
+  },
+  "MONDO:0005484": {
+   "label": "Colorectal adenoma",
+   "rows": 59
+  },
+  "MONDO:0005485": {
+   "label": "Psychosis",
+   "rows": 4
+  },
+  "MONDO:0005494": {
+   "label": "Triple-negative breast cancer",
+   "rows": 5
+  },
+  "MONDO:0005532": {
+   "label": "Crohn's colitis",
+   "rows": 2
+  },
+  "MONDO:0005533": {
+   "label": "Distal colitis",
+   "rows": 1
+  },
+  "MONDO:0005534": {
+   "label": "Ileocolitis",
+   "rows": 2
+  },
+  "MONDO:0005536": {
+   "label": "Pancolitis",
+   "rows": 1
+  },
+  "MONDO:0005546": {
+   "label": "Fibromyalgia",
+   "rows": 2
+  },
+  "MONDO:0005575": {
+   "label": "Colorectal cancer",
+   "rows": 528
+  },
+  "MONDO:0005578": {
+   "label": "Arthritis",
+   "rows": 12
+  },
+  "MONDO:0005580": {
+   "label": "Esophageal squamous cell carcinoma",
+   "rows": 20
+  },
+  "MONDO:0005582": {
+   "label": "Binge eating",
+   "rows": 2
+  },
+  "MONDO:0005583": {
+   "label": "Animal disease",
+   "rows": 2
+  },
+  "MONDO:0005593": {
+   "label": "Chronic periodontitis",
+   "rows": 42
+  },
+  "MONDO:0005618": {
+   "label": "Anxiety disorder",
+   "rows": 19
+  },
+  "MONDO:0005649": {
+   "label": "Appendicitis",
+   "rows": 10
+  },
+  "MONDO:0005654": {
+   "label": "Ascariasis",
+   "rows": 8
+  },
+  "MONDO:0005671": {
+   "label": "Blastocystis hominis infectious disease",
+   "rows": 15
+  },
+  "MONDO:0005701": {
+   "label": "Chlamydia trachomatis infectious disease",
+   "rows": 6
+  },
+  "MONDO:0005705": {
+   "label": "Clonorchiasis",
+   "rows": 2
+  },
+  "MONDO:0005707": {
+   "label": "Coccidiosis",
+   "rows": 9
+  },
+  "MONDO:0005801": {
+   "label": "Human T-lymphotropic virus 1 infectious disease",
+   "rows": 9
+  },
+  "MONDO:0005844": {
+   "label": "Meibomian cyst",
+   "rows": 6
+  },
+  "MONDO:0005892": {
+   "label": "Otitis media with effusion",
+   "rows": 6
+  },
+  "MONDO:0005929": {
+   "label": "Postpartum depression",
+   "rows": 2
+  },
+  "MONDO:0005937": {
+   "label": "REM sleep behavior disorder",
+   "rows": 7
+  },
+  "MONDO:0005960": {
+   "label": "Silicosis",
+   "rows": 2
+  },
+  "MONDO:0005972": {
+   "label": "Streptococcal pneumonia",
+   "rows": 1
+  },
+  "MONDO:0005993": {
+   "label": "Trichomonas vaginitis",
+   "rows": 2
+  },
+  "MONDO:0005996": {
+   "label": "Trichuriasis",
+   "rows": 6
+  },
+  "MONDO:0006001": {
+   "label": "Urinary schistosomiasis",
+   "rows": 14
+  },
+  "MONDO:0006012": {
+   "label": "Viral pneumonia",
+   "rows": 4
+  },
+  "MONDO:0006014": {
+   "label": "Vulvovaginal candidiasis",
+   "rows": 8
+  },
+  "MONDO:0006031": {
+   "label": "Chronic rhinosinusitis",
+   "rows": 1
+  },
+  "MONDO:0006042": {
+   "label": "Meningeal tuberculosis",
+   "rows": 6
+  },
+  "MONDO:0006052": {
+   "label": "Pulmonary tuberculosis",
+   "rows": 97
+  },
+  "MONDO:0006060": {
+   "label": "Nasopharyngeal squamous cell carcinoma",
+   "rows": 12
+  },
+  "MONDO:0006130": {
+   "label": "Central Nervous System Neoplasm",
+   "rows": 2
+  },
+  "MONDO:0006143": {
+   "label": "Cervical squamous cell carcinoma",
+   "rows": 4
+  },
+  "MONDO:0006156": {
+   "label": "Colon Sessile Serrated Adenoma/Polyp",
+   "rows": 1
+  },
+  "MONDO:0006157": {
+   "label": "Colorectal Adenosquamous Carcinoma",
+   "rows": 6
+  },
+  "MONDO:0006159": {
+   "label": "Colorectal Gastrointestinal Stromal Tumor",
+   "rows": 3
+  },
+  "MONDO:0006181": {
+   "label": "Digestive System Carcinoma",
+   "rows": 4
+  },
+  "MONDO:0006244": {
+   "label": "HER2 Positive Breast Carcinoma",
+   "rows": 2
+  },
+  "MONDO:0006249": {
+   "label": "Hyperplastic Polyp",
+   "rows": 2
+  },
+  "MONDO:0006365": {
+   "label": "Peutz-Jeghers Polyp",
+   "rows": 8
+  },
+  "MONDO:0006373": {
+   "label": "Pituitary Gland Adenoma",
+   "rows": 2
+  },
+  "MONDO:0006498": {
+   "label": "Adenomatous colon polyp",
+   "rows": 5
+  },
+  "MONDO:0006502": {
+   "label": "Acute respiratory distress syndrome",
+   "rows": 1
+  },
+  "MONDO:0006515": {
+   "label": "Acute pancreatitis",
+   "rows": 30
+  },
+  "MONDO:0006559": {
+   "label": "Hidradenitis suppurativa",
+   "rows": 4
+  },
+  "MONDO:0006604": {
+   "label": "Rosacea",
+   "rows": 3
+  },
+  "MONDO:0006608": {
+   "label": "Seborrheic dermatitis",
+   "rows": 4
+  },
+  "MONDO:0006624": {
+   "label": "Overactive bladder",
+   "rows": 4
+  },
+  "MONDO:0006626": {
+   "label": "Diabetic neuropathy",
+   "rows": 5
+  },
+  "MONDO:0006651": {
+   "label": "Anterior uveitis",
+   "rows": 6
+  },
+  "MONDO:0006665": {
+   "label": "Atrophic gastritis",
+   "rows": 2
+  },
+  "MONDO:0006696": {
+   "label": "Cervix erosion",
+   "rows": 2
+  },
+  "MONDO:0006702": {
+   "label": "Chronic inflammatory demyelinating polyradiculoneuropathy",
+   "rows": 2
+  },
+  "MONDO:0006722": {
+   "label": "Dental fluorosis",
+   "rows": 6
+  },
+  "MONDO:0006733": {
+   "label": "Dry eye syndrome",
+   "rows": 59
+  },
+  "MONDO:0006757": {
+   "label": "Extrahepatic cholestasis",
+   "rows": 2
+  },
+  "MONDO:0006793": {
+   "label": "Hyperpituitarism",
+   "rows": 2
+  },
+  "MONDO:0006849": {
+   "label": "Mastitis",
+   "rows": 12
+  },
+  "MONDO:0006873": {
+   "label": "Nutritional deficiency disease",
+   "rows": 2
+  },
+  "MONDO:0006896": {
+   "label": "Peptic esophagitis",
+   "rows": 2
+  },
+  "MONDO:0006916": {
+   "label": "Postcholecystectomy syndrome",
+   "rows": 1
+  },
+  "MONDO:0006920": {
+   "label": "Prediabetes syndrome",
+   "rows": 12
+  },
+  "MONDO:0006952": {
+   "label": "Retinopathy of prematurity",
+   "rows": 1
+  },
+  "MONDO:0006957": {
+   "label": "Root caries",
+   "rows": 2
+  },
+  "MONDO:0006971": {
+   "label": "Sigmoid neoplasm",
+   "rows": 2
+  },
+  "MONDO:0007005": {
+   "label": "Ulcerative proctosigmoiditis",
+   "rows": 2
+  },
+  "MONDO:0007007": {
+   "label": "Ureaplasma urealyticum urethritis",
+   "rows": 1
+  },
+  "MONDO:0007016": {
+   "label": "Vitamin A deficiency",
+   "rows": 2
+  },
+  "MONDO:0007019": {
+   "label": "Vulvovaginitis",
+   "rows": 5
+  },
+  "MONDO:0007027": {
+   "label": "Non-alcoholic steatohepatitis",
+   "rows": 52
+  },
+  "MONDO:0007147": {
+   "label": "Obstructive sleep apnea",
+   "rows": 47
+  },
+  "MONDO:0007179": {
+   "label": "Autoimmune disease",
+   "rows": 8
+  },
+  "MONDO:0007186": {
+   "label": "Gastroesophageal reflux disease",
+   "rows": 19
+  },
+  "MONDO:0007191": {
+   "label": "Behcet's syndrome",
+   "rows": 14
+  },
+  "MONDO:0007254": {
+   "label": "Breast cancer",
+   "rows": 91
+  },
+  "MONDO:0007256": {
+   "label": "Hepatocellular carcinoma",
+   "rows": 33
+  },
+  "MONDO:0007488": {
+   "label": "Lewy body dementia",
+   "rows": 17
+  },
+  "MONDO:0007576": {
+   "label": "Esophageal cancer",
+   "rows": 10
+  },
+  "MONDO:0007691": {
+   "label": "Chronic inflammatory demyelinating polyneuropathy",
+   "rows": 3
+  },
+  "MONDO:0007699": {
+   "label": "Hashimoto's thyroiditis",
+   "rows": 7
+  },
+  "MONDO:0007739": {
+   "label": "Huntington disease",
+   "rows": 2
+  },
+  "MONDO:0007743": {
+   "label": "Attention deficit-hyperactivity disorder",
+   "rows": 28,
+   "other_labels": [
+    "Attention deficit hyperactivity disorder"
+   ]
+  },
+  "MONDO:0007915": {
+   "label": "Systemic lupus erythematosus",
+   "rows": 10
+  },
+  "MONDO:0008114": {
+   "label": "Obsessive-compulsive disorder",
+   "rows": 9
+  },
+  "MONDO:0008159": {
+   "label": "Postmenopausal osteoporosis",
+   "rows": 2
+  },
+  "MONDO:0008170": {
+   "label": "Ovarian cancer",
+   "rows": 46
+  },
+  "MONDO:0008171": {
+   "label": "Nephrolithiasis",
+   "rows": 5
+  },
+  "MONDO:0008219": {
+   "label": "Pemphigus vulgaris",
+   "rows": 2
+  },
+  "MONDO:0008226": {
+   "label": "Aggressive periodontitis",
+   "rows": 8
+  },
+  "MONDO:0008315": {
+   "label": "Prostate cancer",
+   "rows": 15
+  },
+  "MONDO:0008383": {
+   "label": "Rheumatoid arthritis",
+   "rows": 54
+  },
+  "MONDO:0008487": {
+   "label": "Polycystic ovary syndrome",
+   "rows": 165
+  },
+  "MONDO:0008608": {
+   "label": "Down syndrome",
+   "rows": 4
+  },
+  "MONDO:0008661": {
+   "label": "Vitiligo",
+   "rows": 10
+  },
+  "MONDO:0008797": {
+   "label": "Anodontia",
+   "rows": 2
+  },
+  "MONDO:0008867": {
+   "label": "Biliary atresia",
+   "rows": 6
+  },
+  "MONDO:0008903": {
+   "label": "Lung cancer",
+   "rows": 30
+  },
+  "MONDO:0009061": {
+   "label": "Cystic fibrosis",
+   "rows": 16
+  },
+  "MONDO:0009285": {
+   "label": "Gamma-glutamyl transpeptidase deficiency",
+   "rows": 1
+  },
+  "MONDO:0009693": {
+   "label": "Multiple myeloma",
+   "rows": 11
+  },
+  "MONDO:0009861": {
+   "label": "Phenylketonuria",
+   "rows": 32
+  },
+  "MONDO:0010030": {
+   "label": "Sjogren syndrome",
+   "rows": 2
+  },
+  "MONDO:0010150": {
+   "label": "Head and neck squamous cell carcinoma",
+   "rows": 25
+  },
+  "MONDO:0010643": {
+   "label": "Acute Leukemia",
+   "rows": 4
+  },
+  "MONDO:0010811": {
+   "label": "Benign prostatic hyperplasia",
+   "rows": 5
+  },
+  "MONDO:0010888": {
+   "label": "Adenomyosis",
+   "rows": 2
+  },
+  "MONDO:0011122": {
+   "label": "Obesity",
+   "rows": 287
+  },
+  "MONDO:0011382": {
+   "label": "Sickle cell anemia",
+   "rows": 2
+  },
+  "MONDO:0011429": {
+   "label": "Juvenile idiopathic arthritis",
+   "rows": 9
+  },
+  "MONDO:0011438": {
+   "label": "Acne",
+   "rows": 12
+  },
+  "MONDO:0011786": {
+   "label": "Allergic rhinitis",
+   "rows": 8
+  },
+  "MONDO:0011849": {
+   "label": "Psoriatic arthritis",
+   "rows": 4
+  },
+  "MONDO:0011962": {
+   "label": "Endometrial cancer",
+   "rows": 26
+  },
+  "MONDO:0012105": {
+   "label": "Granulomatosis with Polyangiitis",
+   "rows": 6
+  },
+  "MONDO:0012511": {
+   "label": "Preterm premature rupture of the membranes",
+   "rows": 4
+  },
+  "MONDO:0012819": {
+   "label": "Diabetic ketoacidosis",
+   "rows": 2
+  },
+  "MONDO:0013209": {
+   "label": "Non-alcoholic fatty liver disease",
+   "rows": 112
+  },
+  "MONDO:0013598": {
+   "label": "Myostatin-related muscle hypertrophy",
+   "rows": 8
+  },
+  "MONDO:0013600": {
+   "label": "Insomnia",
+   "rows": 2
+  },
+  "MONDO:0013662": {
+   "label": "Barrett's esophagus",
+   "rows": 4
+  },
+  "MONDO:0013730": {
+   "label": "Graft versus host disease",
+   "rows": 14
+  },
+  "MONDO:0013991": {
+   "label": "Obesity due to congenital leptin deficiency",
+   "rows": 4
+  },
+  "MONDO:0014535": {
+   "label": "Hyperproinsulinemia",
+   "rows": 1
+  },
+  "MONDO:0015075": {
+   "label": "Thyroid carcinoma",
+   "rows": 5
+  },
+  "MONDO:0015254": {
+   "label": "Schistosomiasis",
+   "rows": 2
+  },
+  "MONDO:0015517": {
+   "label": "Common variable immunodeficiency",
+   "rows": 10
+  },
+  "MONDO:0015925": {
+   "label": "Interstitial lung disease",
+   "rows": 1
+  },
+  "MONDO:0016264": {
+   "label": "Autoimmune Hepatitis",
+   "rows": 2
+  },
+  "MONDO:0016367": {
+   "label": "Dermatomyositis",
+   "rows": 3
+  },
+  "MONDO:0016642": {
+   "label": "Meningioma",
+   "rows": 1
+  },
+  "MONDO:0018076": {
+   "label": "Tuberculosis",
+   "rows": 12
+  },
+  "MONDO:0018229": {
+   "label": "Stevens-Johnson syndrome",
+   "rows": 2
+  },
+  "MONDO:0018305": {
+   "label": "Chronic granulomatous disease",
+   "rows": 4
+  },
+  "MONDO:0018469": {
+   "label": "Pulmonary non-tuberculous mycobacterial infection",
+   "rows": 7
+  },
+  "MONDO:0018661": {
+   "label": "Zika virus infectious disease",
+   "rows": 7
+  },
+  "MONDO:0018675": {
+   "label": "IgG4-related ophthalmic disease",
+   "rows": 10
+  },
+  "MONDO:0018874": {
+   "label": "Acute myeloid leukemia",
+   "rows": 17
+  },
+  "MONDO:0018905": {
+   "label": "Diffuse large B-cell lymphoma",
+   "rows": 21
+  },
+  "MONDO:0018908": {
+   "label": "Non-Hodgkins lymphoma",
+   "rows": 6
+  },
+  "MONDO:0019052": {
+   "label": "Inborn errors of metabolism",
+   "rows": 2
+  },
+  "MONDO:0019086": {
+   "label": "Esophageal carcinoma",
+   "rows": 2
+  },
+  "MONDO:0019091": {
+   "label": "Bronchopulmonary dysplasia",
+   "rows": 2
+  },
+  "MONDO:0019100": {
+   "label": "Neuromyelitis optica",
+   "rows": 2
+  },
+  "MONDO:0019266": {
+   "label": "SAPHO syndrome",
+   "rows": 2
+  },
+  "MONDO:0019345": {
+   "label": "Shigellosis",
+   "rows": 12
+  },
+  "MONDO:0019471": {
+   "label": "Adult T-cell leukemia/lymphoma",
+   "rows": 3
+  },
+  "MONDO:0019472": {
+   "label": "Extranodal nasal NK/T cell lymphoma",
+   "rows": 25
+  },
+  "MONDO:0019956": {
+   "label": "Encephalitis",
+   "rows": 4
+  },
+  "MONDO:0020782": {
+   "label": "Chronic gingivitis",
+   "rows": 4
+  },
+  "MONDO:0021042": {
+   "label": "Glioma",
+   "rows": 10
+  },
+  "MONDO:0021085": {
+   "label": "Stomach neoplasm",
+   "rows": 1
+  },
+  "MONDO:0021115": {
+   "label": "Luminal B breast carcinoma",
+   "rows": 1
+  },
+  "MONDO:0021116": {
+   "label": "Luminal A breast carcinoma",
+   "rows": 2
+  },
+  "MONDO:0021124": {
+   "label": "Female infertility",
+   "rows": 18
+  },
+  "MONDO:0021204": {
+   "label": "Chronic otitis media",
+   "rows": 2
+  },
+  "MONDO:0021211": {
+   "label": "Brain neoplasm",
+   "rows": 12
+  },
+  "MONDO:0021240": {
+   "label": "Tongue neoplasm",
+   "rows": 2
+  },
+  "MONDO:0021680": {
+   "label": "Streptococcal infection",
+   "rows": 4
+  },
+  "MONDO:0021681": {
+   "label": "Sexually transmitted disease",
+   "rows": 12
+  },
+  "MONDO:0024271": {
+   "label": "Intestinal helminthiasis",
+   "rows": 4
+  },
+  "MONDO:0024331": {
+   "label": "Colorectal carcinoma",
+   "rows": 13
+  },
+  "MONDO:0024355": {
+   "label": "Respiratory tract infectious disease",
+   "rows": 14
+  },
+  "MONDO:0024647": {
+   "label": "Urolithiasis",
+   "rows": 2
+  },
+  "MONDO:0031219": {
+   "label": "Mismatch repair cancer syndrome",
+   "rows": 2
+  },
+  "MONDO:0040679": {
+   "label": "Urothelial carcinoma",
+   "rows": 1
+  },
+  "MONDO:0043693": {
+   "label": "Alcoholic liver disease",
+   "rows": 4
+  },
+  "MONDO:0043797": {
+   "label": "Spinal cord injury",
+   "rows": 6
+  },
+  "MONDO:0044925": {
+   "label": "Oral cavity carcinoma",
+   "rows": 19
+  },
+  "MONDO:0044937": {
+   "label": "Rectal carcinoma",
+   "rows": 2
+  },
+  "MONDO:0044991": {
+   "label": "Upper digestive tract disease",
+   "rows": 6
+  },
+  "MONDO:0045024": {
+   "label": "Cancer or benign tumor",
+   "rows": 2
+  },
+  "MONDO:0045042": {
+   "label": "Restricted to specific location",
+   "rows": 10
+  },
+  "MONDO:0100081": {
+   "label": "Sleep Disorder",
+   "rows": 13
+  },
+  "MONDO:0100096": {
+   "label": "COVID-19",
+   "rows": 217
+  },
+  "MONDO:0100320": {
+   "label": "Post-COVID-19 disorder",
+   "rows": 2
+  },
+  "MONDO:0100338": {
+   "label": "Urinary tract infection",
+   "rows": 40
+  },
+  "MONDO:0100342": {
+   "label": "Malignant glioma",
+   "rows": 1
+  },
+  "MONDO:0100345": {
+   "label": "Lactose intolerance",
+   "rows": 10
+  },
+  "MONDO:0600023": {
+   "label": "Idiopathic inflammatory myopathy",
+   "rows": 4
+  },
+  "MONDO:0700226": {
+   "label": "Food allergy",
+   "rows": 56
+  },
+  "MONDO:8000010": {
+   "label": "Antiphospholipid syndrome",
+   "rows": 5
+  },
+  "MP:0001845": {
+   "label": "Inflammation",
+   "rows": 5
+  },
+  "NCBITaxon:103818": {
+   "label": "Lactobacillus kimchii",
+   "rows": 4
+  },
+  "NCBITaxon:10566": {
+   "label": "Human papillomavirus",
+   "rows": 7
+  },
+  "NCBITaxon:12721": {
+   "label": "Human immunodeficiency virus",
+   "rows": 24
+  },
+  "NCBITaxon:1313": {
+   "label": "Streptococcus pneumoniae",
+   "rows": 12
+  },
+  "NCBITaxon:1492": {
+   "label": "Clostridium butyricum",
+   "rows": 3
+  },
+  "NCBITaxon:1496": {
+   "label": "Clostridium difficile",
+   "rows": 4
+  },
+  "NCBITaxon:1773": {
+   "label": "Mycobacterium tuberculosis",
+   "rows": 28
+  },
+  "NCBITaxon:210": {
+   "label": "Helicobacter pylori",
+   "rows": 10
+  },
+  "NCBITaxon:33858": {
+   "label": "Environmental samples",
+   "rows": 2
+  },
+  "NCBITaxon:568703": {
+   "label": "Lactobacillus rhamnosus GG",
+   "rows": 3
+  },
+  "NCBITaxon:6183": {
+   "label": "Schistosoma mansoni",
+   "rows": 2
+  },
+  "NCBITaxon:694009": {
+   "label": "SARS coronavirus",
+   "rows": 14
+  },
+  "NCBITaxon:813": {
+   "label": "Chlamydia trachomatis",
+   "rows": 13
+  },
+  "NCIT:C102763": {
+   "label": "Cervical cerclage",
+   "rows": 2
+  },
+  "OBA:1000110": {
+   "label": "Bone density",
+   "rows": 17
+  },
+  "OBA:1000840": {
+   "label": "Alcohol consumption measurement",
+   "rows": 10
+  },
+  "OBA:1000869": {
+   "label": "Gait measurement",
+   "rows": 1
+  },
+  "OBA:1000968": {
+   "label": "Vitamin D measurement",
+   "rows": 3
+  },
+  "OBA:1001009": {
+   "label": "Luteinizing hormone measurement",
+   "rows": 4
+  },
+  "OBA:1001013": {
+   "label": "Tumor necrosis factor-alpha measurement",
+   "rows": 4
+  },
+  "OBA:1001085": {
+   "label": "Waist circumference",
+   "rows": 23
+  },
+  "OBA:2040126": {
+   "label": "Response to oxcarbazepine",
+   "rows": 3
+  },
+  "OBA:2040128": {
+   "label": "Response to irinotecan",
+   "rows": 3
+  },
+  "OBA:2040170": {
+   "label": "Sleep quality",
+   "rows": 1
+  },
+  "OBA:2040171": {
+   "label": "Sleep duration",
+   "rows": 10
+  },
+  "OBA:2045224": {
+   "label": "Visceral adipose tissue measurement",
+   "rows": 8
+  },
+  "OBA:2045230": {
+   "label": "Growth rate measurement",
+   "rows": 2
+  },
+  "OBA:2045231": {
+   "label": "Height growth measurement",
+   "rows": 2
+  },
+  "OBA:2045271": {
+   "label": "Brain growth measurement",
+   "rows": 1
+  },
+  "OBA:2045303": {
+   "label": "Natriuretic peptides B measurement",
+   "rows": 2
+  },
+  "OBA:2045329": {
+   "label": "Granulocyte colony-stimulating factor measurement",
+   "rows": 1
+  },
+  "OBA:2045333": {
+   "label": "Macrophage inflammatory protein 1a measurement",
+   "rows": 3
+  },
+  "OBA:2045334": {
+   "label": "Macrophage inflammatory protein 1b measurement",
+   "rows": 4
+  },
+  "OBA:2045404": {
+   "label": "Nitrite measurement",
+   "rows": 4
+  },
+  "OBA:2050043": {
+   "label": "Hippocampal fissure volume",
+   "rows": 4
+  },
+  "OBA:2050062": {
+   "label": "Serum alanine aminotransferase measurement",
+   "rows": 7
+  },
+  "OBA:2050068": {
+   "label": "Serum albumin measurement",
+   "rows": 3
+  },
+  "OBA:2050096": {
+   "label": "Creatinine measurement",
+   "rows": 2
+  },
+  "OBA:2050108": {
+   "label": "Carotid artery intima media thickness",
+   "rows": 2
+  },
+  "OBA:2050116": {
+   "label": "Smoking behaviour measurement",
+   "rows": 31
+  },
+  "OBA:2050117": {
+   "label": "Reproductive behaviour measurement",
+   "rows": 8
+  },
+  "OBA:2050131": {
+   "label": "Vascular endothelial growth factor measurement",
+   "rows": 2
+  },
+  "OBA:2050154": {
+   "label": "Fibroblast growth factor basic measurement",
+   "rows": 1
+  },
+  "OBA:2050167": {
+   "label": "Platelet-derived growth factor BB measurement",
+   "rows": 2
+  },
+  "OBA:2050201": {
+   "label": "Semen measurement",
+   "rows": 6
+  },
+  "OBA:2050291": {
+   "label": "Tumor necrosis factor beta measurement",
+   "rows": 1
+  },
+  "OBA:VT0000047": {
+   "label": "Infant head circumference",
+   "rows": 4
+  },
+  "OBA:VT0000188": {
+   "label": "Fasting blood glucose measurement",
+   "rows": 19
+  },
+  "OBA:VT0000254": {
+   "label": "Cerebrospinal fluid volume measurement",
+   "rows": 1
+  },
+  "OBA:VT0001253": {
+   "label": "Body height",
+   "rows": 2
+  },
+  "OBA:VT0001560": {
+   "label": "Fasting blood insulin measurement",
+   "rows": 5
+  },
+  "OBA:VT0002460": {
+   "label": "Antibody measurement",
+   "rows": 7
+  },
+  "OBA:VT0005416": {
+   "label": "Blood protein measurement",
+   "rows": 2
+  },
+  "OBA:VT0005584": {
+   "label": "Liver enzyme measurement",
+   "rows": 12
+  },
+  "OBA:VT0008752": {
+   "label": "Tumor necrosis factor measurement",
+   "rows": 2
+  },
+  "OBA:VT0010046": {
+   "label": "Fatty acid measurement",
+   "rows": 2
+  },
+  "OBA:VT0010442": {
+   "label": "Behavior or behavioral disorder measurement",
+   "rows": 5
+  },
+  "OBA:VT0015088": {
+   "label": "Glucose metabolism measurement",
+   "rows": 4
+  },
+  "OBI:0000427": {
+   "label": "Enzyme",
+   "rows": 1
+  },
+  "OBI:0000711": {
+   "label": "Library preparation",
+   "rows": 3
+  },
+  "OBI:0100051": {
+   "label": "Specimen",
+   "rows": 10
+  },
+  "OBI:0600002": {
+   "label": "Tumor grading",
+   "rows": 2
+  },
+  "PATO:0000047": {
+   "label": "Biological sex",
+   "rows": 17
+  },
+  "PATO:0000384": {
+   "label": "Male",
+   "rows": 6
+  },
+  "PATO:0001894": {
+   "label": "Phenotypic sex",
+   "rows": 1
+  },
+  "PO:0009001": {
+   "label": "Fruit",
+   "rows": 7
+  },
+  "PO:0009005": {
+   "label": "Root",
+   "rows": 2
+  },
+  "PR:000000017": {
+   "label": "Interferon gamma",
+   "rows": 1
+  },
+  "XCO:0000415": {
+   "label": "Maternal milk",
+   "rows": 64
+  },
+  "XCO:0000671": {
+   "label": "Doxycycline",
+   "rows": 2
+  }
+ }
+}

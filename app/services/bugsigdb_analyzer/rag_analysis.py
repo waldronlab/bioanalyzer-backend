@@ -13,13 +13,12 @@ import app.services.bugsigdb_analyzer as _pkg
 from app.utils.credential_masking import mask_exception_message
 from app.utils.config import ANALYSIS_TIMEOUT, GEMINI_API_KEY
 
+from .condition_disambiguation import disambiguate_condition
 from .constants import _current_timestamp
 from .field_extraction import (
     _avg_confidence,
     _build_curation_summary,
-    _extract_structured_metadata,
     _field_results_from_unified_payload,
-    _heuristic_payload_from_text,
     _parse_json_object,
     _postprocess_field_results,
     _resolve_diff_abundance,
@@ -27,6 +26,11 @@ from .field_extraction import (
     extract_year,
 )
 from .parsing import prepare_analysis_context
+from .simple_analysis import (
+    SOURCE_HEURISTIC,
+    _extract_payload_with_retry,
+    _heuristic_payload,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -138,18 +142,21 @@ async def analyze_paper_with_rag(
 
         processing_time = time.time() - start_time
 
-        # ── LLM extraction ─────────────────────────────────────────────────
-        payload = await _extract_structured_metadata(
+        # ── LLM extraction (JSON mode, one retry) ──────────────────────────
+        payload = await _extract_payload_with_retry(
             context_text=context_for_prompt,
             title=title,
             journal=texts.get("journal", ""),
             year=year if year is not None else "",
+            pmid=pmid,
         )
         if not payload:
             logger.warning(
-                "Empty LLM payload for PMID %s; using heuristic fallback", pmid
+                "No LLM payload for PMID %s after retry; using heuristic fallback",
+                pmid,
             )
-            payload = _heuristic_payload_from_text(analysis_text)
+            payload = _heuristic_payload(analysis_text)
+        extraction_source = payload.get("_source", SOURCE_HEURISTIC)
 
         # Normalization can make blocking network calls (NCBI/OLS fallback
         # lookups) - run off the event loop so a slow lookup doesn't stall
@@ -158,6 +165,15 @@ async def analyze_paper_with_rag(
             _field_results_from_unified_payload, payload
         )
         field_results = _postprocess_field_results(field_results, analysis_text)
+        if "condition" in field_results:
+            field_results["condition"] = await disambiguate_condition(
+                field_results["condition"],
+                title=title,
+                abstract=abstract,
+                unified_qa=_pkg.get_unified_qa(),
+                pmid=pmid,
+                context=analysis_text,
+            )
         has_diff_abund, diff_abund_conf = _resolve_diff_abundance(
             payload, analysis_text
         )
@@ -180,6 +196,9 @@ async def analyze_paper_with_rag(
             "curation_summary": _build_curation_summary(field_results),
             "analysis_timestamp": _current_timestamp(),
             "model_used": model_label,
+            # "llm" or "heuristic": whether the fields came from the model
+            # or from the regex fallback after the LLM returned nothing usable.
+            "extraction_source": extraction_source,
             # RAG-specific extras (not consumed by data.R; useful for debugging)
             "processing_time": processing_time,
             "rag_enabled": use_rag_final,
@@ -197,7 +216,10 @@ async def analyze_paper_with_rag(
             )
 
         logger.info(
-            "RAG analysis completed for PMID %s in %.2fs", pmid, processing_time
+            "RAG analysis completed for PMID %s in %.2fs (source=%s)",
+            pmid,
+            processing_time,
+            extraction_source,
         )
 
         try:
@@ -366,7 +388,7 @@ async def _query_single_field(
         logger.error("UnifiedQA not available — check GEMINI_API_KEY")
         return create_empty_field_result(field_name)
 
-    chat_call = unified_qa.chat(prompt)
+    chat_call = unified_qa.chat(prompt, json_mode=True)
     response = (
         await asyncio.wait_for(chat_call, timeout=ANALYSIS_TIMEOUT)
         if asyncio.iscoroutine(chat_call)
@@ -382,7 +404,7 @@ async def _query_single_field(
             from app.models.gemini_qa import GeminiQA
 
             response = await asyncio.wait_for(
-                GeminiQA(api_key=GEMINI_API_KEY).chat(prompt),
+                GeminiQA(api_key=GEMINI_API_KEY).chat(prompt, json_mode=True),
                 timeout=ANALYSIS_TIMEOUT,
             )
             answer_text = response.get("text", "")

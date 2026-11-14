@@ -78,6 +78,8 @@ setup(
     include_package_data=True,
     package_data={
         "": ["*.md", "*.txt", "*.yml", "*.yaml"],
+        # BugSigDB Condition vocabulary (app/normalization/bugsigdb_vocabulary.py)
+        "app.normalization": ["data/*.json"],
     },
     keywords="bioinformatics, microbiome, bugsigdb, curation, ai, analysis",
     project_urls={

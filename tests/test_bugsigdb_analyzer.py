@@ -448,7 +448,8 @@ class TestPostprocessFieldResults:
         result = _postprocess_field_results(
             field_results, "patients with rheumatoid arthritis were enrolled"
         )
-        assert result["condition"]["value"] == "rheumatoid arthritis"
+        # BugSigDB's label for MONDO:0008383 (bugsigdb_vocabulary.py)
+        assert result["condition"]["value"] == "Rheumatoid arthritis"
         assert result["condition"]["status"] != "ABSENT"
 
     def test_does_not_clobber_a_present_condition_with_a_shorter_unrelated_phrase(
@@ -485,7 +486,23 @@ class TestPostprocessFieldResults:
         result = _postprocess_field_results(
             field_results, "patients with colorectal cancer were recruited"
         )
-        assert result["condition"]["value"] == "colorectal cancer"
+        assert result["condition"]["value"] == "Colorectal cancer"
+
+    def test_does_not_replace_a_non_disease_condition_with_an_unrelated_disease(
+        self,
+    ):
+        """BugSigDB's Condition is the factor the compared groups differ by,
+        often not a disease. A "patients with X" phrase elsewhere in the
+        paper is not a more specific version of "diet" and must not
+        replace it, even though it is longer."""
+        field_results = {
+            "condition": {"value": "diet", "status": "PRESENT", "confidence": 0.8}
+        }
+        result = _postprocess_field_results(
+            field_results,
+            "Patients with ulcerative colitis were randomised to two diets.",
+        )
+        assert result["condition"]["value"] == "diet"
 
     def test_condition_upgrade_recomputes_mapping_tier_not_stale_auto(self):
         """CRITICAL-adjacent regression: this branch swaps in a NEW
@@ -597,6 +614,245 @@ class TestFieldResultsFromUnifiedPayload:
         payload = {"host_species_raw": "human"}
         results = _field_results_from_unified_payload(payload)
         assert results["host_species"]["mapping_tier"] == "auto"
+
+
+_EVIDENCE = (
+    "METHODS: We enrolled 40 patients with celiac disease and 38 healthy controls."
+)
+
+
+class TestConditionEvidenceAndProvenance:
+    """The extraction prompt asks for condition_comparison / conditions /
+    condition_evidence / condition_confidence. They are carried on the
+    condition FieldDict, and "auto" (no curator review) requires evidence."""
+
+    def _payload(self, **overrides):
+        payload = {
+            "condition_comparison": "celiac disease patients vs healthy controls",
+            "conditions": ["celiac disease", "gluten-free diet adherence"],
+            "condition_raw": "celiac disease",
+            "condition_evidence": _EVIDENCE,
+            "condition_confidence": 1.0,
+        }
+        payload.update(overrides)
+        return payload
+
+    def test_carries_comparison_evidence_alternatives_and_confidence(self):
+        cond = _field_results_from_unified_payload(self._payload())["condition"]
+        assert cond["value"] == "Celiac disease"
+        assert cond["comparison"] == "celiac disease patients vs healthy controls"
+        assert cond["evidence"] == _EVIDENCE
+        assert cond["alternatives"] == ["celiac disease", "gluten-free diet adherence"]
+        assert all(isinstance(a, str) for a in cond["alternatives"])
+        assert cond["llm_confidence"] == 1.0
+        assert cond["source"] == "llm"
+        # Evidence-backed, confident exact match may still be auto-accepted.
+        assert cond["mapping_tier"] == "auto"
+        # Existing keys are untouched.
+        for key in (
+            "value",
+            "status",
+            "confidence",
+            "ontology_id",
+            "mapping_confidence",
+            "reason_if_missing",
+            "mapping_tier",
+            "mapping_candidates",
+            "raw",
+        ):
+            assert key in cond
+
+    def test_missing_new_keys_do_not_break_and_cap_tier(self):
+        """An older-style payload (condition_raw only) still maps, but
+        without evidence it can no longer skip curator review."""
+        cond = _field_results_from_unified_payload({"condition_raw": "celiac disease"})[
+            "condition"
+        ]
+        assert cond["value"] == "Celiac disease"
+        assert cond["status"] == "PRESENT"
+        assert cond["evidence"] == ""
+        assert cond["comparison"] == ""
+        assert cond["alternatives"] == ["celiac disease"]
+        assert cond["llm_confidence"] is None
+        assert cond["mapping_tier"] == "review"
+
+    @pytest.mark.parametrize("bad_evidence", [None, "", "   ", 42])
+    def test_no_evidence_caps_tier_at_review(self, bad_evidence):
+        cond = _field_results_from_unified_payload(
+            self._payload(condition_evidence=bad_evidence)
+        )["condition"]
+        assert cond["evidence"] == ""
+        assert cond["mapping_tier"] == "review"
+
+    @pytest.mark.parametrize("low", [0.4, 0.2, 0.0, "0.49"])
+    def test_low_llm_confidence_caps_tier_at_review(self, low):
+        cond = _field_results_from_unified_payload(
+            self._payload(condition_confidence=low)
+        )["condition"]
+        assert cond["mapping_tier"] == "review"
+
+    @pytest.mark.parametrize("junk", ["high", None, True, float("nan"), [1]])
+    def test_invalid_llm_confidence_is_none_and_caps_tier(self, junk):
+        cond = _field_results_from_unified_payload(
+            self._payload(condition_confidence=junk)
+        )["condition"]
+        assert cond["llm_confidence"] is None
+        assert cond["mapping_tier"] == "review"
+
+    def test_llm_confidence_is_clamped(self):
+        cond = _field_results_from_unified_payload(
+            self._payload(condition_confidence=7)
+        )["condition"]
+        assert cond["llm_confidence"] == 1.0
+
+    def test_cap_only_affects_condition(self):
+        results = _field_results_from_unified_payload(
+            self._payload(host_species_raw="human", condition_evidence=None)
+        )
+        assert results["condition"]["mapping_tier"] == "review"
+        assert results["host_species"]["mapping_tier"] == "auto"
+
+    def test_condition_raw_falls_back_to_first_condition(self):
+        cond = _field_results_from_unified_payload(
+            self._payload(condition_raw=None, conditions=["asthma", "season"])
+        )["condition"]
+        assert cond["value"] == "Asthma"
+        assert cond["alternatives"] == ["asthma", "season"]
+
+    def test_condition_raw_kept_first_and_alternatives_deduplicated(self):
+        cond = _field_results_from_unified_payload(
+            self._payload(
+                condition_raw="celiac disease",
+                conditions=["season", "Celiac disease", "", None, 3, "season"],
+            )
+        )["condition"]
+        assert cond["value"] == "Celiac disease"
+        assert cond["alternatives"] == ["celiac disease", "season"]
+
+    def test_conditions_given_as_a_string(self):
+        cond = _field_results_from_unified_payload(
+            self._payload(condition_raw=None, conditions="asthma")
+        )["condition"]
+        assert cond["value"] == "Asthma"
+        assert cond["alternatives"] == ["asthma"]
+
+    def test_overlong_evidence_is_truncated(self):
+        cond = _field_results_from_unified_payload(
+            self._payload(condition_evidence="METHODS: " + "x" * 1000)
+        )["condition"]
+        assert len(cond["evidence"]) <= 300
+        assert cond["evidence"].endswith("...")
+
+    def test_absent_condition_still_carries_evidence(self):
+        """A purely descriptive study: condition null, evidence says why."""
+        cond = _field_results_from_unified_payload(
+            self._payload(
+                condition_raw=None,
+                conditions=[],
+                condition_evidence="METHODS: We describe the gut microbiota of 20 adults.",
+            )
+        )["condition"]
+        assert cond["status"] == "ABSENT"
+        assert cond["evidence"].startswith("METHODS:")
+        assert cond["alternatives"] == []
+
+    def test_llm_payload_marks_every_field_source_llm(self):
+        results = _field_results_from_unified_payload(self._payload())
+        assert {f["source"] for f in results.values()} == {"llm"}
+
+    def test_heuristic_payload_marks_every_field_and_caps_tier(self):
+        payload = _heuristic_payload_from_text(
+            "Fecal samples from 40 patients with rheumatoid arthritis were "
+            "analysed by 16S rRNA gene sequencing."
+        )
+        assert payload["_source"] == "heuristic"
+        results = _field_results_from_unified_payload(payload)
+        assert {f["source"] for f in results.values()} == {"heuristic"}
+        assert all(f["mapping_tier"] != "auto" for f in results.values())
+        # Even an exact vocabulary match from the regex fallback is reviewed.
+        assert results["condition"]["value"] == "Rheumatoid arthritis"
+        assert results["condition"]["mapping_tier"] == "review"
+
+
+class TestPostprocessConditionProvenance:
+    def test_regex_fill_is_marked_and_never_auto(self):
+        """Rheumatoid arthritis is an exact vocabulary match that the LLM
+        path would grade "auto"; filled in by the regex it must be reviewed."""
+        field_results = {
+            "condition": {
+                "value": "",
+                "status": "ABSENT",
+                "confidence": 0.0,
+                "source": "llm",
+                "evidence": "",
+            }
+        }
+        result = _postprocess_field_results(
+            field_results, "patients with rheumatoid arthritis were enrolled"
+        )
+        cond = result["condition"]
+        assert cond["value"] == "Rheumatoid arthritis"
+        assert cond["source"] == "regex"
+        assert cond["mapping_tier"] == "review"
+
+    def test_regex_upgrade_is_marked_and_never_auto(self):
+        field_results = {
+            "condition": {"value": "cancer", "status": "PRESENT", "confidence": 0.5}
+        }
+        result = _postprocess_field_results(
+            field_results, "patients with colorectal cancer were recruited"
+        )
+        assert result["condition"]["value"] == "Colorectal cancer"
+        assert result["condition"]["source"] == "regex"
+        assert result["condition"]["mapping_tier"] == "review"
+
+    @pytest.mark.parametrize(
+        "current,text",
+        [
+            ("periodontitis", "patients with severe periodontitis were enrolled"),
+            ("epilepsy", "patients with drug-resistant epilepsy were enrolled"),
+            ("melanoma", "patients with stage iv melanoma were enrolled"),
+            ("asthma", "patients with refractory asthma were enrolled"),
+        ],
+    )
+    def test_qualifier_only_phrase_does_not_override_llm_value(self, current, text):
+        """The prompt tells the LLM to drop severity/stage/resistance
+        qualifiers; the regex must not add them back as "more specific"."""
+        field_results = {
+            "condition": {
+                "value": current,
+                "status": "PRESENT",
+                "confidence": 0.85,
+                "source": "llm",
+            }
+        }
+        result = _postprocess_field_results(field_results, text)
+        assert result["condition"]["value"] == current
+        assert result["condition"]["source"] == "llm"
+
+    def test_regex_does_not_touch_an_untouched_llm_condition(self):
+        field_results = {
+            "condition": {
+                "value": "Celiac disease",
+                "status": "PRESENT",
+                "confidence": 0.85,
+                "mapping_tier": "auto",
+                "source": "llm",
+            }
+        }
+        result = _postprocess_field_results(
+            field_results, "Biopsies were taken from children with celiac disease."
+        )
+        assert result["condition"]["mapping_tier"] == "auto"
+        assert result["condition"]["source"] == "llm"
+
+    def test_host_species_patch_is_marked_regex(self):
+        field_results = {
+            "host_species": {"value": "", "status": "ABSENT", "confidence": 0.0}
+        }
+        result = _postprocess_field_results(field_results, "40 participants")
+        assert result["host_species"]["value"] == "Homo sapiens"
+        assert result["host_species"]["source"] == "regex"
 
 
 class TestAvgConfidence:

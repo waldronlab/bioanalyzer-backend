@@ -46,8 +46,8 @@ The settings are organized into logical groups:
 ### API Configuration (`api`)
 
 - `timeout`: API timeout in seconds (default: 30)
-- `analysis_timeout`: Total analysis timeout in seconds (default: 45)
-- `gemini_timeout`: Gemini API timeout in seconds (default: 30)
+- `analysis_timeout`: Total analysis timeout in seconds (default: 90)
+- `gemini_timeout`: Single LLM call timeout in seconds, clamped to `analysis_timeout` (default: 60)
 - `frontend_timeout`: API client timeout in seconds (default: 60)
 - `ncbi_timeout`: NCBI API timeout in seconds (default: 60)
 - `ncbi_rate_limit_delay`: NCBI rate limit delay in seconds (default: 0.34)

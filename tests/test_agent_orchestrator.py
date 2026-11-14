@@ -189,7 +189,9 @@ def test_parse_experiments_single_block(orchestrator):
     # host_species/body_site go through the real normalizers (ontology labels)
     assert exp.fields.host_species.value == "Homo sapiens"
     assert exp.fields.body_site.value == "feces"
-    assert exp.fields.condition.value == "inflammatory bowel disease"
+    # Condition is shown in BugSigDB's own wording for the same MONDO ID
+    # (app/normalization/bugsigdb_vocabulary.py).
+    assert exp.fields.condition.value == "Inflammatory bowel disease"
     assert exp.fields.sequencing_type.value == "16S"
     assert exp.fields.sample_size.value == "42"
 

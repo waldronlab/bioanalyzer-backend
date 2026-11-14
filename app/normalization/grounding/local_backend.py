@@ -419,6 +419,51 @@ class LocalOntologyBackend:
             )
         ]
 
+    def find_by_xref(self, xref: str) -> List[Tuple[str, str]]:
+        """Reverse of `get_xrefs()`: every ``(ontology, curie)`` that lists
+        *xref* as a cross-reference - e.g. MONDO:0005146 lists EFO:0001358
+        (both "post-traumatic stress disorder"). Used to move between EFO and
+        MONDO IDs for the same disease when only one of them is in BugSigDB's
+        vocabulary."""
+        return [
+            (row[0], row[1])
+            for row in self._db.execute(
+                "SELECT ontology, curie FROM xrefs WHERE xref = ?", (xref,)
+            )
+        ]
+
+    def lookup_obsolete(self, value: str, ontology: str) -> List[Tuple[str, str]]:
+        """``(curie, replaced_by)`` for *obsolete* terms whose label or exact
+        synonym equals *value*. `lookup()` deliberately never returns these;
+        this exists so a caller can follow a retired term to its replacement
+        (metacurator's obsolete-term rule) instead of finding nothing. EFO
+        retired many disease terms in favour of MONDO ones without filling
+        `replaced_by` - e.g. EFO:0001358 "post-traumatic stress disorder" - so
+        callers also check cross-references (`get_xrefs`/`find_by_xref`)."""
+        normalized = normalize(value)
+        if not normalized:
+            return []
+        rows = self._db.execute(
+            "SELECT curie, COALESCE(replaced_by, '') FROM terms "
+            "WHERE ontology = ? AND obsolete = 1 AND label_normalized = ? "
+            "UNION SELECT t.curie, COALESCE(t.replaced_by, '') FROM synonyms s "
+            "JOIN terms t ON t.ontology = s.ontology AND t.curie = s.curie "
+            "WHERE s.ontology = ? AND s.scope = 'exact' AND t.obsolete = 1 "
+            "AND s.synonym_normalized = ?",
+            (ontology, normalized, ontology, normalized),
+        )
+        return [(row[0], row[1]) for row in rows]
+
+    def is_obsolete(self, curie: str, ontology: str) -> Optional[bool]:
+        """True/False if *curie* is in this store, None if it isn't."""
+        rows = list(
+            self._db.execute(
+                "SELECT obsolete FROM terms WHERE ontology = ? AND curie = ?",
+                (ontology, curie),
+            )
+        )
+        return bool(rows[0][0]) if rows else None
+
     def clear_ontology(self, ontology: str) -> None:
         """Delete every terms/synonyms/edges/xrefs row for *ontology* -
         called by `seed.ensure_ontology()` right before writing a fresh

@@ -469,25 +469,26 @@ def test_body_site_specificity_override_prefers_specific_descendant_when_input_s
 
 def test_condition_normalization_variants():
     t = normalize_condition("Parkinson's disease patients")
-    assert t.label == "Parkinson disease"
+    # BugSigDB's label for MONDO:0005180 (app/normalization/bugsigdb_vocabulary.py)
+    assert t.label == "Parkinson's disease"
     assert t.ontology_id == "MONDO:0005180"
     assert t.status == "PRESENT"
 
     t = normalize_condition("type 2 diabetes cohort")
-    assert t.label == "type 2 diabetes mellitus"
+    assert t.label == "Type II diabetes mellitus"
     assert t.ontology_id == "MONDO:0005148"
 
     t = normalize_condition("Type II diabetes mellitus")
-    assert t.label == "type 2 diabetes mellitus"
+    assert t.label == "Type II diabetes mellitus"
     assert t.ontology_id == "MONDO:0005148"
     assert t.mapping_confidence == 1.0
 
     t = normalize_condition("Type I diabetes mellitus")
-    assert t.label == "type 1 diabetes mellitus"
+    assert t.label == "Type I diabetes mellitus"
     assert t.ontology_id == "MONDO:0005147"
 
     t = normalize_condition("obese adults")
-    assert t.label == "obesity disorder"
+    assert t.label == "Obesity"
     assert t.ontology_id == "MONDO:0011122"
 
     t = normalize_condition("healthy controls")
@@ -518,7 +519,7 @@ def test_condition_disease_subtype_specificity_against_real_mondo_data():
     honest answer, and forcing a more specific one would mean fabricating
     an ID, exactly what this pass was told not to do."""
     t = normalize_condition("gestational diabetes")
-    assert t.label == "gestational diabetes"
+    assert t.label == "Gestational diabetes"
     assert t.ontology_id == "MONDO:0005406"
     assert t.mapping_confidence == 1.0
 
@@ -531,7 +532,7 @@ def test_condition_disease_subtype_specificity_against_real_mondo_data():
     assert normalize_condition("type 2 diabetes").ontology_id == "MONDO:0005148"
 
     t = normalize_condition("food allergy")
-    assert t.label == "food allergy"
+    assert t.label == "Food allergy"
     assert t.ontology_id == "MONDO:0700226"
 
     # "egg allergy" has no real, non-obsolete MONDO term (both real MONDO
@@ -642,16 +643,16 @@ def test_condition_disease_wins_over_comparator_arm_wording():
     studied must win even when a "vs healthy/matched controls" phrase is
     also present in the same text."""
     t = normalize_condition("IBD patients vs healthy controls")
-    assert t.label == "inflammatory bowel disease"
+    assert t.label == "Inflammatory bowel disease"
 
     t = normalize_condition("HIV patients compared to controls")
-    assert t.label == "HIV infectious disease"
+    assert t.label == "HIV infection"
 
     t = normalize_condition("ASD children vs typically developing controls")
-    assert t.label == "autism spectrum disorder"
+    assert t.label == "Autism spectrum disorder"
 
     t = normalize_condition("patients with T2D and matched controls")
-    assert t.label == "type 2 diabetes mellitus"
+    assert t.label == "Type II diabetes mellitus"
 
     # No disease mentioned at all - "healthy" must still be reachable.
     t = normalize_condition("healthy volunteers")
@@ -1175,7 +1176,7 @@ def test_body_site_multiple_matches_is_partially_present():
 def test_condition_two_distinct_conditions_surfaces_candidate():
     t = normalize_condition("comorbid obesity and type 2 diabetes cohort")
     assert t.status == "PARTIALLY_PRESENT"
-    assert t.label in ("obesity disorder", "type 2 diabetes mellitus")
+    assert t.label in ("Obesity", "Type II diabetes mellitus")
     assert len(t.candidates) >= 1
     assert t.label not in (c[0] for c in t.candidates)
 
@@ -1187,7 +1188,7 @@ def test_condition_overlapping_keys_for_same_disease_stay_unambiguous():
     # candidate surfacing).
     t = normalize_condition("type 2 diabetes cohort")
     assert t.status == "PRESENT"
-    assert t.label == "type 2 diabetes mellitus"
+    assert t.label == "Type II diabetes mellitus"
     assert t.candidates == ()
 
 

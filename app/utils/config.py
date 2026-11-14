@@ -90,14 +90,61 @@ validate_env_vars()
 
 
 # Performance Configuration - balanced timeouts for reliability
+#
+# The two LLM timeouts nest: GEMINI_TIMEOUT bounds a single provider call
+# (inside LLMProviderManager.chat / GeminiQA), ANALYSIS_TIMEOUT bounds the
+# whole extraction attempt that wraps it (field prompt + provider fallbacks).
+# The inner one must therefore be <= the outer one, or the outer deadline
+# fires first and the analysis aborts instead of degrading gracefully; see
+# _enforce_timeout_nesting() at the bottom of this module.
 API_TIMEOUT = int(os.getenv("API_TIMEOUT", "30"))  # seconds - NCBI API timeout
 ANALYSIS_TIMEOUT = int(
-    os.getenv("ANALYSIS_TIMEOUT", "45")
-)  # seconds - total analysis timeout
-GEMINI_TIMEOUT = int(os.getenv("GEMINI_TIMEOUT", "30"))  # seconds - Gemini API timeout
+    os.getenv("ANALYSIS_TIMEOUT", "90")
+)  # seconds - total analysis timeout (one extraction attempt)
+GEMINI_TIMEOUT = int(
+    os.getenv("GEMINI_TIMEOUT", "60")
+)  # seconds - single LLM provider call timeout
 FRONTEND_TIMEOUT = int(
     os.getenv("FRONTEND_TIMEOUT", "60")
 )  # seconds - API client timeout
+
+
+def _parse_float_env(name: str, default: float) -> float:
+    raw = os.getenv(name, "")
+    if raw is None or not str(raw).strip():
+        return default
+    try:
+        return float(raw)
+    except (TypeError, ValueError):
+        logging.getLogger(__name__).warning(
+            "Invalid %s=%r; using default %s", name, raw, default
+        )
+        return default
+
+
+def _parse_optional_int_env(name: str, default: Optional[int]) -> Optional[int]:
+    """Int env var; empty/unset -> default, "none"/"off" -> None (disabled)."""
+    raw = os.getenv(name, "")
+    if raw is None or not str(raw).strip():
+        return default
+    if str(raw).strip().lower() in ("none", "null", "off", "disabled"):
+        return None
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        logging.getLogger(__name__).warning(
+            "Invalid %s=%r; using default %s", name, raw, default
+        )
+        return default
+
+
+# LLM sampling configuration. Extraction is a classification task, so it
+# runs greedy (temperature 0.0) by default: at the old 0.7 default, 33/100
+# Condition answers changed between two otherwise identical benchmark runs.
+# LLM_SEED is forwarded only to providers that accept a seed (OpenAI,
+# Ollama, llamafile); Gemini and Anthropic ignore it. LLM_SEED=none disables.
+LLM_TEMPERATURE = _parse_float_env("LLM_TEMPERATURE", 0.0)
+LLM_SEED: Optional[int] = _parse_optional_int_env("LLM_SEED", 0)
 
 # RAG Configuration - Advanced RAG with Contextual Summarization
 RAG_SUMMARY_PROVIDER = (
@@ -365,3 +412,28 @@ except Exception as e:
         "Failed to load structured settings; falling back to raw env vars: %s",
         mask_exception_message(e),
     )
+
+
+def _enforce_timeout_nesting(inner: int, outer: int) -> int:
+    """Return the inner (single LLM call) timeout clamped to the outer
+    (whole extraction attempt) timeout.
+
+    If GEMINI_TIMEOUT were longer than ANALYSIS_TIMEOUT, the outer
+    ``asyncio.wait_for`` would fire first and raise out of the analysis,
+    losing the graceful "timed out -> error dict -> heuristic fallback" path
+    the inner timeout provides. Clamping keeps env overrides honoured while
+    making the pair consistent, and logs so a misconfiguration is visible.
+    """
+    if inner > outer:
+        logger.warning(
+            "GEMINI_TIMEOUT=%ss exceeds ANALYSIS_TIMEOUT=%ss; clamping the per-call "
+            "LLM timeout to %ss so the analysis deadline is the outer one.",
+            inner,
+            outer,
+            outer,
+        )
+        return outer
+    return inner
+
+
+GEMINI_TIMEOUT = _enforce_timeout_nesting(GEMINI_TIMEOUT, ANALYSIS_TIMEOUT)

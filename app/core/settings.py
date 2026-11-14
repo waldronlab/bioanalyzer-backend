@@ -76,10 +76,13 @@ class APIConfig(BaseModel):
 
     timeout: int = Field(default=30, ge=1, le=300, description="API timeout in seconds")
     analysis_timeout: int = Field(
-        default=45, ge=1, le=600, description="Total analysis timeout in seconds"
+        default=90, ge=1, le=600, description="Total analysis timeout in seconds"
     )
     gemini_timeout: int = Field(
-        default=30, ge=1, le=300, description="Gemini API timeout in seconds"
+        default=60,
+        ge=1,
+        le=300,
+        description="Single LLM provider call timeout in seconds (<= analysis_timeout)",
     )
     frontend_timeout: int = Field(
         default=60,
@@ -475,8 +478,8 @@ class BioAnalyzerSettings(BaseModel):
             "balanced": {
                 "api": {
                     "timeout": 30,
-                    "analysis_timeout": 45,
-                    "gemini_timeout": 30,
+                    "analysis_timeout": 90,
+                    "gemini_timeout": 60,
                 },
                 "rag": {
                     "summary_quality": "balanced",
