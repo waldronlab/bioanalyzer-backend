@@ -112,7 +112,12 @@ Rules:
     e.g. "celiac disease patients vs healthy controls",
          "melanoma patients responding vs not responding to anti-PD-1 therapy",
          "mice on standard chow vs chow plus metformin".
-  Step 2 - "conditions": list every factor the compared groups differ by, most important first.
+  Step 2 - "conditions": list every factor the compared groups differ by, in this order:
+    FIRST the disease/disorder, if ANY compared group has one - the disease the study population is
+    defined by, as named in the title or aims. This holds even when every participant has the same
+    disease and the groups differ by a treatment, response, outcome, measurement or sex.
+    THEN any other factor the groups differ by (treatment, response, exposure, measurement, ...).
+    A non-disease factor comes first ONLY when no compared group has a disease.
     * A disease/disorder that a compared group has: give the standard disease entity, as a disease
       ontology would name it. Drop severity, stage, subtype, treatment-resistance and activity qualifiers:
       "refractory celiac disease" -> "celiac disease", "stage IV melanoma" -> "melanoma",
@@ -126,8 +131,10 @@ Rules:
       "vitamin D"), a measurement ("blood pressure measurement"), a design factor ("season",
       "geographic location"), or a response to an intervention ("response to probiotic").
     * When EVERY participant has the same disease and the groups differ by treatment, response or
-      outcome (responders vs non-responders, before vs after a drug, relapse vs remission), list that
-      distinguishing factor FIRST (e.g. "response to anti-PD-1 therapy") and the shared disease second.
+      outcome (responders vs non-responders, before vs after a drug, relapse vs remission), list the
+      shared disease FIRST and that factor second, e.g. ["melanoma", "response to anti-PD-1 therapy"].
+    * Do NOT let a secondary analysis displace the disease: if a study of a disease also compares
+      a measurement, sex or season, the disease stays first.
     * Animal models: give the modelled disease if one is induced (e.g. "pulmonary fibrosis") AND the
       inducing exposure (e.g. "bleomycin"); for models defined only by a feed or a drug, give that exposure.
     * Healthy-only cohorts: give the non-disease factor(s) the groups differ by.
