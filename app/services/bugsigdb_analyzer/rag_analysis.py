@@ -11,7 +11,7 @@ from typing import Any, Dict, List, Optional
 
 import app.services.bugsigdb_analyzer as _pkg
 from app.utils.credential_masking import mask_exception_message
-from app.utils.config import ANALYSIS_TIMEOUT, GEMINI_API_KEY
+from app.utils.config import ANALYSIS_TIMEOUT, GEMINI_API_KEY, INCLUDE_INDEX_TERMS
 
 from .condition_disambiguation import disambiguate_condition
 from .constants import _current_timestamp
@@ -25,7 +25,7 @@ from .field_extraction import (
     create_empty_field_result,
     extract_year,
 )
-from .parsing import prepare_analysis_context
+from .parsing import build_analysis_text
 from .simple_analysis import (
     SOURCE_HEURISTIC,
     _extract_payload_with_retry,
@@ -81,7 +81,14 @@ async def analyze_paper_with_rag(
         full_text = texts.get("full_text", "")
         year = extract_year(texts.get("publication_date", ""))
 
-        analysis_text = prepare_analysis_context(abstract, full_text)
+        analysis_text = build_analysis_text(
+            title,
+            abstract,
+            full_text,
+            mesh_terms=texts.get("mesh_terms"),
+            keywords=texts.get("keywords"),
+            include_index_terms=INCLUDE_INDEX_TERMS,
+        )
         if not analysis_text.strip():
             logger.warning("No analysable text for PMID %s", pmid)
             return None

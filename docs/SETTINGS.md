@@ -99,6 +99,7 @@ The settings are organized into logical groups:
 ### Retrieval Configuration (`retrieval`)
 
 - `use_fulltext`: Use full text retrieval (default: false)
+  - Environment variable `INCLUDE_INDEX_TERMS` (default `1`): append the PubMed record's MeSH headings and author keywords to the text the LLM sees. They arrive with the same request as the abstract, so they add no NCBI call.
 - `ncbi_api_key`: NCBI API key
 - `email`: Email for NCBI API requests
 - `ncbi_api_url`: NCBI API URL

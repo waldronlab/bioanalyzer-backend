@@ -182,6 +182,14 @@ MAX_CONCURRENT_REQUESTS = int(os.getenv("MAX_CONCURRENT_REQUESTS", "3"))
 
 # Retrieval configuration
 USE_FULLTEXT = os.getenv("USE_FULLTEXT", "0").lower() in ("1", "true", "yes")
+# Append the PubMed record's MeSH headings and author keywords to the text
+# the extraction prompt sees. They come with the same efetch call as the
+# abstract, so they cost no extra NCBI request.
+INCLUDE_INDEX_TERMS = os.getenv("INCLUDE_INDEX_TERMS", "1").lower() in (
+    "1",
+    "true",
+    "yes",
+)
 
 # Production Configuration
 ENVIRONMENT = os.getenv("ENVIRONMENT", "development").lower()

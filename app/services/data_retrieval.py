@@ -44,6 +44,52 @@ def _all_text(node) -> str:
     return " ".join(" ".join(node.itertext()).split())
 
 
+def _abstract_text(article) -> str:
+    """The PubMed abstract, keeping structured-abstract labels.
+
+    A structured abstract has one <AbstractText Label="METHODS"> per part;
+    the labels tell the LLM which sentences define the study groups.
+    """
+    parts = []
+    for node in article.findall(".//Abstract/AbstractText"):
+        text = _all_text(node)
+        if not text:
+            continue
+        label = (node.get("Label") or "").strip()
+        if label and label.upper() != "UNLABELLED":
+            text = f"{label.upper()}: {text}"
+        parts.append(text)
+    return "\n".join(parts)
+
+
+def _mesh_terms(root) -> List[str]:
+    """MeSH descriptor names indexed for the paper; major topics marked with '*'."""
+    terms = []
+    for heading in root.findall(".//MedlineCitation/MeshHeadingList/MeshHeading"):
+        descriptor = heading.find("DescriptorName")
+        if descriptor is None:
+            continue
+        name = _all_text(descriptor)
+        if not name:
+            continue
+        major = descriptor.get("MajorTopicYN") == "Y" or any(
+            q.get("MajorTopicYN") == "Y" for q in heading.findall("QualifierName")
+        )
+        terms.append(f"{name}*" if major else name)
+    return terms
+
+
+def _keywords(root) -> List[str]:
+    """Author keywords from the PubMed record."""
+    return [
+        text
+        for text in (
+            _all_text(k) for k in root.findall(".//MedlineCitation/KeywordList/Keyword")
+        )
+        if text
+    ]
+
+
 def _body_section_blocks(body) -> List[str]:
     """PMC `<body>` rendered as `Header: text` blocks, one per top-level `<sec>`.
 
@@ -248,10 +294,12 @@ class PubMedRetriever:
                 logger.warning(f"No article node found for PMID {pmid}")
                 return {"error": "No article metadata found."}
 
-            title = article.findtext("ArticleTitle", default="N/A")
-            abstract = " ".join(
-                [t.text for t in article.findall(".//AbstractText") if t.text]
-            )
+            # _all_text, not .text/.findtext: those stop at the first inline
+            # tag (<i>, <sup>, ...), which cut the abstract short in about a
+            # quarter of BugSigDB papers (e.g. at an italicised species name).
+            title_node = article.find("ArticleTitle")
+            title = (_all_text(title_node) if title_node is not None else "") or "N/A"
+            abstract = _abstract_text(article)
             journal = article.findtext("Journal/Title", default="N/A")
             authors = [
                 f"{a.findtext('ForeName', default='')} {a.findtext('LastName', default='')}".strip()
@@ -265,6 +313,8 @@ class PubMedRetriever:
                 "abstract": abstract,
                 "journal": journal,
                 "authors": authors,
+                "mesh_terms": _mesh_terms(root),
+                "keywords": _keywords(root),
             }
 
             pub_date = article.findtext(
@@ -580,4 +630,6 @@ class PubMedRetriever:
             "journal": metadata.get("journal", ""),
             "authors": metadata.get("authors", []),
             "publication_date": metadata.get("publication_date", ""),
+            "mesh_terms": metadata.get("mesh_terms", []),
+            "keywords": metadata.get("keywords", []),
         }
