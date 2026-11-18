@@ -431,6 +431,8 @@ class TestGetTextsForAnalysisAsync:
             "journal": "J",
             "authors": ["A B"],
             "publication_date": "2021",
+            "mesh_terms": [],
+            "keywords": [],
         }
 
     def test_skips_fulltext_when_use_fulltext_false(self, retriever, monkeypatch):
@@ -457,6 +459,8 @@ class TestGetTextsForAnalysisAsync:
             "journal": "J",
             "authors": ["A B"],
             "publication_date": "2021",
+            "mesh_terms": [],
+            "keywords": [],
         }
 
     def test_metadata_timeout_returns_empty_strings(self, retriever, monkeypatch):
@@ -483,6 +487,8 @@ class TestGetTextsForAnalysisAsync:
             "journal": "",
             "authors": [],
             "publication_date": "",
+            "mesh_terms": [],
+            "keywords": [],
         }
 
     def test_metadata_network_error_returns_empty_dict_fields(
@@ -507,6 +513,8 @@ class TestGetTextsForAnalysisAsync:
             "journal": "",
             "authors": [],
             "publication_date": "",
+            "mesh_terms": [],
+            "keywords": [],
         }
 
     def test_fulltext_network_error_falls_back_to_empty_string(
@@ -540,6 +548,8 @@ class TestGetTextsForAnalysisAsync:
             "journal": "J",
             "authors": ["A B"],
             "publication_date": "2021",
+            "mesh_terms": [],
+            "keywords": [],
         }
 
 

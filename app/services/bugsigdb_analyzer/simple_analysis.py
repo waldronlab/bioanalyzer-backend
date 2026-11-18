@@ -9,7 +9,7 @@ from typing import Any, Dict, Optional
 
 import app.services.bugsigdb_analyzer as _pkg
 from app.utils.credential_masking import mask_exception_message
-from app.utils.config import ANALYSIS_TIMEOUT, CACHE_VALIDITY_HOURS
+from app.utils.config import ANALYSIS_TIMEOUT, CACHE_VALIDITY_HOURS, INCLUDE_INDEX_TERMS
 
 from .condition_disambiguation import disambiguate_condition
 from .constants import EXTRACTION_PROMPT, _current_timestamp
@@ -24,7 +24,7 @@ from .field_extraction import (
     _resolve_diff_abundance,
     extract_year,
 )
-from .parsing import prepare_analysis_context
+from .parsing import build_analysis_text
 
 logger = logging.getLogger(__name__)
 
@@ -191,7 +191,14 @@ async def analyze_paper_simple(
         full_text = texts.get("full_text", "")
         year = extract_year(texts.get("publication_date", ""))
 
-        analysis_text = prepare_analysis_context(abstract, full_text)
+        analysis_text = build_analysis_text(
+            title,
+            abstract,
+            full_text,
+            mesh_terms=texts.get("mesh_terms"),
+            keywords=texts.get("keywords"),
+            include_index_terms=INCLUDE_INDEX_TERMS,
+        )
         if not analysis_text.strip():
             logger.warning("No analysable text for PMID %s", pmid)
             return None

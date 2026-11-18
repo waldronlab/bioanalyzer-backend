@@ -4,7 +4,7 @@ analyzer.
 """
 
 import re
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple
 
 from defusedxml import ElementTree
 from xml.etree.ElementTree import Element as ETElement
@@ -232,3 +232,54 @@ def prepare_analysis_context(
         total_chars += overhead + len(section_text)
 
     return "".join(parts)
+
+
+# MeSH headings plus author keywords rarely exceed ~600 chars; the cap only
+# guards against a pathological record.
+_INDEX_TERMS_CHAR_LIMIT = 1_500
+
+
+def format_index_terms(
+    mesh_terms: Optional[Sequence[str]] = None,
+    keywords: Optional[Sequence[str]] = None,
+) -> str:
+    """Labelled MeSH/keyword blocks for the extraction prompt ('' if none)."""
+    blocks = []
+    mesh = [t.strip() for t in (mesh_terms or []) if t and t.strip()]
+    kws = [k.strip() for k in (keywords or []) if k and k.strip()]
+    if mesh:
+        blocks.append(
+            "MESH TERMS:\n" + _truncate("; ".join(mesh), _INDEX_TERMS_CHAR_LIMIT)
+        )
+    if kws:
+        blocks.append(
+            "KEYWORDS:\n" + _truncate("; ".join(kws), _INDEX_TERMS_CHAR_LIMIT)
+        )
+    return "\n\n".join(blocks)
+
+
+def build_analysis_text(
+    title: str,
+    abstract: str,
+    full_text: str,
+    *,
+    mesh_terms: Optional[Sequence[str]] = None,
+    keywords: Optional[Sequence[str]] = None,
+    include_index_terms: bool = True,
+) -> str:
+    """The paper text the extraction prompt sees.
+
+    Abstract/full text as from prepare_analysis_context, then the PubMed
+    index terms. A paper with no abstract in PubMed (letters, short reports)
+    falls back to its title, so it still gets an analysis instead of none.
+    """
+    text = prepare_analysis_context(abstract, full_text)
+    if not text.strip() and (title or "").strip() and title.strip() != "N/A":
+        text = f"TITLE ONLY (no abstract in PubMed):\n{title.strip()}"
+    if not text.strip():
+        return ""
+    if include_index_terms:
+        terms = format_index_terms(mesh_terms, keywords)
+        if terms:
+            text = f"{text}\n\n{terms}"
+    return text

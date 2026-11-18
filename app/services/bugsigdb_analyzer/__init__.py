@@ -87,6 +87,8 @@ from .parsing import (
     _local_tag,
     _parse_pmc_sections,
     _truncate,
+    build_analysis_text,
+    format_index_terms,
     prepare_analysis_context,
 )
 from .rag_analysis import analyze_paper_with_rag, analyze_single_field
@@ -115,6 +117,8 @@ __all__ = [
     "ESSENTIAL_FIELDS",
     "EXTRACTION_PROMPT",
     "prepare_analysis_context",
+    "build_analysis_text",
+    "format_index_terms",
     "_parse_pmc_sections",
     "_classify_section_title",
     "_local_tag",

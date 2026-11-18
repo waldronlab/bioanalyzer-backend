@@ -31,6 +31,8 @@ services:
       CONDITION_EMBEDDING_MODEL: "${CONDITION_EMBEDDING_MODEL:-/app/cache/models/sapbert}"
       # Deterministic extraction: greedy sampling, fixed seed where the
       # provider accepts one (see app/models/llm_provider.py).
+      # Set to 0 to leave PubMed MeSH headings/keywords out of the LLM input.
+      INCLUDE_INDEX_TERMS: "${INCLUDE_INDEX_TERMS:-1}"
       LLM_TEMPERATURE: "${LLM_TEMPERATURE:-0}"
       LLM_SEED: "${LLM_SEED:-0}"
     ports:

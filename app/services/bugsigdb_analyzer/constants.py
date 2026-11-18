@@ -68,6 +68,13 @@ Analyse the following biomedical paper content and extract structured metadata.
 The content may include labelled sections (ABSTRACT, METHODS, RESULTS, DISCUSSION, etc.).
 When a section is present, prefer its information over unlabelled text for the
 corresponding fields as described in the Rules below.
+The content may end with MESH TERMS (subject headings assigned by PubMed indexers; "*" marks
+a major topic of the paper) and KEYWORDS (chosen by the authors). They list topics of the whole
+paper, including background ones. Use them only to confirm or complete what the text says vaguely
+or not at all (e.g. the host organism, or the marker gene of the sequencing method); never let them
+override the text, and never quote them as condition_evidence.
+If the content is marked TITLE ONLY, extract only what the title states and set
+condition_confidence to at most 0.4.
 
 Return ONLY a valid JSON object. No markdown fences, no explanation, no extra text.
 
@@ -98,6 +105,7 @@ Extract the following fields and return as a single JSON object:
 Rules:
 - host_species_raw   : Give the species name(s) as written. Prefer METHODS or ABSTRACT if sections are present, otherwise extract from any available text. If multiple species, join with " and ".
   If no species is named anywhere in the text, return null — do NOT default to "Homo sapiens" just because the study concerns a human disease or clinical condition.
+  An organism in MESH TERMS (e.g. "Humans", "Mice") counts as named.
 - body_site_raw      : Give the anatomical sample site(s) as written. Prefer METHODS or ABSTRACT if sections are present, otherwise extract from any available text. If multiple sites, join with " and ".
   If no sample site is stated, return null — do NOT guess a typical site (e.g. "gut") just because the paper is about microbiome research.
 - condition_comparison / conditions / condition_raw / condition_evidence / condition_confidence:
@@ -105,6 +113,7 @@ Rules:
   controls, exposed vs unexposed, before vs after, responders vs non-responders) - an experimental factor
   in the style of the EFO ontology.
   Take this field from ABSTRACT and METHODS (study population, inclusion criteria, group definitions).
+  A disease in MESH TERMS is the condition only if a compared group in the text has that disease.
   Do NOT take it from INTRODUCTION or DISCUSSION: they name background diseases the study is not about.
   If the text has no section labels, use the sentences that say who or what was sampled and how the
   groups were formed.
@@ -157,7 +166,8 @@ Rules:
   BugSigDB records one of: 16S (16S rRNA amplicon), 18S (18S rRNA amplicon), WMS (whole-metagenome shotgun),
   ITS / ITS2 (fungal ITS amplicon), PCR (targeted qPCR/PCR of specific taxa) — so always include the marker gene or
   approach that tells these apart. If the text only says "amplicon sequencing" or "high-throughput sequencing", look in
-  METHODS for the target gene (16S, 18S, ITS) and include it. If several methods were used (e.g. 16S and shotgun), give
+  METHODS for the target gene (16S, 18S, ITS) and include it; if the text never names it, use a marker gene
+  named in MESH TERMS or KEYWORDS (e.g. "RNA, Ribosomal, 16S"). If several methods were used (e.g. 16S and shotgun), give
   all of them joined with " and ". If no sequencing/molecular method is stated, return null.
 - sample_size_raw    : Give ONLY an integer. Prefer METHODS if sections are present, otherwise extract from any available text. Convert word-numbers
   (e.g. "forty-two" → 42). If a range or multiple cohorts, give the total or largest number.
