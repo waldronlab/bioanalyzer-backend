@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from typing import Dict, Tuple
+from typing import Dict, Optional, Tuple
 
 
 @dataclass(frozen=True)
@@ -18,6 +18,10 @@ class NormalizedTerm:
     mapping_confidence: float
     raw: str = ""
     candidates: Tuple[Tuple[str, str], ...] = field(default_factory=tuple)
+    # (label, ontology_id) of the live grounded term that the BugSigDB-
+    # vocabulary embedding snap replaced (condition only), else None. Lets
+    # search tags keep both; never used for the primary value.
+    pre_snap: Optional[Tuple[str, str]] = None
 
     @classmethod
     def absent(cls) -> NormalizedTerm:

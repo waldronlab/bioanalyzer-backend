@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import replace
 from typing import Dict, Optional, Tuple
@@ -9,14 +10,18 @@ from typing import Dict, Optional, Tuple
 from app.normalization import embedding_match
 from app.normalization.bugsigdb_vocabulary import BugSigDBVocabulary, get_vocabulary
 from app.normalization.local_lookup import _get_backend as local_lookup_backend
+from app.normalization.grounding.backend import SCOPE_EXACT
 from app.normalization.local_lookup import local_lookup
 from app.normalization.ols import ols_search
+from app.utils.credential_masking import mask_exception_message
 from app.normalization.types import (
     LookupMatcher,
     NormalizedTerm,
     is_null_like,
     normalize_spelling,
 )
+
+logger = logging.getLogger(__name__)
 
 CONDITION_LOOKUP: Dict[str, Tuple[str, str]] = {
     "parkinson disease": ("Parkinson disease", "MONDO:0005180"),
@@ -192,6 +197,107 @@ def _progressive_queries(query: str, max_extra: int = 2):
                 yield candidate
 
 
+# First words of a MeSH-style inverted-heading qualifier ("Diabetes Mellitus,
+# Type 2", "Hepatitis B, Chronic"). Keeping this closed list is what stops a
+# plain comma list ("obesity, diabetes") from being flipped.
+_HEADING_QUALIFIER_LEADS = frozenset(
+    {
+        "type",
+        "chronic",
+        "acute",
+        "viral",
+        "bacterial",
+        "fungal",
+        "parasitic",
+        "juvenile",
+        "adult",
+        "infantile",
+        "neonatal",
+        "congenital",
+        "familial",
+        "hereditary",
+        "primary",
+        "secondary",
+        "idiopathic",
+        "autoimmune",
+        "functional",
+        "allergic",
+        "atopic",
+        "recurrent",
+        "relapsing",
+    }
+)
+
+
+_ROMAN_RE = re.compile(r"^[ivx]+$")
+
+
+def _is_heading_qualifier_word(word: str) -> bool:
+    """A word allowed in a MeSH-style heading qualifier: a known qualifier,
+    "onset", a number, a roman numeral or a single letter (hyphenated words
+    must be made of such parts, e.g. "adult-onset")."""
+    for part in word.lower().split("-"):
+        if not part:
+            return False
+        if not (
+            part in _HEADING_QUALIFIER_LEADS
+            or part == "onset"
+            or part.isdigit()
+            or _ROMAN_RE.match(part)
+            or len(part) == 1
+        ):
+            return False
+    return True
+
+
+def _uninvert_heading(text: str) -> str:
+    """ "Diabetes Mellitus, Type 2" -> "Type 2 Diabetes Mellitus". Only for
+    exactly one comma whose tail is 1-3 words starting with a known
+    qualifier word; anything else is returned unchanged."""
+    if text.count(",") != 1:
+        return text
+    head, tail = (part.strip() for part in text.split(","))
+    words = tail.split()
+    if not head or not 1 <= len(words) <= 3:
+        return text
+    if not all(_is_heading_qualifier_word(w) for w in words):
+        return text
+    return f"{tail} {head}"
+
+
+def _more_specific_exact_hit(
+    text: str, generic_ontology_id: str
+) -> Optional[NormalizedTerm]:
+    """For a static-dict key that matched only as a substring of *text*: an
+    EFO/MONDO term whose label or EXACT synonym is the whole of *text* (never
+    a broad/narrow/related synonym or a fuzzy hit), provided it is unique and
+    a descendant of the static entry's term in the same ontology - so a
+    specific disease ("chronic hepatitis B") replaces its broad parent
+    ("hepatitis"), but an equivalent or unrelated term never displaces the
+    audited static answer. Review tier (confidence < 1.0)."""
+    prefix = generic_ontology_id.split(":", 1)[0].lower()
+    if prefix not in ("mondo", "efo") or not text.strip():
+        return None
+    try:
+        backend = local_lookup_backend()
+        hits = {
+            t.curie: t
+            for t in backend.lookup(text.strip(), prefix, scopes=(SCOPE_EXACT,))
+            if t.curie != generic_ontology_id
+        }
+        if len(hits) != 1:
+            return None
+        hit = next(iter(hits.values()))
+        if backend.reachable_from(hit.curie, generic_ontology_id, prefix) is not True:
+            return None
+    except Exception as e:
+        logger.debug(
+            "Specific-term lookup failed for %r: %s", text, mask_exception_message(e)
+        )
+        return None
+    return NormalizedTerm(hit.label, hit.curie, "PRESENT", 0.9)
+
+
 def _resolve_more_specific_override(
     raw_text: str, generic_ontology_id: str
 ) -> Optional[NormalizedTerm]:
@@ -340,6 +446,7 @@ def _ground_condition(raw_text: str) -> NormalizedTerm:
     """Ground free text to an EFO/MONDO term: static dict -> local ontology
     store -> live OLS. Labels here are the ontology's own; see
     `normalize_condition()` for the BugSigDB-vocabulary steps applied after."""
+    raw_text = _uninvert_heading(raw_text.strip())
     lowered = normalize_spelling(raw_text.lower())
     hit = _MATCHER.match_longest(lowered)
     if hit:
@@ -349,6 +456,11 @@ def _ground_condition(raw_text: str) -> NormalizedTerm:
         override = _resolve_more_specific_override(raw_text, efo_id)
         if override is not None:
             return override
+        cleaned = _extract_clean_disease_name(lowered)
+        if cleaned and cleaned != matched_key:
+            specific = _more_specific_exact_hit(cleaned, efo_id)
+            if specific is not None:
+                return specific
         candidates = _MATCHER.candidates(lowered, matched_key, (label, efo_id))
         if candidates:
             return NormalizedTerm(
@@ -494,6 +606,10 @@ def normalize_condition(raw_text: str) -> NormalizedTerm:
        app/services/bugsigdb_analyzer/condition_disambiguation.py).
     5. Relabel: show BugSigDB's label for the final ID.
 
+    When step 4 snaps away a live grounded term whose ontology prefix BugSigDB's
+    vocabulary also uses, that term is kept on the result as `pre_snap` so
+    search tags can carry both; the primary is the snapped term.
+
     Steps 2-4 never produce mapping_confidence 1.0, so anything they decide
     lands in "review" tier, never "auto".
     """
@@ -546,12 +662,20 @@ def normalize_condition(raw_text: str) -> NormalizedTerm:
             others = [(lbl, cid) for lbl, cid, _ in neighbours[1:]]
             if term.ontology_id:
                 others.insert(0, (term.label, term.ontology_id))
+            pre_snap = None
+            if (
+                term.ontology_id
+                and term.ontology_id.split(":", 1)[0].upper() in vocab.prefixes()
+                and _is_live(term.ontology_id)
+            ):
+                pre_snap = (term.label, term.ontology_id)
             term = NormalizedTerm(
                 best_label,
                 best_curie,
                 "PRESENT",
                 min(round(score, 3), embedding_match.MAX_SNAP_CONFIDENCE),
                 candidates=tuple(others[:4]),
+                pre_snap=pre_snap,
             )
         elif neighbours and neighbours[0][2] >= _CANDIDATE_FLOOR:
             extra = tuple(

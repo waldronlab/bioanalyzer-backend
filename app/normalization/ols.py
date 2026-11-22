@@ -129,13 +129,20 @@ def ols_search(
         return None
 
 
-def _obo_iri(ontology_id: str) -> Optional[str]:
-    """CURIE ('EFO:0000400') -> OBO Foundry PURL IRI, or None if malformed.
+# OBO PURLs are case-sensitive; restore the canonical case of known prefixes
+# (an upper-cased "NCBITAXON:9606" would otherwise 404).
+_CANONICAL_PREFIX = {
+    p.upper(): p
+    for p in ("EFO", "MONDO", "UBERON", "NCBITaxon", "HP", "DOID", "CHEBI", "ENVO")
+}
 
-    All four ontologies this module deals with (EFO, MONDO, UBERON,
-    NCBITaxon) publish OBO-compliant PURLs of this form, and OLS resolves
-    terms by IRI regardless of which ontology originally minted the ID -
-    this is the one IRI scheme that works for every prefix we handle.
+
+def _obo_iri(ontology_id: str) -> Optional[str]:
+    """CURIE ('MONDO:0005180') -> the term's IRI, or None if malformed.
+
+    MONDO, UBERON, NCBITaxon, HP etc. use OBO Foundry PURLs; EFO's own terms
+    use http://www.ebi.ac.uk/efo/EFO_<n>. OLS resolves terms by IRI
+    regardless of which ontology is queried, so the IRI must be exact.
     """
     if ":" not in ontology_id:
         return None
@@ -143,6 +150,12 @@ def _obo_iri(ontology_id: str) -> Optional[str]:
     prefix, local = prefix.strip(), local.strip()
     if not prefix or not local:
         return None
+    prefix = _CANONICAL_PREFIX.get(prefix.upper(), prefix)
+    if prefix == "EFO":
+        # EFO's own terms are minted under its EBI namespace, not an OBO
+        # PURL; OLS answers the PURL form with 200 + no terms (not a 404),
+        # which would read as "term does not exist" / "no ancestors".
+        return f"http://www.ebi.ac.uk/efo/EFO_{local}"
     return f"http://purl.obolibrary.org/obo/{prefix}_{local}"
 
 
@@ -255,3 +268,71 @@ def is_in_branch(ontology_id: str, ontology: str, root_id: str) -> Optional[bool
         if obo_id:
             ancestor_ids.add(obo_id)
     return root_id in ancestor_ids
+
+
+# OLS ontology id for a CURIE prefix when it differs from prefix.lower().
+_OLS_ONTOLOGY_BY_PREFIX = {"ORPHANET": "ordo"}
+# Disease-like prefixes whose hierarchy EFO imports: ask EFO too, so a MONDO
+# tag can reach a curated EFO parent.
+_EFO_IMPORTED_PREFIXES = frozenset({"MONDO", "EFO", "ORPHANET", "HP"})
+
+
+def ancestor_ontologies(ontology_id: str) -> list:
+    """OLS ontologies to query for the ancestors of *ontology_id*: "efo" first
+    for MONDO/EFO/Orphanet/HP, then the prefix's own OLS ontology."""
+    prefix = (ontology_id or "").split(":", 1)[0].strip().upper()
+    if not prefix:
+        return []
+    own = _OLS_ONTOLOGY_BY_PREFIX.get(prefix, prefix.lower())
+    out = ["efo"] if prefix in _EFO_IMPORTED_PREFIXES else []
+    if own not in out:
+        out.append(own)
+    return out
+
+
+def fetch_ancestor_ids(ontology_id: str) -> Optional[set]:
+    """All hierarchical ancestor CURIEs of *ontology_id* (e.g. for a search
+    "is a general term an ancestor of this specific one?"), via OLS4, as the
+    union over `ancestor_ontologies()`.
+
+    Returns a set when the lookup is trustworthy, or None (unknown - do not
+    cache) when the ID is malformed, any request failed, or no queried
+    ontology answered successfully. A 404 means OLS does not know the term
+    in that ontology; it is skipped, never treated as "no ancestors".
+    """
+    iri = _obo_iri(ontology_id or "")
+    if iri and ontology_id.split(":", 1)[0].strip().upper() == "ORPHANET":
+        # Orphanet terms live in ORDO under their own IRI scheme, not OBO PURLs.
+        iri = (
+            "http://www.orpha.net/ORDO/Orphanet_" + ontology_id.split(":", 1)[1].strip()
+        )
+    ontologies = ancestor_ontologies(ontology_id)
+    if not iri or not ontologies:
+        return None
+    prefix = ontology_id.split(":", 1)[0].strip()
+    encoded_iri = quote(quote(iri, safe=""), safe="")
+    out = set()
+    successes = 0
+    for ontology in ontologies:
+        url = OLS_ANCESTORS_URL_TMPL.format(ontology=ontology, iri=encoded_iri)
+        try:
+            response = requests.get(url, params={"size": 1000}, timeout=10)
+            if response.status_code == 404:
+                continue
+            response.raise_for_status()
+            terms = response.json().get("_embedded", {}).get("terms", [])
+        except (
+            requests.exceptions.RequestException,
+            ValueError,
+            KeyError,
+            AttributeError,
+        ):
+            return None
+        successes += 1
+        for term in terms:
+            if not isinstance(term, dict):
+                continue
+            obo_id = format_ontology_id(term.get("obo_id", ""), prefix)
+            if obo_id:
+                out.add(obo_id)
+    return out if successes else None

@@ -224,3 +224,137 @@ def test_get_model_fails_open(tmp_path, monkeypatch):
         assert embedding_match._model_failed is True
     finally:
         monkeypatch.setattr(embedding_match, "_model_failed", False)
+
+
+class _FakeBackend:
+    """Exact-scope lookup + descendant check over small in-memory tables."""
+
+    def __init__(self, exact, parents=None):
+        self.exact = exact  # normalized text -> [(curie, label)]
+        self.parents = parents or {}  # curie -> {ancestor curies}
+
+    def lookup(self, value, ontology, scopes=()):
+        from app.normalization.grounding.backend import GroundedTerm
+
+        return [
+            GroundedTerm(
+                curie=c, label=lbl, ontology=ontology, scope="exact", source="t"
+            )
+            for c, lbl in self.exact.get(value.lower().replace(",", "").strip(), [])
+            if c.lower().startswith(ontology)
+        ]
+
+    def reachable_from(self, curie, root, ontology):
+        return curie == root or root in self.parents.get(curie, set())
+
+    def is_obsolete(self, curie, ontology):
+        return False
+
+
+@pytest.fixture
+def specific_backend(vocab, monkeypatch):
+    backend = _FakeBackend(
+        {
+            "chronic hepatitis b": [
+                ("MONDO:0005366", "chronic hepatitis B virus infection")
+            ],
+            "type 2 diabetes mellitus": [("MONDO:0005148", "type 2 diabetes mellitus")],
+            "hepatitis": [("MONDO:0002251", "hepatitis")],
+            "ibd": [("MONDO:0009999", "unrelated ibd thing")],
+        },
+        {"MONDO:0005366": {"MONDO:0002251"}},
+    )
+    monkeypatch.setattr(condition, "local_lookup_backend", lambda: backend)
+    monkeypatch.setattr(condition, "local_lookup", lambda *a, **k: None)
+    return backend
+
+
+def test_uninvert_heading():
+    f = condition._uninvert_heading
+    assert f("Diabetes Mellitus, Type 2") == "Type 2 Diabetes Mellitus"
+    assert f("Hepatitis B, Chronic") == "Chronic Hepatitis B"
+    assert f("obesity, diabetes") == "obesity, diabetes"  # list, not a heading
+    assert f("a, b, chronic") == "a, b, chronic"  # more than one comma
+    assert f("Hepatitis B, chronic viral") == "chronic viral Hepatitis B"
+    assert f("Hepatitis C, Chronic") == "Chronic Hepatitis C"
+    assert f("Diabetes Mellitus, Adult-Onset") == "Adult-Onset Diabetes Mellitus"
+    assert f("Diabetes Mellitus, Type II") == "Type II Diabetes Mellitus"
+    # every tail word must be a qualifier: these are lists, not headings
+    assert f("obesity, type 2 diabetes") == "obesity, type 2 diabetes"
+    assert f("IBS, functional constipation") == "IBS, functional constipation"
+    assert f("Hepatitis B, one two three four") == "Hepatitis B, one two three four"
+
+
+@pytest.mark.parametrize("text", ["chronic hepatitis B", "Hepatitis B, Chronic"])
+def test_specific_disease_beats_substring_static_key(specific_backend, text):
+    term = condition.normalize_condition(text)
+    assert term.ontology_id == "MONDO:0005366"
+    assert term.mapping_confidence < 1.0
+    assert term.raw == text
+
+
+def test_inverted_type2_diabetes_maps_to_specific_term(specific_backend):
+    term = condition.normalize_condition("Diabetes Mellitus, Type 2")
+    assert term.ontology_id == "MONDO:0005148"
+    assert term.raw == "Diabetes Mellitus, Type 2"
+
+
+def test_static_answers_hold_without_a_specific_descendant(specific_backend):
+    # exact-key matches and an unrelated (non-descendant) exact hit keep the
+    # audited static ID
+    assert condition.normalize_condition("hepatitis").ontology_id == "MONDO:0002251"
+    assert condition.normalize_condition("IBD").ontology_id == "MONDO:0005265"
+    assert (
+        condition.normalize_condition("type 2 diabetes").ontology_id == "MONDO:0005148"
+    )
+
+
+def test_specific_hit_needs_unique_exact_descendant(specific_backend):
+    specific_backend.exact["chronic hepatitis b"].append(("MONDO:0000001", "other"))
+    assert (
+        condition.normalize_condition("chronic hepatitis B").ontology_id
+        == "MONDO:0002251"
+    )
+
+
+def _ground_as(monkeypatch, curie):
+    monkeypatch.setattr(
+        condition,
+        "_ground_condition",
+        lambda raw: NormalizedTerm("grounded disease", curie, "PRESENT", 0.9),
+    )
+    monkeypatch.setattr(
+        embedding_match,
+        "nearest",
+        lambda *a, **k: [("Fatty liver disease", "MONDO:0004790", 0.95)],
+    )
+
+
+def test_snap_records_pre_snap_term_when_prefix_used_by_vocabulary(vocab, monkeypatch):
+    _ground_as(monkeypatch, "MONDO:0005354")  # not in vocab; MONDO is
+    term = condition.normalize_condition("some disease")
+    assert term.ontology_id == "MONDO:0004790"  # primary is the snapped term
+    assert term.pre_snap == ("grounded disease", "MONDO:0005354")
+
+
+def test_pre_snap_dropped_when_prefix_not_used_by_vocabulary(vocab, monkeypatch):
+    _ground_as(monkeypatch, "ZZZ:0001")
+    term = condition.normalize_condition("some disease")
+    assert term.ontology_id == "MONDO:0004790"
+    assert term.pre_snap is None
+
+
+def test_no_snap_means_no_pre_snap(vocab, monkeypatch):
+    _ground_as(monkeypatch, "MONDO:0004790")  # already in the vocabulary
+    assert condition.normalize_condition("some disease").pre_snap is None
+
+
+def test_empty_vocabulary_unchanged(monkeypatch):
+    bugsigdb_vocabulary._load.cache_clear()
+    monkeypatch.setenv("BUGSIGDB_CONDITION_VOCAB_PATH", "/nonexistent.json")
+    monkeypatch.setattr(condition, "ols_search", lambda *a, **k: None)
+    _ground_as(monkeypatch, "MONDO:0005354")
+    term = condition.normalize_condition("some disease")
+    assert term.ontology_id == "MONDO:0005354"
+    assert term.pre_snap is None
+    bugsigdb_vocabulary._load.cache_clear()
