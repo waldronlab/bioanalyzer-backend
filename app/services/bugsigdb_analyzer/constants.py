@@ -73,6 +73,7 @@ a major topic of the paper) and KEYWORDS (chosen by the authors). They list topi
 paper, including background ones. Use them only to confirm or complete what the text says vaguely
 or not at all (e.g. the host organism, or the marker gene of the sequencing method); never let them
 override the text, and never quote them as condition_evidence.
+Never copy a MeSH heading's inverted form ("Pancreatitis, Chronic", "Arthritis, Juvenile"): write every term in natural word order ("chronic pancreatitis", "juvenile arthritis").
 If the content is marked TITLE ONLY, extract only what the title states and set
 condition_confidence to at most 0.4.
 
@@ -127,14 +128,17 @@ Rules:
     disease and the groups differ by a treatment, response, outcome, measurement or sex.
     THEN any other factor the groups differ by (treatment, response, exposure, measurement, ...).
     A non-disease factor comes first ONLY when no compared group has a disease.
-    * A disease/disorder that a compared group has: give the standard disease entity, as a disease
-      ontology would name it. Drop severity, stage, subtype, treatment-resistance and activity qualifiers:
-      "refractory celiac disease" -> "celiac disease", "stage IV melanoma" -> "melanoma",
-      "drug-resistant epilepsy" -> "epilepsy", "early-onset preeclampsia" -> "preeclampsia".
-      Keep names that are distinct disease entities rather than qualified versions of one:
-      "primary sclerosing cholangitis" and "primary biliary cholangitis" stay as they are (not
-      "cholangitis"); "systemic lupus erythematosus" stays (not "lupus"). Never broaden a named
-      disease to its parent category.
+    * A disease/disorder that a compared group has: give the most specific disease entity the paper
+      names, in natural word order, as a disease ontology would name it. KEEP the type, subtype, cause
+      or course when it is part of the disease's name: "alcoholic cirrhosis" (not "cirrhosis"),
+      "chronic rhinosinusitis" (not "rhinosinusitis"), "tuberculous meningitis" (not "meningitis"),
+      "sickle cell anemia", "acute myeloid leukemia", "psoriatic arthritis". Drop only severity, stage,
+      treatment-resistance and activity qualifiers, which disease ontologies don't name as separate
+      diseases: "severe acute pancreatitis" -> "acute pancreatitis", "stage IV melanoma" -> "melanoma",
+      "drug-resistant epilepsy" -> "epilepsy", "refractory celiac disease" -> "celiac disease".
+      Keep names that are distinct disease entities: "primary sclerosing cholangitis" and "primary
+      biliary cholangitis" stay as they are (not "cholangitis"); "systemic lupus erythematosus" stays
+      (not "lupus"). Never broaden a named disease to its parent category.
     * A non-disease factor the groups differ by, as ONE short EFO-style term (1-4 words, never a list
       joined by "and" or commas): an exposure or treatment ("metformin", "probiotic", "exercise",
       "vitamin D"), a measurement ("blood pressure measurement"), a design factor ("season",
