@@ -31,10 +31,12 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import logging
 import random
 import sys
+import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 # Reuse the same dump URL as app.services.bugsigdb_check rather than
 # duplicating it, in case a caller wants --dump to fall back to a fresh
@@ -675,6 +677,324 @@ def cmd_compare(args: argparse.Namespace) -> int:
 
 
 # ---------------------------------------------------------------------------
+# search-recall
+# ---------------------------------------------------------------------------
+#
+# Question: "if a user searched for the curated term, would this paper be
+# found?" A search for curated term X finds the paper when some predicted tag
+# Y has ID == X, or X is an ontology ancestor of Y (a general search finds
+# specific papers), or (label fallback) Y's label equals a curated label.
+#
+# Host species ground truth has labels only, so each curated label is mapped
+# to an NCBITaxon ID with app.normalization.host_species.normalize_host_species
+# and the label comparison is kept as a fallback. Ancestors come from OLS via
+# app.normalization.ols.ancestor_ontologies: for MONDO/EFO/Orphanet/HP tags EFO
+# is queried first (it imports those hierarchies) and then the prefix's own
+# ontology, results unioned; other prefixes use their own ontology only.
+
+SEARCH_FIELDS = ("condition", "body_site", "host_species")
+SEARCH_LEVELS = ("top1", "tags_exact", "tags_hierarchy")
+DEFAULT_ANCESTOR_CACHE = "cache/ontology_ancestors.json"
+_ANCESTOR_SLEEP_SECONDS = 0.2
+
+
+class AncestorCache:
+    """JSON-file-backed CURIE -> ancestor-CURIE list. Failed lookups (None)
+    are not stored, so a rerun retries them."""
+
+    def __init__(self, path: Optional[Path] = None, fetcher: Any = None):
+        self.path = path
+        self._fetcher = fetcher
+        self._data: Dict[str, List[str]] = {}
+        self._dirty = False
+        self._failed: Set[str] = set()  # in-memory only, never persisted
+        if path and path.exists():
+            try:
+                self._data = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                self._data = {}
+
+    @staticmethod
+    def _key(curie: str) -> str:
+        """CURIE plus the OLS ontologies that were queried for it, so a cache
+        built with different ontology rules is never reused silently."""
+        from app.normalization.ols import ancestor_ontologies
+
+        return f"v3|{_norm_id(curie)}@{','.join(ancestor_ontologies(curie))}"
+
+    def ancestors(self, curie: str) -> Set[str]:
+        if not _norm_id(curie):
+            return set()
+        key = self._key(curie)
+        if key in self._failed:
+            return set()
+        if key not in self._data:
+            fetcher = self._fetcher
+            if fetcher is None:
+                from app.normalization.ols import fetch_ancestor_ids as fetcher
+
+                time.sleep(_ANCESTOR_SLEEP_SECONDS)
+            found = fetcher(curie.strip())  # original case: IRIs are case-sensitive
+            if found is None:
+                self._failed.add(key)
+                return set()
+            self._data[key] = sorted(_norm_id(a) for a in found)
+            self._dirty = True
+        return set(self._data[key])
+
+    def save(self) -> None:
+        if self.path and self._dirty:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            self.path.write_text(json.dumps(self._data, indent=1), encoding="utf-8")
+            self._dirty = False
+
+
+def _load_analyze_results(path: Path) -> Dict[str, Dict[str, Any]]:
+    """PMID -> result dict from `analyze --format json` output (a list of
+    results, one result, or {"results": [...]})."""
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if isinstance(data, dict) and isinstance(data.get("results"), list):
+        data = data["results"]
+    if isinstance(data, dict):
+        data = [data]
+    out: Dict[str, Dict[str, Any]] = {}
+    for item in data if isinstance(data, list) else []:
+        if isinstance(item, dict) and item.get("pmid") not in (None, ""):
+            out[str(item["pmid"]).strip()] = item
+    return out
+
+
+def _predicted_tags(result: Optional[Dict[str, Any]], field: str):
+    """(primary, tags) as lists of (label, id). Falls back to the primary
+    value when a result predates `tags`."""
+    fd = ((result or {}).get("fields") or {}).get(field) or {}
+    primary = []
+    if str(fd.get("status", "")).upper() != "ABSENT" and (
+        fd.get("value") or fd.get("ontology_id")
+    ):
+        primary = [(fd.get("value") or "", fd.get("ontology_id") or "")]
+    tags = [
+        (t.get("label") or "", t.get("ontology_id") or "")
+        for t in (fd.get("tags") or [])
+        if isinstance(t, dict)
+    ]
+    return primary, (tags or primary)
+
+
+def _resolve_host_label(label: str, host_resolver: Any, memo: Dict[str, str]) -> str:
+    """NCBITaxon ID for a curated host label, memoized per label. A failing or
+    empty resolution is remembered as "" (counted by the caller)."""
+    if label not in memo:
+        try:
+            memo[label] = host_resolver(label) or ""
+        except Exception as e:
+            from app.utils.credential_masking import mask_exception_message
+
+            logging.getLogger(__name__).debug(
+                "Host label %r not resolved: %s", label, mask_exception_message(e)
+            )
+            memo[label] = ""
+    return memo[label]
+
+
+def _curated_terms(
+    gt: Dict[str, Any],
+    field: str,
+    host_resolver: Any,
+    host_memo: Optional[Dict[str, str]] = None,
+):
+    """(labels, ids) of normalized curated values for *field*."""
+    if field == "host_species":
+        memo = host_memo if host_memo is not None else {}
+        labels = {_norm(v) for v in gt.get("host_species") or []} - {""}
+        ids = set()
+        for label in sorted(labels):
+            oid = _resolve_host_label(label, host_resolver, memo)
+            if oid:
+                ids.add(_norm_id(oid))
+        return labels, ids
+    labels = {_norm(v) for v in gt.get(f"{field}_labels") or []} - {""}
+    ids = {_norm_id(v) for v in gt.get(f"{field}_ids") or []} - {""}
+    return labels, ids
+
+
+def _host_resolver_default(label: str) -> str:
+    from app.normalization.host_species import normalize_host_species
+
+    return normalize_host_species(label).ontology_id
+
+
+def _found(
+    field: str,
+    terms,
+    labels: Set[str],
+    ids: Set[str],
+    hierarchy: bool,
+    cache: Optional[AncestorCache],
+    synonym_scoring: bool = False,
+) -> bool:
+    tag_ids = {_norm_id(i) for _, i in terms if i}
+    original_case = {_norm_id(i): i.strip() for _, i in terms if i}
+    tag_labels = {_norm(lab) for lab, _ in terms if lab}
+    if tag_ids & ids or tag_labels & labels:
+        return True
+    if synonym_scoring and tag_labels and labels:
+        if _ontology_equivalent(field, tag_labels, labels):
+            return True
+    if hierarchy and cache is not None and ids:
+        for tid in sorted(tag_ids):
+            if cache.ancestors(original_case[tid]) & ids:
+                return True
+    return False
+
+
+def compute_search_recall(
+    results: Dict[str, Dict[str, Any]],
+    ground_truth: Dict[str, Dict[str, Any]],
+    cache: Optional[AncestorCache] = None,
+    host_resolver: Any = None,
+    synonym_scoring: bool = False,
+):
+    """Returns (counts, misses). counts[field_or_'all'] = {"n": denominator,
+    "top1": hits, "tags_exact": hits, "tags_hierarchy": hits}."""
+    host_resolver = host_resolver or _host_resolver_default
+    host_memo: Dict[str, str] = {}
+    no_tags = 0
+    counts = {f: {"n": 0, **{lv: 0 for lv in SEARCH_LEVELS}} for f in SEARCH_FIELDS}
+    counts["all"] = {"n": 0, **{lv: 0 for lv in SEARCH_LEVELS}}
+    misses: List[Dict[str, str]] = []
+    for pmid, gt in ground_truth.items():
+        result = results.get(str(pmid))
+        per_field: Dict[str, Dict[str, bool]] = {}
+        lacks_tags = False
+        for field in SEARCH_FIELDS:
+            labels, ids = _curated_terms(gt, field, host_resolver, host_memo)
+            if not labels and not ids:
+                continue
+            fd = ((result or {}).get("fields") or {}).get(field)
+            if isinstance(fd, dict) and "tags" not in fd:
+                lacks_tags = True
+            primary, tags = _predicted_tags(result, field)
+            hit = {
+                "top1": _found(
+                    field, primary, labels, ids, False, None, synonym_scoring
+                ),
+                "tags_exact": _found(
+                    field, tags, labels, ids, False, None, synonym_scoring
+                ),
+            }
+            hit["tags_hierarchy"] = hit["tags_exact"] or _found(
+                field, tags, labels, ids, True, cache, synonym_scoring
+            )
+            counts[field]["n"] += 1
+            for lv in SEARCH_LEVELS:
+                counts[field][lv] += int(hit[lv])
+            per_field[field] = hit
+            if not hit["tags_hierarchy"]:
+                misses.append(
+                    {
+                        "PMID": str(pmid),
+                        "field": field,
+                        "curated": "; ".join(sorted(ids | labels)),
+                        "predicted_tags": "; ".join(
+                            f"{lab}|{i}" for lab, i in tags
+                        )
+                        if result is not None
+                        else "(paper missing from results)",
+                    }
+                )
+        no_tags += int(lacks_tags)
+        if len(per_field) == len(SEARCH_FIELDS):
+            counts["all"]["n"] += 1
+            for lv in SEARCH_LEVELS:
+                counts["all"][lv] += int(all(per_field[f][lv] for f in SEARCH_FIELDS))
+    unresolved = sorted(label for label, oid in host_memo.items() if not oid)
+    if unresolved:
+        logging.getLogger(__name__).warning(
+            "%d curated host label(s) did not resolve to an NCBITaxon ID "
+            "(label match only): %s",
+            len(unresolved),
+            "; ".join(unresolved[:10]),
+        )
+    counts["_meta"] = {
+        "results_without_tags": no_tags,
+        "unresolved_host_labels": len(unresolved),
+    }
+    return counts, misses
+
+
+def cmd_search_recall(args: argparse.Namespace) -> int:
+    results = _load_analyze_results(Path(args.results))
+    ground_truth = json.loads(Path(args.ground_truth).read_text(encoding="utf-8"))
+    cache = AncestorCache(Path(args.ancestor_cache))
+    counts, misses = compute_search_recall(
+        results, ground_truth, cache, synonym_scoring=args.synonym_scoring
+    )
+    cache.save()
+    meta = counts["_meta"]
+    if meta["results_without_tags"]:
+        print(
+            f"WARNING: {meta['results_without_tags']} paper(s) have results "
+            "without `tags` (cached older results); their primary value was "
+            "used as the only tag. Re-run analysis for a true tag score.",
+            file=sys.stderr,
+        )
+    out = Path(args.out)
+    out.mkdir(parents=True, exist_ok=True)
+
+    def _pct(hits: int, n: int) -> str:
+        return f"{hits / n:.3f}" if n else ""
+
+    rows = []
+    for field in (*SEARCH_FIELDS, "all"):
+        c = counts[field]
+        rows.append(
+            {
+                "field": field,
+                "n_papers": c["n"],
+                **{f"recall_{lv}": _pct(c[lv], c["n"]) for lv in SEARCH_LEVELS},
+                **{f"hits_{lv}": c[lv] for lv in SEARCH_LEVELS},
+            }
+        )
+    with open(out / "summary.csv", "w", newline="", encoding="utf-8") as f:
+        w = csv.DictWriter(f, fieldnames=list(rows[0]))
+        w.writeheader()
+        w.writerows(rows)
+    with open(out / "misses.csv", "w", newline="", encoding="utf-8") as f:
+        w = csv.DictWriter(
+            f, fieldnames=["PMID", "field", "curated", "predicted_tags"]
+        )
+        w.writeheader()
+        w.writerows(misses)
+    lines = [
+        "# Search recall",
+        "",
+        f"Results: {len(results)} papers; ground truth: {len(ground_truth)} papers.",
+        "A paper counts if ANY curated ID is found. Denominator: ground-truth "
+        "papers with a curated value for the field (papers missing from the "
+        "results count as misses). `all` = papers curated for all three fields, "
+        "found on all three.",
+        "Host species ground truth is labels only: labels are mapped to "
+        "NCBITaxon with normalize_host_species, label match is a fallback "
+        f"({meta['unresolved_host_labels']} curated host label(s) did not resolve).",
+        f"Papers whose results lack a `tags` key (primary used as the only "
+        f"tag): {meta['results_without_tags']}.",
+        "",
+        "| field | n | top1 | tags exact | tags hierarchy |",
+        "|---|---|---|---|---|",
+    ]
+    for r in rows:
+        lines.append(
+            f"| {r['field']} | {r['n_papers']} | {r['recall_top1']} | "
+            f"{r['recall_tags_exact']} | {r['recall_tags_hierarchy']} |"
+        )
+    (out / "summary.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    print("\n".join(lines))
+    print(f"\nWrote {out}/summary.md, summary.csv, misses.csv ({len(misses)} misses)")
+    return 0
+
+
+# ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 
@@ -726,6 +1046,30 @@ def main() -> int:
         ),
     )
     p_compare.set_defaults(func=cmd_compare)
+
+    p_recall = sub.add_parser(
+        "search-recall",
+        help="Would a search for the curated term find the paper? (tags + hierarchy)",
+    )
+    p_recall.add_argument(
+        "--results", required=True, help="`BioAnalyzer analyze --format json` output"
+    )
+    p_recall.add_argument(
+        "--ground-truth", required=True, help="*.ground_truth.json from `prepare`"
+    )
+    p_recall.add_argument("--out", required=True, help="Output directory")
+    p_recall.add_argument(
+        "--ancestor-cache",
+        default=DEFAULT_ANCESTOR_CACHE,
+        help="JSON cache of OLS ancestors (default %(default)s)",
+    )
+    p_recall.add_argument(
+        "--synonym-scoring",
+        action="store_true",
+        help="Also count label matches that resolve to the same ontology term "
+        "(live OLS lookups)",
+    )
+    p_recall.set_defaults(func=cmd_search_recall)
 
     args = parser.parse_args()
     return args.func(args)

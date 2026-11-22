@@ -76,6 +76,9 @@ class FieldAnalysis(BaseModel):
     mapping_tier: str = "none"  # "auto" | "review" | "none"
     mapping_candidates: List[Dict[str, str]] = Field(default_factory=list)
     raw: str = ""
+    # Search tags ({label, ontology_id}, primary first) for condition,
+    # host_species and body_site; empty for the other fields.
+    tags: List[Dict[str, str]] = Field(default_factory=list)
 
     @computed_field  # type: ignore[prop-decorator]
     @property

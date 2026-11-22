@@ -17,6 +17,7 @@ from .field_extraction import (
     _avg_confidence,
     _build_curation_summary,
     _field_results_from_unified_payload,
+    _refresh_primary_tag,
     _heuristic_payload_from_text,
     _is_low_quality_cached_result,
     _parse_json_object,
@@ -235,6 +236,8 @@ async def analyze_paper_simple(
                 pmid=pmid,
                 context=analysis_text,
             )
+        for _tag_key in ("condition", "host_species", "body_site"):
+            _refresh_primary_tag(field_results.get(_tag_key))
         has_diff_abund, diff_abund_conf = _resolve_diff_abundance(
             payload, analysis_text
         )
