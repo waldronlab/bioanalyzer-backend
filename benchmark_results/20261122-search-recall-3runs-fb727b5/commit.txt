@@ -1,0 +1,4 @@
+fb727b50dc77d8780da0dce2d1d245e4c4edcdbd
+WARNING: uncommitted changes:
+ scripts/cli_rendering.py | 12 ------------
+ 1 file changed, 12 deletions(-)

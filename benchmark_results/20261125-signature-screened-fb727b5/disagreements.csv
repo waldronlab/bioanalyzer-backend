@@ -1,0 +1,34 @@
+PMID,Screener,BioAnalyzer flag,Confidence,Title,Screener condition,BioAnalyzer condition,In BugSigDB dump
+30171064,No,yes,0.8,Population-level analysis of Blastocystis subtype prevalence and variation in the human gut microbiota.,,Inflammatory bowel disease,no
+30583154,No,yes,0.8,"Spatial and temporal variation of antibiotic resistance in marine fish cage-culture area of Guangdong, China.",,farming period,no
+30531975,No,yes,0.8,GABA-modulating bacteria of the human gut microbiota.,,Major depressive disorder,no
+30447610,Yes,no,0.0,Assessment of the adverse impacts of aflatoxin B 1 on gut-microbiota dependent metabolism in F344 rats.,impacts of AFB1 on gut-microbiota dependent metabolism in F344 rats,aflatoxin B1 exposure,no
+30598081,Yes,no,0.0,Gut microbiome changes in overweight male adults following bowel preparation.,Bowel prep,bowel preparation,no
+30446879,No,yes,0.8,Calorie restriction and its impact on gut microbial composition and global metabolism.,,Energy intake,no
+30453528,Yes,no,0.0,Intestinal Microbiome in Irritable Bowel Syndrome before and after Gut-Directed Hypnotherapy.,Gut-directed hypnotherapy,Irritable bowel syndrome,no
+30290831,Yes,no,0.0,Evaluation of patient- versus provider-collected vaginal swabs for microbiome analysis during pregnancy.,Pregnancy,Sample collection protocol,no
+29908759,Yes,no,0.0,Cutibacterium acnes and the shoulder microbiome.,Acne,,no
+30099890,No,yes,0.8,Gut bacterial composition in a mouse model of Parkinson's disease.,,Parkinson's disease,no
+30189859,No,yes,1.0,Reliability of a participant-friendly fecal collection method for microbiome analyses: a step towards large sample size investigation.,,Sample collection protocol,no
+30068076,No,yes,0.8,"Chemical Compositions of Cold-Pressed Broccoli, Carrot, and Cucumber Seed Flours and Their in Vitro Gut Microbiota Modulatory, Anti-inflammatory, and Free Radical Scavenging Properties.",,seed flour extract exposure,no
+29532420,No,yes,0.8,"Detection of Streptococcus pyogenes virulence genes in Streptococcus dysgalactiae subsp. equisimilis from Vellore, India.",,Lancefield group,no
+29985123,No,yes,0.8,Accuracy of a commercial multiplex PCR for the diagnosis of bacterial vaginosis.,,Bacterial vaginosis,no
+29873593,No,yes,1.0,Variation in the Plasma Levels of Polyunsaturated Fatty Acids in Control vis-à-vis Nonalcoholic Fatty Liver Disease Subjects and Its Possible Association with Gut Microbiome.,,Non-alcoholic steatohepatitis,no
+30064419,Yes,no,0.0,Predicting oral malodour based on the microbiota in saliva samples using a deep learning approach.,Bad breath,Halitosis,no
+29909134,No,yes,0.8,The influence of the intestinal microbiome on vaccine responses.,,Response to vaccine,no
+29767712,No,yes,0.8,Limited influence of hospital wastewater on the microbiome and resistome of wastewater in a community sewerage system.,,hospital sewage exposure,no
+29515164,No,yes,0.8,Activation of Notch-1 in oral epithelial cells by P. gingivalis triggers the expression of the antimicrobial protein PLA 2 -IIA.,,Periodontitis,no
+29907093,Yes,no,0.0,"Effect of administration of a probiotic preparation on gut microbiota and immune response in healthy women in India: an open-label, single-arm pilot study.",Probiotic,probiotic administration,no
+29857583,No,yes,0.8,Changes of Colonic Bacterial Composition in Parkinson's Disease and Other Neurodegenerative Diseases.,,Parkinson's disease,no
+28705725,No,yes,0.8,Assessing the impact of protein extraction methods for human gut metaproteomics.,,Extraction protocol,no
+29475969,Yes,no,0.0,Temporal Variability of Oral Microbiota over 10 Months and the Implications for Future Epidemiologic Studies.,Time,Time,no
+28341746,No,yes,0.8,Leveraging sequence-based faecal microbial community survey data to identify a composite biomarker for colorectal cancer.,,Colorectal cancer,no
+29669883,No,yes,0.8,Impact of Long-Term Erythromycin Therapy on the Oropharyngeal Microbiome and Resistance Gene Reservoir in Non-Cystic Fibrosis Bronchiectasis.,,Bronchiectasis,no
+29623445,No,yes,0.8,Role of the Microbiome in Food Allergy.,,Food allergy,no
+29531366,No,yes,0.8,Towards predicting the environmental metabolome from metagenomics with a mechanistic model.,,Sampling site,no
+29293960,No,yes,1.0,Assessment of the cPAS-based BGISEQ-500 platform for metagenomic sequencing.,,,no
+28883543,No,yes,1.0,"Pre-treatment microbial Prevotella-to-Bacteroides ratio, determines body fat loss success during a 6-month randomized controlled diet intervention.",,Obesity,no
+29248229,Yes,no,0.0,"Breastfeeding-associated microbiota in human milk following supplementation with Lactobacillus rhamnosus GG, Lactobacillus acidophilus La-5, and Bifidobacterium animalis ssp. lactis Bb-12.",Breastfeeding,probiotic supplementation,no
+29168036,No,yes,0.8,"The gut microbiome, symptoms, and targeted interventions in children with cancer: a systematic review.",,Cancer,no
+28829923,Yes,no,0.0,High intake of dairy during energy restriction does not affect energy balance or the intestinal microflora compared with low dairy intake in overweight individuals in a randomized controlled trial.,dairy intake,Obesity,no
+29494275,No,yes,0.8,The gut microbiota and immune checkpoint inhibitors.,,Cancer,no

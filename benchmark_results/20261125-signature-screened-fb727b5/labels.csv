@@ -1,0 +1,375 @@
+PMID,Year,Contains signatures,Condition (screener),In BugSigDB dump,In 200-paper test sets
+32075882,2020,,,no,no
+31215600,2019,Yes,acetaldehyde,yes,no
+31160598,2019,Yes,fat distribution,no,no
+31126003,2018,Yes,Air pollution,yes,no
+31123265,2019,Yes,respiratory tract infections,no,no
+31053143,2019,Yes,sports and diet,yes,no
+30919073,2019,Yes,aplastic anemia,yes,no
+30888539,2019,Yes,obesity,no,no
+30875283,2019,Yes,kostmann syndrome,no,no
+30867067,2019,Yes,dietary fiber,no,no
+30866773,2019,Yes,hormonal contraceptive,yes,no
+30854760,2019,Yes,cervical cerclage,yes,no
+30813950,2019,Yes,environmental toxicants,yes,yes
+30803537,2019,Yes,pulpitis,no,no
+30791484,2019,Yes,soybean,yes,no
+30791436,2019,Yes,stillbenoids,no,no
+30770768,2019,Yes,hospital environment,no,no
+30764497,2019,Yes,autism,yes,no
+30719912,2019,Yes,soybean,no,no
+30707176,2019,Yes,vasovagal syncope,yes,no
+30696735,2019,Yes,dietary fiber,no,no
+30682843,2019,Yes,sports,no,no
+30678168,2019,Yes,sorghum,no,no
+30665461,2019,Yes,Africa vs. US,no,no
+30664020,2019,Yes,surgical fecal stream diversion,no,no
+30661321,2019,Yes,old age,no,no
+30642268,2019,Yes,diarrhea,no,no
+30633889,2018,Yes,Preterm prelabor rupture of the fetal membranes,yes,no
+30604790,2019,Yes,wheat bran???,no,no
+30599284,2018,Yes,Adenotonsillar and middle ear diseases,no,no
+30574802,2018,Yes,Eczema,no,no
+30542916,2018,Yes,,yes,no
+30520232,2018,Yes,,no,no
+30508628,2018,Yes,,yes,no
+30503971,2018,Yes,arsenic exposure in carotid intima-media thickness,no,no
+30440093,2018,Yes,,no,no
+30417607,2018,Yes,BMI and lifestyle,no,no
+30366118,2018,Yes,obesity,yes,no
+30292647,2018,Yes,,yes,no
+30239655,2019,Yes,Crohn's Disease and Ulcerative Colitis,yes,yes
+30171206,2018,Yes,,no,no
+30117171,2018,Yes,,yes,no
+29791775,2018,Yes,,yes,yes
+29708822,2018,Yes,,no,no
+29509315,2018,Yes,,no,no
+30171064,2018,No,,no,no
+30553628,2018,No,,no,no
+30583154,2018,No,,no,no
+30293222,2018,No,,no,no
+30531975,2018,No,,no,no
+30423465,2018,Yes,schizophrenia,no,no
+30051546,2018,Yes,,yes,yes
+30447610,2018,Yes,impacts of AFB1 on gut-microbiota dependent metabolism in F344 rats,no,no
+30500755,2018,,,no,no
+30287886,2018,,,no,no
+30471188,2018,Yes,,no,no
+30118620,2018,,,no,no
+30445307,2018,,,no,no
+30297287,2018,,,no,no
+30279512,2018,,,no,no
+30573310,2018,,,no,no
+30429094,2018,No,,no,no
+30598081,2018,Yes,Bowel prep,no,no
+30579350,2018,Yes,daycare,no,no
+30583518,2018,Yes,navy bean,no,no
+30516980,2018,No,,no,no
+30562947,2018,Yes,American diet,yes,no
+30581271,2018,Yes,Crohn's,yes,no
+30545401,2018,Yes,inflammatory diseases,yes,no
+30541450,2018,Yes,"diet, physical activity, screen time",yes,yes
+30538180,2018,Yes,Diet,no,no
+30622429,2018,No,,no,no
+30522511,2018,Yes,high fat diet,no,no
+30510177,2018,No,,no,no
+30418043,2018,Yes,Iron-deficiency anemia,yes,no
+30212253,2018,Yes,High altitude,no,no
+30292635,2018,Yes,Something tumor related?,no,no
+30446879,2018,No,,no,no
+30311721,2018,Yes,H pylori therapy,no,no
+29855054,2018,Yes,root canal,no,no
+30267143,2018,Yes,Urinogynecologic surgery,no,no
+30467977,2018,Yes,Sample collection procedures,no,no
+30498207,2018,Yes,Splenectomy,no,no
+30301767,2018,No,,no,no
+30488879,2018,Yes,Septic shock,no,no
+30463925,2018,Yes,antibiotics + fecal transplant,no,no
+30453528,2018,Yes,Gut-directed hypnotherapy,no,no
+30584534,2018,No,,no,no
+30409177,2018,Yes,travelers' diarrhea,no,no
+30395655,2018,Yes,HPV,yes,yes
+30165663,2018,No,,no,no
+30392210,2018,Yes,fatty liver disease,no,no
+30027706,2018,No,,no,no
+29355905,2018,No,,no,no
+30157044,2018,No,,no,no
+30224347,2018,Yes,type 1 diabetes,yes,no
+29303032,2018,Yes,oolong tea,no,no
+30273610,2018,No,,no,no
+29564487,2018,Yes,autism,yes,no
+30115996,2018,No,,no,no
+30153231,2018,Yes,pneumococcal colonization,yes,no
+29353409,2018,Yes,kidney stones,yes,no
+30365522,2018,Yes,Necrotizing enterocolitis,yes,yes
+30356965,2018,Yes,Crohn's disease,no,no
+30332459,2018,Yes,diabetes mellitus,no,no
+30300382,2018,Yes,Hemodialysis,yes,no
+30290831,2018,Yes,Pregnancy,no,no
+30279249,2018,No,,no,no
+29997110,2018,Yes,Granulomatosis with polyangiitis,no,no
+29808442,2018,No,,no,no
+30100563,2018,Yes,type 1 diabetes,no,no
+29876777,2018,Yes,probiotics,no,no
+30006660,2018,Yes,urinary tract infection,yes,no
+30118374,2018,No,,no,no
+29665102,2018,Yes,fecal transplant,no,no
+30174010,2018,Yes,tonsillectomy,no,no
+30174001,2018,Yes,recurrent tonsillitis/sleep apnea,no,no
+30143589,2018,No,,no,no
+29753031,2018,Yes,Antiseptic,no,no
+29908759,2018,Yes,Acne,no,no
+30244778,2018,Yes,Gender and menopause,no,no
+30313111,2018,Yes,cerebral infarction,no,no
+30261008,2018,Yes,metformin,no,no
+30248149,2018,No,,no,no
+30237489,2018,Yes,Neonatal jaundice,yes,yes
+30235351,2018,?,,no,no
+30187897,2018,Yes,Pregnant pigs,no,no
+30099890,2018,No,,no,no
+29888657,2018,Yes,Allergies?,no,no
+30227892,2018,Yes,fecal transplant,no,no
+30208875,2018,Yes,Asthma,no,no
+30208950,2018,Yes,very low birth weight,no,no
+30204780,2018,Yes,chronic fatigue syndrome,yes,no
+30201048,2018,No,,no,no
+30202057,2018,Yes,C. difficile infection,no,no
+30189859,2018,No,,no,no
+30068076,2018,No,,no,no
+29862523,2018,Yes,Asthma,no,no
+30373876,2018,No,,no,no
+29976769,2018,?,,no,no
+29945689,2018,No,,no,no
+30010747,2018,Yes,Ulcerative colitis,no,no
+29532420,2018,No,,no,no
+29791788,2018,Yes,Aging women,yes,no
+29548797,2018,Yes,Acne,no,no
+29985123,2018,No,,no,no
+29873593,2018,No,,no,no
+30172257,2018,Yes,Antibiotics,no,no
+30127432,2018,No,,no,no
+29984544,2018,Yes,Asthma,no,no
+30165830,2018,Yes,Sinus surgery,no,no
+29756631,2018,Yes,Acne vulgaris,yes,no
+30157953,2018,Yes,Smoking,yes,no
+30143034,2018,Yes,Lung cancer,no,no
+30138339,2018,Yes,NSAIDs for horses,no,no
+30134854,2018,No,,no,no
+29617871,2018,No,,no,no
+30039147,2018,Yes,"""L. plantarum ZDY04"" whatever it is",no,no
+30122883,2018,Yes,chronic Hepatitis B,yes,yes
+30091979,2018,Yes,anti-worm medication,no,no
+30089174,2018,Yes,Macular degeneration,yes,no
+30086729,2018,No,,no,no
+30081953,2018,Yes,Breast cancer,yes,no
+30081517,2018,No,,no,no
+30074988,2018,Yes,Lab conditions,no,no
+30071894,2018,Yes,Prebiotics for autism,no,no
+30071046,2018,Yes,Antibiotics,no,no
+30071000,2018,Yes,Chronic lung disease,no,no
+29787419,2018,No,,no,no
+29897654,2018,Yes,Bismuth,no,no
+29479697,2018,Yes,HPV,no,no
+30140925,2018,Yes,Different eye tissues,no,no
+29987933,2018,Yes,High fat diet,no,no
+29804008,2018,No,,no,no
+29859693,2018,No,,no,no
+30032789,2018,No,,no,no
+29923815,2018,Yes,OSCC,no,no
+29982534,2018,Yes,Fructans,no,no
+30552302,2018,Yes,Histamine intolerance,no,no
+29412464,2018,Yes,High fat diet,no,no
+29408012,2018,No,,no,no
+29760502,2018,No,,no,no
+30010849,2018,No,,no,no
+29624747,2018,Yes,Food allergies,yes,yes
+30064419,2018,Yes,Bad breath,no,no
+30053882,2018,Yes,HIV,no,no
+30029674,2018,Yes,IBD,no,no
+29984576,2018,Yes,Legume diet,no,no
+29895146,2018,Yes,Camellia oil,no,no
+30020932,2018,Maybe,,no,no
+29974116,2018,Yes,High fat diet,no,no
+29909134,2018,No,,no,no
+30050871,2018,No,,no,no
+30002355,2018,Yes,Kiwifruit,no,no
+30002323,2018,Yes,Vegetarian diet,no,no
+29973274,2018,Yes,Maternal diet,no,no
+29517944,2018,Yes,Alcohol consumption,no,no
+29969462,2018,Yes,Autoimmune liver disease,no,no
+29965986,2018,Yes,IBD,no,no
+29318631,2018,Yes,Egg allergy,yes,no
+29785502,2018,No,,no,no
+29217277,2018,No,,no,no
+29637226,2018,Yes,Liver abscess,no,no
+29767712,2018,No,,no,no
+29718191,2018,No,,no,no
+29468742,2018,Yes,Dogs,no,no
+29452199,2018,Yes,Respiratory disorders,no,no
+29565634,2018,Yes,Herbal medicines,no,no
+29515164,2018,No,,no,no
+29948900,2018,Yes,fatty liver disease,no,no
+29988504,2018,Maybe,,no,no
+29877551,2018,Yes,High fat diet,no,no
+29971220,2018,Yes,Gastric cancer,yes,yes
+29907093,2018,Yes,Probiotic,no,no
+29885665,2018,Yes,Asthma,yes,no
+29884786,2018,Maybe,,no,no
+29679417,2018,Yes,Multiple Sclerosis,no,no
+29863827,2018,Yes,Farming,no,no
+29869736,2018,Yes,Leaky gut,no,no
+28578302,2018,Yes,Cirrhosis,no,no
+29425873,2018,Yes,Brown seaweed,no,no
+29434314,2018,Yes,Obesity,no,no
+29726951,2018,Yes,Walnut,no,no
+29858350,2018,Maybe,Psoriasis,no,no
+29704918,2018,No,,no,no
+28483533,2018,No,,no,no
+29710405,2018,Yes,Polysaccharides,no,no
+29857583,2018,No,,no,no
+29762733,2018,Maybe,,no,no
+29388394,2018,Yes,Obesity,yes,yes
+29256975,2018,Maybe,,no,no
+29574656,2018,No,,no,no
+28705725,2018,No,,no,no
+29799027,2018,No,,no,no
+29788934,2018,Yes,HIV,no,no
+29764499,2018,Yes,Gestational diabetes,yes,no
+29763437,2018,Maybe,,no,no
+29593031,2018,No,,no,no
+29965539,2018,Maybe,Wastewater,no,no
+29767701,2018,No,,no,no
+29713027,2018,No,,no,no
+29571898,2018,Yes,Autism,no,no
+29401402,2018,Yes,Colitis,no,no
+29475969,2018,Yes,Time,no,no
+29097439,2018,No,,no,no
+28341746,2018,No,,no,no
+29525681,2018,Yes,Henoch-Schoenlein Purpura,yes,no
+29721826,2018,No,,no,no
+29610517,2018,No,,no,no
+28263087,2018,No,,no,no
+29618180,2018,Yes,Diarrhea,no,no
+29633639,2018,Yes,IBS,no,no
+29482339,2018,Yes,Bariatric surgery,no,no
+29482338,2018,Yes,Bacillus subtilis,no,no
+29740427,2018,Yes,acute graft-versus-host disease,yes,yes
+29669883,2018,No,,no,no
+29668720,2018,Yes,Periodontitis,no,no
+29666288,2018,Yes,Gingivitis,no,no
+29642940,2018,Yes,Colorectal cancer,no,no
+29355542,2018,Maybe,,no,no
+29632427,2018,Yes,IBD,yes,no
+29681906,2018,Yes,H. pylori,no,no
+29623445,2018,No,,no,no
+29615108,2018,Yes,IBD,no,no
+29127623,2018,Yes,Restrooms,no,no
+29524863,2018,Maybe,,no,no
+29393577,2018,No,,no,no
+29233857,2018,Yes,Timing of food intake,no,no
+29083504,2018,Yes,Alcoholic hepatitis,yes,no
+29524219,2018,Yes,Barley,no,no
+29531366,2018,No,,no,no
+29502926,2018,Yes,Phenylketonuric diet,yes,no
+29405661,2018,Yes,Lower airway,no,no
+29444477,2018,Maybe,,no,no
+29300957,2018,Maybe,,no,no
+29269441,2018,Yes,Chronic Obstructive Pulmonary Disease,no,no
+29596446,2018,Yes,Opioid,yes,no
+29424773,2018,No,,no,no
+29636752,2018,No,,no,no
+29426044,2018,Yes,Allergic Rhinitis,no,no
+29522532,2018,Yes,Cystic Fibrosis,no,no
+28891751,2018,Yes,Rotavirus vaccine,no,no
+29447975,2018,No,,no,no
+29308654,2018,Yes,Condomless receptive anal sex,no,no
+29052232,2018,Yes,Asthma,yes,no
+29122754,2018,No,,no,no
+29278751,2018,Yes,Personality,no,no
+29172724,2018,Yes,Diabetes,yes,yes
+29353421,2018,Yes,1 day vs 5 day samples,no,no
+29368074,2018,Yes,Antibiotics,no,no
+29283459,2018,Yes,Rosacea,no,no
+29293960,2018,No,,no,no
+28986935,2018,No,,no,no
+28883543,2018,No,,no,no
+29183642,2018,No,,no,no
+29028181,2018,No,,no,no
+29458668,2018,Yes,Per-implantitis,no,no
+29521257,2018,No,,no,no
+29663582,2018,Yes,Burn scars,no,no
+29486796,2018,Yes,Helminth infections,yes,no
+29489859,2018,Yes,Atopic Dermatitis,yes,no
+29264969,2018,Yes,Fermented soymilk,no,no
+29124969,2018,Yes,Carotid Atherosclerosis,no,no
+29486761,2018,Yes,Idiopathic pulmonary fibrosis,no,no
+29470389,2018,Yes,Walnut diet,yes,yes
+29458413,2018,Yes,Celiac disease,no,no
+29483715,2018,Yes,Obesity,no,no
+29453431,2018,Yes,Asthma,no,no
+29040451,2018,No,,no,no
+29378945,2018,No,,no,no
+29363966,2018,Maybe,,no,no
+29468143,2018,Yes,Shiga Toxin E. coil,no,no
+29343501,2018,Maybe,,no,no
+29273643,2018,No,,no,no
+29394894,2018,No,,no,no
+29394957,2018,Yes,Household attributes,no,no
+29394954,2018,Yes,Floor dust,no,no
+29128130,2018,No,,no,no
+29092015,2018,No,,no,no
+29028448,2018,Yes,Weight status,no,no
+29031501,2018,No,,no,no
+27872184,2018,Yes,IBS,no,no
+29438602,2018,No,,no,no
+29161417,2018,Yes,Vitamin D,no,no
+29248229,2018,Yes,Breastfeeding,no,no
+29353387,2018,Maybe,,no,no
+29384870,2018,Yes,Peri-implantitis,no,no
+29105287,2018,Yes,Obesity,no,no
+29432061,2018,Yes,,no,no
+28618237,2018,Yes,Dried cranberry consumption,no,no
+29471566,2018,No,,no,no
+29168036,2018,No,,no,no
+29434076,2018,Yes,Pancreatitis,yes,no
+29196292,2018,Yes,Lupus,no,no
+29385143,2018,Yes,Clostridium difficile infection and/or ulcerative colitis,no,no
+29382366,2018,Yes,spondyloarthritis,no,no
+28969444,2018,No,,no,no
+29081087,2018,No,,no,no
+29361936,2018,Yes,Birth complications,no,no
+29362454,2018,Yes,Nonalcoholic fatty liver disease,yes,no
+29351278,2018,Yes,sore throats,no,no
+29361092,2018,Yes,fecal microbiota transplantation,no,no
+29348587,2018,Yes,Chinese subpopulations,no,no
+29682571,2018,Yes,Nonalcoholic Steatohepatitis,no,no
+29269393,2018,No,,no,no
+29302014,2018,Yes,anti-PD-1 therapy for melanoma,yes,no
+29097494,2018,Yes,anti-PD-1 therapy for epithelial tumors,yes,yes
+29097493,2018,Yes,anti-PD-1 therapy for melanoma,yes,no
+28767339,2018,Yes,Infectious diarrhea,no,no
+29052237,2018,Yes,fecal microbiota transplantation,no,no
+28829923,2018,Yes,dairy intake,no,no
+30793576,2018,No,,no,no
+27149343,2018,No,,no,no
+29049037,2018,,fractures,no,no
+29084074,2018,Yes,uncomplicated diverticular disease,no,no
+28636759,2018,Yes,Rosacea,no,no
+30535609,2018,No,,no,no
+29161377,2018,Yes,IncF conjugative plasmids,no,no
+27742762,2018,Yes,Pancreatic cancer,yes,no
+29543544,2018,No,,no,no
+29469650,2018,Yes,Prenatal androgene exposure,no,no
+29494275,2018,No,,no,no
+29478734,2018,No,,no,no
+28479329,2018,Yes,Asthma,no,no
+29045349,2018,Yes,Child BMI,no,no
+28561276,2018,Yes,Hep C,yes,yes
+30298261,2018,No,,no,no
+30298256,2018,No,,no,no
+29195140,2018,,,no,no
+28843021,2018,Yes,Parkinsons,yes,no
+28612844,2018,,,no,no
+29689651,2018,Yes,obesity,no,no
+28888753,2018,Yes,Prostate cancer,no,no
+24316595,,,,yes,no

@@ -1,0 +1,6 @@
+commit fb727b5; started 2026-11-22T13:55:25+03:00
+BUGSIGDB_CONDITION_VOCAB_PATH=/app/cache/bugsigdb_condition_vocabulary.heldout200.json
+DEFAULT_MODEL=models/gemini-2.5-flash
+INCLUDE_INDEX_TERMS=1
+LLM_TEMPERATURE=0
+USE_FULLTEXT=0

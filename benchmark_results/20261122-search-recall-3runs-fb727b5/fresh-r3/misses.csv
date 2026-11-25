@@ -1,0 +1,58 @@
+PMID,field,curated,predicted_tags
+22622349,body_site,UBERON:0013067; colorectal mucosa,rectum|UBERON:0001052
+22730468,condition,MONDO:0005052; irritable bowel syndrome,
+22949626,condition,CHEBI:33281; antimicrobial agent,antibiotic exposure|
+23038174,condition,EFO:0002755; diet,Carbohydrate intake measurement|EFO:0010811
+23071781,body_site,UBERON:0002048; lung,bronchoalveolar lavage fluid|
+23153041,condition,MONDO:0005083; psoriasis,skin barrier disruption|
+23153041,body_site,UBERON:0002097; skin of body,outer epithelium|UBERON:0007376
+24451087,body_site,UBERON:0001988; feces,rectum|UBERON:0001052
+25057045,condition,EFO:0010123; response to antiviral drug,HIV infection|MONDO:0005109
+25239901,condition,MONDO:0005096; squamous cell carcinoma,laryngeal carcinoma|MONDO:0002358; vocal cord polyps|
+25239901,body_site,UBERON:0000341; UBERON:0001836; saliva; throat,upper throat near the epiglottis and vestibulum laryngis to the subglottic region|; upper throat near the epiglottis|; vestibulum laryngis to the subglottic region|
+25278091,body_site,UBERON:0003729; mouth mucosa,oral cavity|UBERON:0000167
+25432777,condition,MONDO:0024331; colorectal carcinoma,Colorectal cancer|MONDO:0005575
+25487798,condition,CHEBI:33281; antimicrobial agent,GSK1322322 treatment regimen|
+25540641,condition,EFO:0009756; autoimmune type 1 diabetes,Type I diabetes mellitus|MONDO:0005147
+26069274,condition,HP:0031685; abnormal stool composition,stool consistency|
+26151645,body_site,UBERON:0005023; mucosa of oropharynx,oropharynx|UBERON:0001729
+26606973,condition,MONDO:0005366; chronic hepatitis b virus infection,hepatitis|MONDO:0002251
+26606973,body_site,UBERON:0016482; dental plaque,saliva|UBERON:0001836
+26901400,body_site,UBERON:0000992; UBERON:0001295; endometrium; ovary,endometrial swabs and cystic fluid|; endometrial swabs|; cystic fluid|
+26962942,condition,NCBITAXON:12721; human immunodeficiency virus,HIV infection|MONDO:0005109; ART treatment|
+27499582,host_species,NCBITAXON:9606; homo sapiens,Japanese population|
+27609659,body_site,UBERON:0003403; skin of forearm,nasal cavity|UBERON:0001707; antecubital|; popliteal fossae|; nose tip|UBERON:0012128; cheek|UBERON:0001567
+28512451,condition,EFO:0003917; EFO:0009636; cesarean section; premature birth,Delivery method|EFO:0000395
+28512451,body_site,UBERON:0001988; UBERON:0007109; feces; meconium,alimentary part of gastrointestinal system|UBERON:0005409
+28538949,body_site,UBERON:0015474; axilla skin,skin|UBERON:0002097; inguinal part of abdomen|UBERON:0008337
+28683818,condition,EFO:0007918; response to anti-tuberculosis drug,Tuberculosis|MONDO:0018076; anti-tuberculosis therapy|
+28683818,body_site,UBERON:0001988; feces,intestines|
+28743816,body_site,UBERON:0001331; skin of penis,penile (coronal sulcus)|
+28852861,condition,MONDO:0005011; MONDO:0005101; crohn's disease; ulcerative colitis,Inflammatory bowel disease|MONDO:0005265
+28852861,body_site,UBERON:0001988; feces,colon|UBERON:0001155; mucosal surfaces (ileum|; caecum|UBERON:0001153; sigmoid colon|UBERON:0001159
+28860468,body_site,UBERON:0036243; vaginal fluid,vagina|UBERON:0000996
+28874767,condition,EFO:0000395; EFO:0007658; IDOMAL:0001254; carrier status; delivery method; population,Place of residence measurement|EFO:0009583
+28932201,body_site,UBERON:0000995; uterus,placenta|UBERON:0001987
+29031597,body_site,UBERON:0012068; right lung middle lobe bronchiole,lower airway|
+29091972,condition,EFO:0000410; EFO:0000724; disease staging; timepoint,Parkinson's disease|MONDO:0005180; Disease progression measurement|EFO:0008336
+29097494,condition,EFO:0008336; MONDO:0005086; MONDO:0005233; disease progression measurement; non-small cell lung carcinoma; renal cell carcinoma,Cancer|MONDO:0004992; response to ICIs|
+29190829,condition,MONDO:0004989; breast carcinoma,Breast cancer|MONDO:0007254
+29190829,body_site,UBERON:0000310; breast,breast tumor tissues and non-cancerous adjacent tissues|; breast tumor tissues|; non-cancerous adjacent tissues|
+29196767,body_site,UBERON:0010306; bulbar conjunctiva,inferior bulbar conjunctiva|
+29276170,condition,EFO:0002757; high fat diet,Metabolic syndrome|EFO:0000195; inulin|
+29470389,condition,EFO:0002755; diet,walnut-enriched diet|
+29554907,condition,CHEBI:33281; antimicrobial agent,antibiotic exposure|
+29774014,body_site,UBERON:0000165; mouth,saliva|UBERON:0001836
+29971220,condition,MONDO:0001056; gastric cancer,Helicobacter pylori|NCBITAXON:210; gastric lesions|
+30042470,condition,CHEBI:33281; EFO:0000395; EFO:0009713; antimicrobial agent; delivery method; number of siblings,maternal antimicrobial use|
+30154758,condition,EFO:0002950; XCO:0000415; maternal milk; pregnancy,litter performance|
+30154758,host_species,NCBITAXON:9823; sus scrofa domesticus,sows|
+30239655,body_site,UBERON:0002509; mesenteric lymph node,mesenteric lymph nodes|
+30257444,condition,MONDO:0011122; obesity,Metabolic process|GO:0008152
+30395655,body_site,UBERON:0000165; mouth,saliva|UBERON:0001836; breast milk|
+30541450,condition,MONDO:0011122; obesity,Physical activity|EFO:0003940; dietary fiber intake measurement|EFO:0020088
+30551387,condition,EFO:0007637; traditional chinese medicine type,Chronic constipation|HP:0012450; Zengye decoction treatment|
+30643289,condition,EFO:0007369; milk allergic reaction,allergic disease|MONDO:0005271
+30656437,condition,CHEBI:51050; titanium dioxide nanoparticle,TiO2 NPs exposure|
+30738924,condition,MONDO:0005654; ascariasis,Ascaris suum infection|
+30813950,condition,EFO:0008360; environmental exposure measurement,Exposure|EFO:0000487
