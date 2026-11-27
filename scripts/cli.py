@@ -713,9 +713,17 @@ class BioAnalyzerCLI:
         deadline = time.time() + timeout
         while time.time() < deadline:
             try:
-                status = self._session.get(
+                response = self._session.get(
                     self._build_api_url(f"/analysis-status/{job_id}"), timeout=15
-                ).json()
+                )
+                if response.status_code == 404:
+                    # Jobs live in the API process's memory; a restart drops them.
+                    print(
+                        f"❌ Job {job_id} no longer exists on the server "
+                        "(it was probably restarted). Run the analysis again."
+                    )
+                    return None
+                status = response.json()
                 state = status.get("status")
                 print(f"   ⏳ {state} ({status.get('progress', '')})")
                 if state == "completed":

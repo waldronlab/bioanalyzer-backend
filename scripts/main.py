@@ -61,6 +61,14 @@ def main():
     print(f"Docs: http://{args.host}:{args.port}/docs")
     print(f"Health: http://{args.host}:{args.port}/health")
     print(f"Reload: {'enabled' if reload_enabled else 'disabled'}")
+    if workers > 1:
+        # Each worker process has its own memory, so these don't work across them.
+        print(
+            f"Warning: {workers} workers. URL-analysis jobs (/analyze-url) and "
+            "rate-limit counts are kept per process: a job's status request can "
+            "land on a worker that never saw it (404), and each worker counts "
+            "its own rate limit."
+        )
     print(f"Log level: {args.log_level}")
     print("\nPress Ctrl+C to stop")
 

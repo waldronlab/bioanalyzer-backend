@@ -176,3 +176,55 @@ def test_main_exits_nonzero_when_run_table_fails(monkeypatch):
     with pytest.raises(SystemExit) as exc_info:
         main()
     assert exc_info.value.code == 1
+
+
+# ---------------------------------------------------------------------------
+# analyze-url polling: a job that vanished (API restarted) must not hang
+# ---------------------------------------------------------------------------
+
+
+def test_poll_url_job_stops_when_job_is_gone(monkeypatch, capsys):
+    calls = []
+
+    def _fake_get(url, timeout=15):
+        calls.append(url)
+        return DummyResponse(404, {"detail": "Job abc not found"})
+
+    cli = BioAnalyzerCLI()
+    monkeypatch.setattr(cli._session, "get", _fake_get)
+    monkeypatch.setattr("time.sleep", lambda *_: None)
+
+    assert cli._poll_url_job("abc", interval=1, timeout=600) is None
+    assert len(calls) == 1  # gave up at once instead of polling until timeout
+    assert "no longer exists" in capsys.readouterr().out
+
+
+def test_poll_url_job_returns_result_when_completed(monkeypatch):
+    responses = iter(
+        [
+            DummyResponse(200, {"status": "processing", "progress": "Step 2/7"}),
+            DummyResponse(200, {"status": "completed"}),
+            DummyResponse(200, {"job_id": "abc", "experiments": []}),
+        ]
+    )
+    cli = BioAnalyzerCLI()
+    monkeypatch.setattr(cli._session, "get", lambda url, timeout=15: next(responses))
+    monkeypatch.setattr("time.sleep", lambda *_: None)
+
+    assert cli._poll_url_job("abc", interval=1, timeout=600) == {
+        "job_id": "abc",
+        "experiments": [],
+    }
+
+
+def test_poll_url_job_reports_failed_job(monkeypatch, capsys):
+    cli = BioAnalyzerCLI()
+    monkeypatch.setattr(
+        cli._session,
+        "get",
+        lambda url, timeout=15: DummyResponse(
+            200, {"status": "failed", "error": "boom"}
+        ),
+    )
+    assert cli._poll_url_job("abc", interval=1, timeout=600) is None
+    assert "boom" in capsys.readouterr().out
