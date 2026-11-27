@@ -92,6 +92,19 @@ export NCBI_API_KEY="your_ncbi_api_key"
 export EMAIL="your_email@example.com"
 ```
 
+### Exposing the API beyond your machine
+
+The API is open by default. Before anyone else can reach it, require an API key:
+
+```bash
+export BIOANALYZER_API_KEYS="key-for-alice,key-for-ci"   # server: accepted keys
+export BIOANALYZER_API_KEY="key-for-alice"               # CLI/scripts: key to send
+```
+
+Clients send the key in the `X-API-Key` header. `/health`, `/api/v1/health` and
+`/api/v1/ping` stay public for health checks. To cap LLM cost on
+`/api/v1/analyze-url`, also set `URL_ANALYSIS_ALLOWED_MODELS` (see `.env.example`).
+
 ### Docker Configuration
 
 The system uses these Docker settings:
