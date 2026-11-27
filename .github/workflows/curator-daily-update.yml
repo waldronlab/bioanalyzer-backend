@@ -14,9 +14,29 @@ permissions:
   contents: write
 
 jobs:
-  analyze-and-publish:
+  # `secrets` can't be used in `if:` (GitHub rejects the whole workflow), so
+  # check them in a step and skip the real job when they aren't configured.
+  check-secrets:
     runs-on: ubuntu-latest
-    if: ${{ secrets.GEMINI_API_KEY != '' && secrets.NCBI_API_KEY != '' }}
+    outputs:
+      configured: ${{ steps.check.outputs.configured }}
+    steps:
+      - id: check
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          NCBI_API_KEY: ${{ secrets.NCBI_API_KEY }}
+        run: |
+          if [ -n "$GEMINI_API_KEY" ] && [ -n "$NCBI_API_KEY" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::GEMINI_API_KEY / NCBI_API_KEY not set; skipping the daily update."
+          fi
+
+  analyze-and-publish:
+    needs: check-secrets
+    if: ${{ needs.check-secrets.outputs.configured == 'true' }}
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
