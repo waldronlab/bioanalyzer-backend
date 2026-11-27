@@ -1,6 +1,6 @@
 # Release workflow — build and push Docker image on version tags.
 # Trigger: push tag v* (e.g. git tag v1.0.0 && git push origin v1.0.0)
-# Pushes to GitHub Container Registry (ghcr.io); set DOCKERHUB_* secrets to also push to Docker Hub.
+# Pushes to GitHub Container Registry: ghcr.io/waldronlab/bioanalyzer-backend.
 
 name: Release
 
@@ -20,10 +20,6 @@ jobs:
     permissions:
       contents: read
       packages: write
-    # `secrets` can't be used in `if:` (GitHub rejects the whole workflow), so
-    # expose the one we test as an env var and test that instead.
-    env:
-      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
 
     steps:
       - name: Checkout
@@ -60,36 +56,6 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          platforms: linux/amd64
-
-      - name: Log in to Docker Hub
-        if: ${{ env.DOCKERHUB_USERNAME != '' }}
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - name: Extract metadata for Docker Hub
-        if: ${{ env.DOCKERHUB_USERNAME != '' }}
-        id: meta-dh
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ secrets.DOCKERHUB_USERNAME }}/bioanalyzer-backend
-          tags: |
-            type=ref,event=tag,prefix=v
-            type=semver,pattern={{version}}
-
-      - name: Build and push to Docker Hub
-        if: ${{ env.DOCKERHUB_USERNAME != '' }}
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: ./Dockerfile
-          push: true
-          tags: ${{ steps.meta-dh.outputs.tags }}
-          labels: ${{ steps.meta-dh.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           platforms: linux/amd64
