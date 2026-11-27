@@ -63,6 +63,7 @@ from __future__ import annotations
 import logging
 import os
 import re
+import threading
 from datetime import datetime, timezone
 from typing import Any, List, Optional, Tuple
 
@@ -185,9 +186,16 @@ class _Connection:
     """Uniform execute/fetch surface over sqlite3 or duckdb, so
     LocalOntologyBackend's query methods don't need to know which engine is
     live. Not a general-purpose DB-API shim - just the handful of calls this
-    module makes."""
+    module makes.
+
+    Thread-safe: the default grounding backend is one shared instance, and
+    batch analysis grounds several papers at once in worker threads. A DuckDB
+    connection rejects a second concurrent call ("connection is busy"), so
+    every call runs under one lock. Queries are indexed and take
+    milliseconds, so serializing them costs little."""
 
     def __init__(self, db_path: str):
+        self._lock = threading.RLock()
         self.engine, self._conn = self._connect(db_path)
         self._init_schema()
 
@@ -232,29 +240,35 @@ class _Connection:
                 raise
 
     def _init_schema(self) -> None:
-        for statement in _SCHEMA.strip().split(";"):
-            statement = statement.strip()
-            if statement:
-                self._conn.execute(statement)
-        if self.engine == "sqlite3":
-            self._conn.commit()
+        with self._lock:
+            for statement in _SCHEMA.strip().split(";"):
+                statement = statement.strip()
+                if statement:
+                    self._conn.execute(statement)
+            if self.engine == "sqlite3":
+                self._conn.commit()
 
     def execute(self, sql: str, params: tuple = ()) -> List[tuple]:
-        cursor = self._conn.execute(sql, params)
-        return cursor.fetchall()
+        # fetchall() inside the lock: the result set lives on the connection.
+        with self._lock:
+            cursor = self._conn.execute(sql, params)
+            return cursor.fetchall()
 
     def executemany(self, sql: str, rows: List[tuple]) -> None:
-        self._conn.executemany(sql, rows)
-        if self.engine == "sqlite3":
-            self._conn.commit()
+        with self._lock:
+            self._conn.executemany(sql, rows)
+            if self.engine == "sqlite3":
+                self._conn.commit()
 
     def commit(self) -> None:
-        if self.engine == "sqlite3":
-            self._conn.commit()
-        # DuckDB autocommits outside an explicit transaction block.
+        with self._lock:
+            if self.engine == "sqlite3":
+                self._conn.commit()
+            # DuckDB autocommits outside an explicit transaction block.
 
     def close(self) -> None:
-        self._conn.close()
+        with self._lock:
+            self._conn.close()
 
 
 class LocalOntologyBackend:
