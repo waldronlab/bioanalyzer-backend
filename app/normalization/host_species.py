@@ -11,6 +11,7 @@ import requests
 from app.normalization.local_lookup import local_lookup
 from app.normalization.ontology_cache import get_cached_term, store_cached_term
 from app.normalization.types import LookupMatcher, NormalizedTerm, is_null_like
+from app.utils.ncbi_rate_limiter import wait_for_ncbi_slot
 
 SPECIES_LOOKUP: Dict[str, Tuple[str, str]] = {
     "human": ("Homo sapiens", "NCBITaxon:9606"),
@@ -59,7 +60,7 @@ def _with_api_key(params: dict) -> dict:
 
 def _rate_limit_delay() -> None:
     api_key = os.getenv("NCBI_API_KEY", "").strip()
-    time.sleep(0.11 if api_key else 0.34)
+    wait_for_ncbi_slot(0.11 if api_key else 0.34)
 
 
 _MATCHER = LookupMatcher(SPECIES_LOOKUP)

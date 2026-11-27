@@ -16,6 +16,7 @@ except ImportError:
     USE_FULLTEXT = True
 
 from app.utils.credential_masking import mask_exception_message
+from app.utils.ncbi_rate_limiter import wait_for_ncbi_slot
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -226,7 +227,7 @@ class PubMedRetriever:
         numbers app.normalization.host_species._rate_limit_delay() uses.
         """
         delay = 0.11 if self.api_key else NCBI_RATE_LIMIT_DELAY
-        time.sleep(max(delay, 0.0))
+        wait_for_ncbi_slot(delay)
 
     def _execute_request(self, url: str, params: Dict[str, Any]) -> requests.Response:
         """Execute the HTTP request."""
