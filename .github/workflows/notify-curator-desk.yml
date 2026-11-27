@@ -1,0 +1,54 @@
+# Rebuild the curator-desk site (waldronlab/curator-desk) as soon as
+# data/curator_predictions.csv changes on main, so new predictions show up
+# without waiting for that site's daily 04:00 UTC build.
+#
+# Needs repo secret CURATOR_DESK_DISPATCH_TOKEN: a fine-grained personal
+# access token for waldronlab/curator-desk with "Actions: Read and write".
+# Without it this job does nothing and the site picks up new predictions at
+# its next daily build.
+name: Notify curator-desk
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - data/curator_predictions.csv
+  # The daily update job commits with the built-in token, and those commits
+  # don't trigger push workflows, so also run when that job finishes.
+  workflow_run:
+    workflows: ["Curator Desk daily update"]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  notify:
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger curator-desk site rebuild
+        env:
+          DISPATCH_TOKEN: ${{ secrets.CURATOR_DESK_DISPATCH_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          if [ -z "$DISPATCH_TOKEN" ]; then
+            echo "::notice::CURATOR_DESK_DISPATCH_TOKEN not set; curator-desk will show new predictions after its next daily build (04:00 UTC)."
+            exit 0
+          fi
+          # Pin the rebuild to the current main commit: raw.githubusercontent.com
+          # caches .../main/... for a few minutes, but a commit URL is fresh.
+          sha=$(gh api "repos/$REPO/commits/main" --jq .sha)
+          url=repos/waldronlab/curator-desk/actions/workflows/quarto-publish.yml/dispatches
+          if GH_TOKEN="$DISPATCH_TOKEN" gh api --method POST "$url" \
+               -f ref=main -f "inputs[predictions_ref]=$sha"; then
+            echo "Triggered curator-desk rebuild with predictions from $sha"
+          else
+            # curator-desk's workflow doesn't accept predictions_ref yet (older
+            # version), so trigger it plain; it then reads predictions from main.
+            echo "::warning::Rebuild with predictions_ref failed; retrying without it."
+            GH_TOKEN="$DISPATCH_TOKEN" gh api --method POST "$url" -f ref=main
+            echo "Triggered curator-desk rebuild"
+          fi
