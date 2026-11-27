@@ -9,7 +9,7 @@ from typing import Optional
 import aiohttp
 
 from app.utils.credential_masking import mask_exception_message
-from app.utils.url_safety import UnsafeURLError, assert_public_url
+from app.utils.url_safety import UnsafeURLError, assert_public_url, safe_aiohttp_get
 
 logger = logging.getLogger(__name__)
 
@@ -117,7 +117,7 @@ class ImageProcessorService:
         self, session: aiohttp.ClientSession, image_url: str
     ) -> Optional[tuple[Path, str]]:
         """GET *image_url* via *session* and cache it. Returns (path, mime_type)."""
-        async with session.get(image_url, timeout=30) as response:
+        async with safe_aiohttp_get(session, image_url, timeout=30) as response:
             response.raise_for_status()
 
             content_length = response.headers.get("content-length")

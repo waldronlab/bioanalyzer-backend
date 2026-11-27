@@ -15,7 +15,7 @@ from bs4 import BeautifulSoup
 from html2text import html2text
 
 from app.utils.credential_masking import mask_exception_message, mask_string
-from app.utils.url_safety import UnsafeURLError, assert_public_url
+from app.utils.url_safety import UnsafeURLError, assert_public_url, safe_aiohttp_get
 
 logger = logging.getLogger(__name__)
 
@@ -183,8 +183,8 @@ class WebScraperService:
 
         try:
             async with aiohttp.ClientSession(headers=headers) as session:
-                async with session.get(
-                    url, timeout=aiohttp.ClientTimeout(total=self.timeout)
+                async with safe_aiohttp_get(
+                    session, url, timeout=aiohttp.ClientTimeout(total=self.timeout)
                 ) as response:
                     response.raise_for_status()
                     return await response.text()
@@ -285,8 +285,8 @@ class WebScraperService:
             return None
 
         try:
-            async with session.get(
-                url, timeout=aiohttp.ClientTimeout(total=self.timeout)
+            async with safe_aiohttp_get(
+                session, url, timeout=aiohttp.ClientTimeout(total=self.timeout)
             ) as response:
                 response.raise_for_status()
 

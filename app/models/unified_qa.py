@@ -398,7 +398,7 @@ class UnifiedQA:
             # Fallback: direct Gemini vision model
             import google.generativeai as genai
             from PIL import Image
-            import requests
+            from app.utils.url_safety import safe_requests_get
             from io import BytesIO
             import base64
 
@@ -424,7 +424,7 @@ class UnifiedQA:
             else:
                 # Download image with a bounded timeout
                 try:
-                    response = requests.get(image_url, timeout=10)
+                    response = safe_requests_get(image_url, timeout=10)
                     response.raise_for_status()
                 except Exception as req_exc:
                     logger.error(
