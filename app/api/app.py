@@ -21,6 +21,7 @@ from app.utils.config import (
     CORS_ORIGINS,
     ENABLE_RATE_LIMITING,
     RATE_LIMIT_PER_MINUTE,
+    TRUSTED_PROXIES,
     ENABLE_REQUEST_ID,
     ENVIRONMENT,
     setup_logging,
@@ -80,6 +81,7 @@ if ENABLE_RATE_LIMITING:
         RateLimitMiddleware,
         requests_per_minute=RATE_LIMIT_PER_MINUTE,
         enabled=ENABLE_RATE_LIMITING,
+        trusted_proxies=TRUSTED_PROXIES,
     )
     logger.info(f"Rate limiting enabled: {RATE_LIMIT_PER_MINUTE} requests/minute")
 
