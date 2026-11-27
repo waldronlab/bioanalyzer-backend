@@ -5,8 +5,8 @@
 #
 # Needs repo secrets GEMINI_API_KEY and NCBI_API_KEY (and ideally
 # BIOANALYZER_EMAIL for NCBI). Without them the job is skipped.
-# To show the CSV on the curator-desk site, set its CURATOR_DATA_URL to
-# https://raw.githubusercontent.com/waldronlab/bioanalyzer-backend/main/data/curator_predictions.csv
+# The curator-desk site (waldronlab/curator-desk) reads this CSV from main;
+# notify-curator-desk.yml rebuilds that site after each successful run.
 name: Curator Desk daily update
 
 on:
