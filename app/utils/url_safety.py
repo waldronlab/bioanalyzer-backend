@@ -106,16 +106,23 @@ async def safe_aiohttp_get(
 
 
 def safe_requests_get(
-    url: str, *, max_redirects: int = MAX_REDIRECTS, **kwargs: Any
+    url: str,
+    *,
+    timeout: float,
+    max_redirects: int = MAX_REDIRECTS,
+    **kwargs: Any,
 ) -> requests.Response:
     """Drop-in for ``requests.get(url, ...)`` that is SSRF-safe across redirects.
 
     Same contract as ``safe_aiohttp_get``, for synchronous callers.
+    ``timeout`` is required and applies to each hop.
     """
     current = url
     for _ in range(max_redirects + 1):
         assert_public_url(current)
-        response = requests.get(current, allow_redirects=False, **kwargs)
+        response = requests.get(
+            current, allow_redirects=False, timeout=timeout, **kwargs
+        )
         next_url = _redirect_target(
             current, response.status_code, response.headers.get("Location")
         )

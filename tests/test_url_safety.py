@@ -227,6 +227,7 @@ def test_requests_redirect_to_internal_is_blocked(monkeypatch):
     def fake_get(url, **kwargs):
         requested.append(url)
         assert kwargs["allow_redirects"] is False
+        assert kwargs["timeout"] == 10
         return first
 
     monkeypatch.setattr(url_safety.requests, "get", fake_get)
@@ -254,4 +255,4 @@ def test_requests_initial_internal_url_is_blocked(monkeypatch):
 
     monkeypatch.setattr(url_safety.requests, "get", fail_get)
     with pytest.raises(UnsafeURLError):
-        safe_requests_get("http://metadata.internal/latest/meta-data/")
+        safe_requests_get("http://metadata.internal/latest/meta-data/", timeout=10)
