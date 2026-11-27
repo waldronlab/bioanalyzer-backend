@@ -14,6 +14,8 @@ Requires BioAnalyzer API (BioAnalyzer start) or set BIOANALYZER_API_URL.
 from __future__ import annotations
 
 import argparse
+import csv
+import io
 import json
 import os
 import sys
@@ -52,6 +54,30 @@ def _save_analyzed_pmids(state_path: Path, pmids: set[str]) -> None:
         ),
         encoding="utf-8",
     )
+
+
+def _merge_predictions(existing_csv: str, new_csv: str) -> tuple[str, int]:
+    """Union of two curator-desk CSVs keyed by PMID; *new_csv* rows win.
+
+    Runs skip PMIDs they've already analyzed, so each run's output holds only
+    new papers - writing it over the file would drop every earlier paper.
+    Columns follow *new_csv* (the current CSV contract); older rows missing a
+    column get it blank. Returns (merged CSV text, total row count).
+    """
+    new_reader = csv.DictReader(io.StringIO(new_csv))
+    columns = list(new_reader.fieldnames or [])
+    new_rows = list(new_reader)
+    new_pmids = {row.get("PMID") for row in new_rows}
+    kept = [
+        row
+        for row in csv.DictReader(io.StringIO(existing_csv))
+        if row.get("PMID") not in new_pmids
+    ]
+    out = io.StringIO()
+    writer = csv.DictWriter(out, fieldnames=columns, extrasaction="ignore", restval="")
+    writer.writeheader()
+    writer.writerows(kept + new_rows)
+    return out.getvalue(), len(kept) + len(new_rows)
 
 
 def _search_pmids(preset: str, query: str | None, max_results: int) -> list[str]:
@@ -137,6 +163,12 @@ def main() -> int:
         help="Keep only rows with all 5 fields PRESENT, ontology mapping >= threshold, and DA detected",
     )
     parser.add_argument("--min-mapping-confidence", type=float, default=0.9)
+    parser.add_argument(
+        "--merge",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Add new rows to an existing output CSV (by PMID) instead of replacing it",
+    )
     args = parser.parse_args()
 
     import os
@@ -184,9 +216,14 @@ def main() -> int:
 
     csv_text = render_results(results, "curator_desk_csv")
     out_path = Path(args.output)
+    total = len(results)
+    if args.merge and out_path.exists():
+        csv_text, total = _merge_predictions(
+            out_path.read_text(encoding="utf-8"), csv_text
+        )
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(csv_text, encoding="utf-8")
-    print(f"Wrote {len(results)} row(s) to {out_path}")
+    print(f"Wrote {len(results)} new row(s) to {out_path} ({total} total)")
 
     analyzed.update(new_pmids)
     _save_analyzed_pmids(state_path, analyzed)
