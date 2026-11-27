@@ -165,8 +165,14 @@ def test_local_lookup_and_ols_are_structurally_incapable_of_auto_confidence():
         assert conf < 1.0
 
 
+@requires_real_ontology_store
 def test_auto_requires_grounding_backend_agreement_not_just_the_term_shape():
-    """A NormalizedTerm can satisfy AUTO's shape-level precondition
+    """Needs the synced local store: without it the check falls through to
+    live OLS, and an OLS timeout makes ground() fail open to "auto", so the
+    result depended on the network (flaky in CI). The same rule is covered
+    offline by test_grounding_backends.py's stub-backend round-trip test.
+
+    A NormalizedTerm can satisfy AUTO's shape-level precondition
     (PRESENT + confidence 1.0) and still be downgraded by `ground()`'s
     round-trip/obsolete/branch/label checks - the shape-level precondition
     is necessary, not sufficient. Exercised here with a real, clean-shaped
