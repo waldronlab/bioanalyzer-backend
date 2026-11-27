@@ -94,6 +94,10 @@ class BioAnalyzerCLI:
         # fetches, polling) get connection keep-alive instead of a fresh
         # TCP/TLS handshake each time.
         self._session = requests.Session()
+        # Needed only when the server sets BIOANALYZER_API_KEYS.
+        api_key = os.getenv("BIOANALYZER_API_KEY")
+        if api_key:
+            self._session.headers["X-API-Key"] = api_key
 
     # ------------------------------------------------------------------
     # Environment helpers

@@ -3,7 +3,7 @@
 import logging
 from typing import Dict
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 
 from app.api.models.api_models import HealthResponse
 from app.api.routers import (
@@ -13,11 +13,13 @@ from app.api.routers import (
 )
 from app.api.middleware.rate_limit import RateLimitMiddleware
 from app.api.middleware.request_id import RequestIDMiddleware
+from app.api.security import require_api_key
 
 from app.core.lifespan import lifespan
 from app.core.exceptions import register_exception_handlers
 
 from app.utils.config import (
+    API_KEYS,
     CORS_ORIGINS,
     ENABLE_RATE_LIMITING,
     RATE_LIMIT_PER_MINUTE,
@@ -38,6 +40,8 @@ app = FastAPI(
     description="API for analyzing scientific papers and extracting BugSigDB curation fields.",
     version="1.0.0",
     lifespan=lifespan,
+    # No-op unless BIOANALYZER_API_KEYS is set; see app/api/security.py.
+    dependencies=[Depends(require_api_key)],
     contact={
         "name": "BioAnalyzer Team",
         "url": "https://github.com/your-repo/bioanalyzer-package",
@@ -57,6 +61,14 @@ app = FastAPI(
         },
     ],
 )
+
+if API_KEYS:
+    logger.info("API key authentication enabled (%d key(s) configured)", len(API_KEYS))
+else:
+    logger.warning(
+        "API key authentication disabled: set BIOANALYZER_API_KEYS before "
+        "exposing this API publicly"
+    )
 
 # Register centralized exception handling
 register_exception_handlers(app)
