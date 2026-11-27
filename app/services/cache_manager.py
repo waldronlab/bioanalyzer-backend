@@ -50,11 +50,30 @@ class CacheManager:
         """Close the connection. No pooling for thread safety."""
         conn.close()
 
+    def _enable_wal(self, conn: sqlite3.Connection) -> None:
+        """Switch the cache DB to write-ahead logging (persists in the DB file).
+
+        In the default rollback-journal mode a write locks out all readers, so
+        concurrent analyses queue on the cache and can hit "database is
+        locked". WAL lets reads run alongside a write. Best effort: on a
+        filesystem without shared-memory support (e.g. NFS) or a read-only
+        cache dir, SQLite keeps its current mode and the cache works as before.
+        """
+        try:
+            mode = conn.execute("PRAGMA journal_mode=WAL").fetchone()[0]
+            if str(mode).lower() != "wal":
+                logger.info("Cache DB journal mode is %s (WAL unavailable)", mode)
+        except sqlite3.Error as e:
+            logger.warning(
+                "Could not enable WAL for cache DB: %s", mask_exception_message(e)
+            )
+
     def _init_database(self):
         """Initialize SQLite database for caching."""
         conn = None
         try:
             conn = sqlite3.connect(self.db_path, check_same_thread=False)
+            self._enable_wal(conn)
             cursor = conn.cursor()
 
             cursor.execute(
