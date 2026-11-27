@@ -2,8 +2,9 @@
 Rate limiting middleware for API endpoints.
 """
 
+import ipaddress
 import time
-from typing import Dict, Optional
+from typing import Dict, List, Optional, Union
 from collections import defaultdict
 from fastapi import Request, status
 from fastapi.responses import JSONResponse
@@ -19,6 +20,30 @@ _rate_limit_store: Dict[str, list] = defaultdict(list)
 # sweep only runs periodically instead of on every single request.
 _last_sweep_time: float = 0.0
 _SWEEP_INTERVAL_SECONDS = 60
+
+
+# Peers allowed to tell us the real client IP via X-Forwarded-For / X-Real-IP.
+# Loopback + private ranges cover a reverse proxy on the same host or Docker
+# network. A client connecting directly from the internet can't use these
+# headers to pose as someone else and reset its own rate limit.
+DEFAULT_TRUSTED_PROXIES = (
+    "127.0.0.0/8,::1/128,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,fc00::/7"
+)
+
+_Network = Union[ipaddress.IPv4Network, ipaddress.IPv6Network]
+
+
+def parse_trusted_proxies(spec: Optional[str]) -> Union[str, List[_Network]]:
+    """Parse a comma-separated CIDR/IP list. ``"*"`` trusts every peer (old behavior)."""
+    if spec is None:
+        spec = DEFAULT_TRUSTED_PROXIES
+    if spec.strip() == "*":
+        return "*"
+    return [
+        ipaddress.ip_network(part.strip(), strict=False)
+        for part in spec.split(",")
+        if part.strip()
+    ]
 
 
 def _sweep_stale_ips(window_seconds: int = 60) -> None:
@@ -53,7 +78,13 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     Uses sliding window algorithm for rate limiting.
     """
 
-    def __init__(self, app, requests_per_minute: int = 60, enabled: bool = True):
+    def __init__(
+        self,
+        app,
+        requests_per_minute: int = 60,
+        enabled: bool = True,
+        trusted_proxies: Optional[str] = None,
+    ):
         """
         Initialize rate limiting middleware.
 
@@ -61,10 +92,13 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             app: FastAPI application
             requests_per_minute: Maximum requests per minute per IP
             enabled: Enable/disable rate limiting
+            trusted_proxies: Comma-separated CIDRs whose forwarding headers
+                are believed (default ``DEFAULT_TRUSTED_PROXIES``; ``"*"`` = all)
         """
         super().__init__(app)
         self.requests_per_minute = requests_per_minute
         self.enabled = enabled
+        self.trusted_proxies = parse_trusted_proxies(trusted_proxies)
 
     async def dispatch(self, request: Request, call_next):
         """Process request with rate limiting."""
@@ -107,18 +141,41 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
         return response
 
+    def _is_trusted_proxy(self, host: str) -> bool:
+        if self.trusted_proxies == "*":
+            return True
+        try:
+            ip = ipaddress.ip_address(host)
+        except ValueError:
+            return False
+        return any(ip in network for network in self.trusted_proxies)
+
     def _get_client_ip(self, request: Request) -> str:
-        """Extract client IP address from request."""
-        # Check for forwarded IP (behind proxy)
+        """Extract client IP address from request.
+
+        Forwarding headers count only when the direct peer is a trusted proxy.
+        X-Forwarded-For is read right to left, skipping trusted proxies: each
+        proxy appends the address it saw, so the leftmost entries are whatever
+        the client chose to send.
+        """
+        peer = request.client.host if request.client else "unknown"
+        if not self._is_trusted_proxy(peer):
+            return peer
+
         forwarded_for = request.headers.get("X-Forwarded-For")
         if forwarded_for:
-            return forwarded_for.split(",")[0].strip()
+            hops = [hop.strip() for hop in forwarded_for.split(",") if hop.strip()]
+            for hop in reversed(hops):
+                if not self._is_trusted_proxy(hop):
+                    return hop
+            if hops:
+                return hops[0]
 
         real_ip = request.headers.get("X-Real-IP")
         if real_ip:
-            return real_ip
+            return real_ip.strip()
 
-        return request.client.host if request.client else "unknown"
+        return peer
 
     def _check_rate_limit(self, client_ip: str) -> bool:
         """Check if client IP is within rate limit."""

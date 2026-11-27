@@ -202,6 +202,9 @@ ENABLE_RATE_LIMITING = os.getenv("ENABLE_RATE_LIMITING", "true").lower() in (
     "yes",
 )
 RATE_LIMIT_PER_MINUTE = int(os.getenv("RATE_LIMIT_PER_MINUTE", "60"))
+# Peers (comma-separated IPs/CIDRs) whose X-Forwarded-For / X-Real-IP headers
+# the rate limiter believes. Unset = loopback + private networks; "*" = any.
+TRUSTED_PROXIES = os.getenv("TRUSTED_PROXIES")
 ENABLE_REQUEST_ID = os.getenv("ENABLE_REQUEST_ID", "true").lower() in (
     "true",
     "1",
