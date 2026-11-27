@@ -66,6 +66,18 @@ def test_no_service_depends_on_redis_health(compose_file):
         )
 
 
+@pytest.mark.parametrize("compose_file", COMPOSE_FILES)
+def test_service_names_are_valid_for_compose(compose_file):
+    """Compose rejects service names outside [a-zA-Z0-9._-]; docker-compose.prod.yml
+    once had "bioanalyzer package" (with a space) and could not start at all."""
+    import re
+
+    with open(PROJECT_ROOT / compose_file) as fh:
+        services = yaml.safe_load(fh)["services"]
+    bad = [name for name in services if not re.fullmatch(r"[a-zA-Z0-9._-]+", name)]
+    assert bad == [], f"{compose_file}: invalid service name(s) {bad}"
+
+
 def _docker_compose_available() -> bool:
     if shutil.which("docker") is None:
         return False
