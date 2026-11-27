@@ -452,6 +452,7 @@ BioAnalyzer            # same as `help` with no arguments
 | `NCBI_API_KEY`, `EMAIL` | Required for PubMed/PMC access (search, curate, retrieve, analyze) |
 | `GEMINI_API_KEY` / `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `OLLAMA_BASE_URL` | One LLM credential; provider auto-detects, override with `LLM_PROVIDER` |
 | `BIOANALYZER_API_URL` | API base the CLI talks to for `analyze`/`analyze-url`/`qa` (default `http://localhost:8000/api/v1`) — point this at a remote/staging API instead of localhost |
+| `BIOANALYZER_API_KEY` | Sent as the `X-API-Key` header. Needed only when the server sets `BIOANALYZER_API_KEYS` |
 | `BIOANALYZER_ANALYZE_TIMEOUT` | Per-PMID HTTP timeout (seconds) for `analyze`, default `180` |
 | `BIOANALYZER_PATH` | Where the `BioAnalyzer` global wrapper looks for this repo, if not run from inside it |
 

@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -86,12 +87,18 @@ def _high_confidence_ready(result: dict, min_mapping_conf: float) -> bool:
     return bool(result.get("has_differential_abundance"))
 
 
+def _auth_headers() -> dict[str, str]:
+    """X-API-Key from BIOANALYZER_API_KEY, if set (needed when the server requires keys)."""
+    api_key = os.getenv("BIOANALYZER_API_KEY")
+    return {"X-API-Key": api_key} if api_key else {}
+
+
 def _analyze_pmids(pmids: list[str], api_base: str, timeout: int) -> list[dict]:
     results: list[dict] = []
     for pmid in pmids:
         url = f"{api_base.rstrip('/')}/analyze/{pmid}"
         try:
-            resp = requests.get(url, timeout=timeout)
+            resp = requests.get(url, timeout=timeout, headers=_auth_headers())
             if resp.status_code == 200:
                 results.append(resp.json())
             else:

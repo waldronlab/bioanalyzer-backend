@@ -208,6 +208,19 @@ ENABLE_REQUEST_ID = os.getenv("ENABLE_REQUEST_ID", "true").lower() in (
     "yes",
 )
 
+
+def _csv_env(name: str) -> frozenset:
+    """Comma-separated env var -> set of non-empty, stripped values."""
+    return frozenset(v.strip() for v in os.getenv(name, "").split(",") if v.strip())
+
+
+# API keys accepted in the X-API-Key header. Empty (the default) leaves the
+# API open, as it has always been; set it before exposing the API publicly.
+API_KEYS = _csv_env("BIOANALYZER_API_KEYS")
+
+# Models a caller may pick for /api/v1/analyze-url. Empty = any model.
+URL_ANALYSIS_ALLOWED_MODELS = _csv_env("URL_ANALYSIS_ALLOWED_MODELS")
+
 # Logging Configuration
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 LOG_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"

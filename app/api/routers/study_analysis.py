@@ -18,6 +18,7 @@ from app.services.agent_orchestrator import AgentOrchestrator
 from app.utils.chunking import ChunkingService
 from app.models.extraction_schemas import StudyAnalysisResult
 from app.models.unified_qa import UnifiedQA
+from app.utils import config as app_config
 from app.utils.config import GEMINI_API_KEY
 
 logger = logging.getLogger(__name__)
@@ -62,11 +63,29 @@ class JobStatus(BaseModel):
     error: Optional[str] = None
 
 
+def _reject_disallowed_models(request: "AnalyzeURLRequest") -> None:
+    """422 if URL_ANALYSIS_ALLOWED_MODELS is set and the request picks another model.
+
+    Without this, any caller can choose any LiteLLM model (and its cost).
+    """
+    allowed = app_config.URL_ANALYSIS_ALLOWED_MODELS
+    if not allowed:
+        return
+    for field in ("llm_model", "embedding_model"):
+        model = getattr(request, field)
+        if model and model not in allowed:
+            raise HTTPException(
+                status_code=422,
+                detail=f"{field} {model!r} is not allowed on this server.",
+            )
+
+
 @router.post("/analyze-url")
 async def analyze_url(
     request: AnalyzeURLRequest, background_tasks: BackgroundTasks
 ) -> JobStatus:
     """Start analysis of a study URL. Returns job ID for tracking progress."""
+    _reject_disallowed_models(request)
     job_id = str(uuid.uuid4())
 
     # Sweep stale jobs before adding a new one so job_store doesn't grow unbounded.
