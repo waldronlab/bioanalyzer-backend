@@ -193,9 +193,12 @@ INCLUDE_INDEX_TERMS = os.getenv("INCLUDE_INDEX_TERMS", "1").lower() in (
 
 # Production Configuration
 ENVIRONMENT = os.getenv("ENVIRONMENT", "development").lower()
-CORS_ORIGINS = (
-    os.getenv("CORS_ORIGINS", "*").split(",") if os.getenv("CORS_ORIGINS") else ["*"]
-)
+# Browser origins allowed to call the API cross-origin (comma-separated).
+# Empty (default) = same-origin only; "*" = any site. Server-side clients
+# (CLI, scripts, Streamlit, Shiny) aren't affected by CORS either way.
+CORS_ORIGINS = [
+    o.strip() for o in os.getenv("CORS_ORIGINS", "").split(",") if o.strip()
+]
 ENABLE_RATE_LIMITING = os.getenv("ENABLE_RATE_LIMITING", "true").lower() in (
     "true",
     "1",
