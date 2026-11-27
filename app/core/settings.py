@@ -227,7 +227,11 @@ class SecurityConfig(BaseModel):
 
     model_config = ConfigDict(extra="allow")
 
-    cors_origins: List[str] = Field(default=["*"], description="CORS allowed origins")
+    cors_origins: List[str] = Field(
+        default=[],
+        description="Browser origins allowed to call the API cross-origin. "
+        'Empty = same-origin only; ["*"] = any site.',
+    )
     enable_request_id: bool = Field(
         default=True, description="Enable request ID tracking"
     )
@@ -447,7 +451,9 @@ class BioAnalyzerSettings(BaseModel):
 
         # Security
         if os.getenv("CORS_ORIGINS"):
-            settings.security.cors_origins = os.getenv("CORS_ORIGINS").split(",")
+            settings.security.cors_origins = [
+                o.strip() for o in os.getenv("CORS_ORIGINS").split(",") if o.strip()
+            ]
         if os.getenv("ENABLE_REQUEST_ID"):
             settings.security.enable_request_id = os.getenv(
                 "ENABLE_REQUEST_ID"
@@ -526,7 +532,7 @@ class BioAnalyzerSettings(BaseModel):
                     "requests_per_minute": 60,
                 },
                 "security": {
-                    "cors_origins": ["*"],
+                    "cors_origins": [],
                     "enable_request_id": True,
                 },
             },

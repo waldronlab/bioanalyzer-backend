@@ -89,7 +89,9 @@ def test_liveness_routes_stay_public(client, auth_on, path):
     assert client.get(path).status_code != 401
 
 
-def test_cors_preflight_is_not_blocked(client, auth_on):
+def test_cors_preflight_is_not_blocked_by_auth(client, auth_on):
+    # Preflights never carry the key; CORSMiddleware answers them (200 for an
+    # allowed origin, 400 otherwise) before auth runs - never 401.
     response = client.options(
         PROTECTED_GET,
         headers={
@@ -98,7 +100,7 @@ def test_cors_preflight_is_not_blocked(client, auth_on):
             "Access-Control-Request-Headers": "X-API-Key",
         },
     )
-    assert response.status_code == 200
+    assert response.status_code != 401
 
 
 # --------------------------------------------------------------------------- #

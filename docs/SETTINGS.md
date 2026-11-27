@@ -106,7 +106,7 @@ The settings are organized into logical groups:
 
 ### Security Configuration (`security`)
 
-- `cors_origins`: CORS allowed origins (default: ["*"])
+- `cors_origins`: browser origins allowed to call the API cross-origin (default: `[]`, same-origin only; `["*"]` allows any site). Applies in every environment.
 - `enable_request_id`: Enable request ID tracking (default: true)
 
 ## Loading Settings

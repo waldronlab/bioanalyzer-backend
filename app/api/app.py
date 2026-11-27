@@ -25,7 +25,6 @@ from app.utils.config import (
     RATE_LIMIT_PER_MINUTE,
     TRUSTED_PROXIES,
     ENABLE_REQUEST_ID,
-    ENVIRONMENT,
     setup_logging,
 )
 
@@ -70,12 +69,18 @@ else:
         "exposing this API publicly"
     )
 
+if "*" in CORS_ORIGINS and not API_KEYS:
+    logger.warning(
+        "CORS_ORIGINS allows any site while API key auth is off: any web page a "
+        "user visits can call this API from their browser"
+    )
+
 # Register centralized exception handling
 register_exception_handlers(app)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=CORS_ORIGINS if ENVIRONMENT == "production" else ["*"],
+    allow_origins=CORS_ORIGINS,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
     expose_headers=[
