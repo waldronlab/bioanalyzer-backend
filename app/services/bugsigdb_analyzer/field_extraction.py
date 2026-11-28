@@ -7,6 +7,7 @@ abundance detection.
 
 import asyncio
 import json
+import logging
 import re
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -19,8 +20,11 @@ from app.normalization.sample_size import normalize_sample_size
 from app.normalization.sequencing_type import normalize_sequencing_type
 from app.normalization.types import NormalizedTerm
 from app.utils.config import ANALYSIS_TIMEOUT
+from app.utils.credential_masking import mask_exception_message
 
 from .constants import EXTRACTION_PROMPT, FIELD_KEYS
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Shared disease-phrase regex (used by both the heuristic fallback and
@@ -212,6 +216,202 @@ def _apply_condition_evidence_gate(
         or llm_confidence < MIN_AUTO_CONDITION_CONFIDENCE
     ):
         _cap_tier_at_review(condition)
+
+
+# ---------------------------------------------------------------------------
+# Search tags (every normalized term a paper could be found by)
+# ---------------------------------------------------------------------------
+
+_TAG_SPLIT_RE = re.compile(r"[,;]")
+_AND_SPLIT_RE = re.compile(r"\s+and\s+", re.IGNORECASE)
+_MIN_SECONDARY_TAG_CONFIDENCE = 0.5
+
+
+# Positional/size modifiers that can open a coordinated phrase ("small and
+# large intestine"); any other single word before " and " starts a new term.
+_PHRASE_MODIFIERS = frozenset(
+    {
+        "small",
+        "large",
+        "upper",
+        "lower",
+        "proximal",
+        "distal",
+        "left",
+        "right",
+        "anterior",
+        "posterior",
+        "inner",
+        "outer",
+    }
+)
+# Safety bound on secondary values normalised per field (cost, not recall:
+# past runs never exceeded 6 tags per field).
+_MAX_SECONDARY_TAG_PIECES = 5
+
+
+def _split_multi_value(raw: Any) -> List[str]:
+    """Split "a and b, c; d" into trimmed, non-empty pieces. A positional/size
+    modifier before " and " followed by a multi-word right side ("small and
+    large intestine") is one phrase; every other " and " separates terms
+    ("gut and oral cavity")."""
+    text = _clean_str(raw)
+    if not text:
+        return []
+    out: List[str] = []
+    for chunk in _TAG_SPLIT_RE.split(text):
+        parts = [p.strip() for p in _AND_SPLIT_RE.split(chunk) if p.strip()]
+        i = 0
+        while i < len(parts):
+            if (
+                i + 1 < len(parts)
+                and parts[i].lower() in _PHRASE_MODIFIERS
+                and len(parts[i + 1].split()) > 1
+            ):
+                out.append(f"{parts[i]} and {parts[i + 1]}")
+                i += 2
+            else:
+                out.append(parts[i])
+                i += 1
+    return out
+
+
+def _append_tag(tags: List[Dict[str, str]], label: Any, ontology_id: Any) -> None:
+    """Add a tag unless empty or a duplicate (by ID, else by lowercased label)."""
+    label = _clean_str(label)
+    oid = _clean_str(ontology_id)
+    if not label and not oid:
+        return
+    for t in tags:
+        if oid and t["ontology_id"]:
+            if t["ontology_id"].casefold() == oid.casefold():
+                return
+        elif (
+            not oid
+            and not t["ontology_id"]
+            and t["label"].casefold() == label.casefold()
+        ):
+            return
+    tags.append({"label": label, "ontology_id": oid})
+
+
+def _tag_key(label: Any, ontology_id: Any) -> str:
+    oid = _clean_str(ontology_id)
+    return oid.casefold() if oid else "label:" + _clean_str(label).casefold()
+
+
+def _build_search_tags(
+    primary: Dict[str, Any],
+    pieces: List[str],
+    normalizer: Any,
+    raw_input: Any = "",
+    primary_extra: Optional[Tuple[str, str]] = None,
+) -> Tuple[List[Dict[str, str]], set]:
+    """(tags, secondary_keys): the primary (value/ontology_id) first, then
+    *primary_extra* (the primary's pre-snap grounded term, a (label, id) pair),
+    then each piece normalized with *normalizer* (followed by that term's own
+    `pre_snap`, if any). Never raises; a failing piece is
+    logged and skipped. No LLM call is made (the normalizers use local vocab,
+    OLS and embeddings only). A piece equal to *raw_input* (the text the
+    primary was normalized from) is not normalized again. Secondary terms
+    with no ontology ID and ABSENT status, or mapping confidence below 0.5,
+    are skipped. secondary_keys holds the tag keys that secondary pieces
+    produced themselves (used to keep a tag the primary alone didn't earn)."""
+    tags: List[Dict[str, str]] = []
+    has_primary = primary.get("status") != "ABSENT"
+    if has_primary:
+        _append_tag(tags, primary.get("value"), primary.get("ontology_id"))
+        if primary_extra:
+            _append_tag(tags, primary_extra[0], primary_extra[1])
+    skip_raw = _clean_str(raw_input).casefold()
+    secondary_keys: set = set()
+    primary_raw = _clean_str(primary.get("raw")).casefold()
+    unique_pieces: List[str] = []
+    seen_raw = {skip_raw, primary_raw} - {""}
+    for piece in pieces:
+        folded = piece.casefold()
+        if folded in seen_raw:
+            continue
+        seen_raw.add(folded)
+        unique_pieces.append(piece)
+    for piece in unique_pieces[:_MAX_SECONDARY_TAG_PIECES]:
+        try:
+            term = normalizer(piece)
+        except Exception as e:
+            logger.warning(
+                "Search-tag normalization failed: %s", mask_exception_message(e)
+            )
+            continue
+        if not isinstance(term, NormalizedTerm):
+            continue
+        if not term.ontology_id and term.status == "ABSENT":
+            continue
+        if term.status == "ABSENT" or (
+            float(term.mapping_confidence or 0.0) < _MIN_SECONDARY_TAG_CONFIDENCE
+        ):
+            continue
+        secondary_keys.add(_tag_key(term.label, term.ontology_id))
+        _append_tag(tags, term.label, term.ontology_id)
+        pre = getattr(term, "pre_snap", None)
+        if pre:
+            secondary_keys.add(_tag_key(pre[0], pre[1]))
+            _append_tag(tags, pre[0], pre[1])
+    return tags, secondary_keys
+
+
+def _attach_search_tags(
+    field: Dict[str, Any],
+    pieces: List[str],
+    normalizer: Any,
+    raw_input: Any,
+    primary_extra: Optional[Tuple[str, str]] = None,
+) -> None:
+    """Set field["tags"], and a private "_primary_tag" record that
+    `_refresh_primary_tag` consumes (and removes) once the final primary is
+    known."""
+    tags, secondary_keys = _build_search_tags(
+        field, pieces, normalizer, raw_input, primary_extra
+    )
+    field["tags"] = tags
+    if field.get("status") != "ABSENT":
+        key = _tag_key(field.get("value"), field.get("ontology_id"))
+        extra_key = _tag_key(*primary_extra) if primary_extra else None
+        field["_primary_tag"] = {
+            "key": key,
+            "independent": key in secondary_keys,
+            "extra_key": extra_key,
+            "extra_independent": extra_key in secondary_keys,
+        }
+
+
+def _refresh_primary_tag(field: Any) -> None:
+    """Re-put the field's current primary value first in field["tags"], after
+    postprocessing/disambiguation may have changed it. No normalization. If the
+    primary changed, the rejected original primary is dropped from the tags
+    unless another entry independently produced the same term."""
+    if not isinstance(field, dict):
+        return
+    original = field.pop("_primary_tag", None)
+    if "tags" not in field:
+        return
+    final_key = _tag_key(field.get("value"), field.get("ontology_id"))
+    # Only the rejected primary itself is dropped; its pre-snap term is the
+    # paper's own grounded term and stays (keep-both).
+    drop = set()
+    if (
+        isinstance(original, dict)
+        and original.get("key") != final_key
+        and not original.get("independent")
+    ):
+        drop.add(original.get("key"))
+    tags: List[Dict[str, str]] = []
+    if field.get("status") != "ABSENT":
+        _append_tag(tags, field.get("value"), field.get("ontology_id"))
+    for t in field.get("tags") or []:
+        if _tag_key(t.get("label"), t.get("ontology_id")) in drop:
+            continue
+        _append_tag(tags, t.get("label"), t.get("ontology_id"))
+    field["tags"] = tags
 
 
 # ---------------------------------------------------------------------------
@@ -627,6 +827,24 @@ def _field_results_from_unified_payload(
         field["source"] = source
 
     _apply_condition_evidence_gate(field_results["condition"], payload, conditions)
+
+    _attach_search_tags(
+        field_results["condition"],
+        conditions,
+        normalize_condition,
+        condition_raw,
+        cond_term.pre_snap,
+    )
+    for key, raw_key, normalizer in (
+        ("host_species", "host_species_raw", normalize_host_species),
+        ("body_site", "body_site_raw", normalize_body_site),
+    ):
+        _attach_search_tags(
+            field_results[key],
+            _split_multi_value(payload.get(raw_key)),
+            normalizer,
+            payload.get(raw_key),
+        )
 
     # Heuristic payloads get a confidence cap — they are less reliable
     if source == SOURCE_HEURISTIC:

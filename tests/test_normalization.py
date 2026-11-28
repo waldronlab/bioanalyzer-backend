@@ -1028,9 +1028,12 @@ def test_ols_search_accepts_matching_ontology_result(monkeypatch):
 
 
 def test_obo_iri_builds_purl_from_curie():
-    assert (
-        ols_module._obo_iri("EFO:0000400")
-        == "http://purl.obolibrary.org/obo/EFO_0000400"
+    # EFO's own terms live under the EBI namespace, not an OBO PURL
+    # (OLS returns no term for the PURL form).
+    assert ols_module._obo_iri("EFO:0000400") == "http://www.ebi.ac.uk/efo/EFO_0000400"
+    assert ols_module._obo_iri("efo:0000400") == "http://www.ebi.ac.uk/efo/EFO_0000400"
+    assert ols_module._obo_iri("MONDO:0005180") == (
+        "http://purl.obolibrary.org/obo/MONDO_0005180"
     )
     assert ols_module._obo_iri("NCBITaxon:9606") == (
         "http://purl.obolibrary.org/obo/NCBITaxon_9606"
@@ -1427,3 +1430,22 @@ def test_null_like_input_resolves_to_absent_across_all_three_ontology_fields():
     assert normalize_condition("control").ontology_id == ""
     assert normalize_condition("control").label == "healthy"
     assert normalize_condition("normal").label == "healthy"
+
+
+@requires_real_ontology_store
+def test_condition_specific_disease_beats_broad_static_key_real_store():
+    """LLM-correct specific diseases must not be broadened by a substring
+    static key ("hepatitis", "diabetes"), including MeSH inverted headings."""
+    assert normalize_condition("chronic hepatitis B").ontology_id == "MONDO:0005366"
+    assert normalize_condition("Hepatitis B, Chronic").ontology_id == "MONDO:0005366"
+    assert (
+        normalize_condition("Diabetes Mellitus, Type 2").ontology_id == "MONDO:0005148"
+    )
+    # Unchanged: exact static keys and plain entities. Plain "hepatitis" stays
+    # the broad term; its ID follows the BugSigDB vocabulary (which uses
+    # HP:0012115 rather than MONDO:0002251), so check the meaning, not one ID.
+    hep = normalize_condition("hepatitis")
+    assert hep.ontology_id in {"MONDO:0002251", "HP:0012115"}
+    assert hep.label.lower() == "hepatitis"
+    assert normalize_condition("chronic kidney disease").ontology_id == "MONDO:0005300"
+    assert normalize_condition("IBD").ontology_id == "MONDO:0005265"

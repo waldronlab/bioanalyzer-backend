@@ -1,0 +1,5 @@
+field,n_papers,recall_top1,recall_tags_exact,recall_tags_hierarchy,hits_top1,hits_tags_exact,hits_tags_hierarchy
+condition,100,0.630,0.670,0.700,63,67,70
+body_site,100,0.810,0.840,0.840,81,84,84
+host_species,100,0.970,0.990,0.990,97,99,99
+all,100,0.510,0.580,0.600,51,58,60

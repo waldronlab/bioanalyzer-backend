@@ -52,6 +52,9 @@ class BugSigDBVocabulary:
     def __init__(self, terms: Dict[str, Dict]):
         self._label_by_curie: Dict[str, str] = {}
         self._curie_by_key: Dict[str, str] = {}
+        self._prefixes = frozenset(
+            curie.split(":", 1)[0].upper() for curie in terms if ":" in curie
+        )
         for curie, entry in terms.items():
             label = entry["label"]
             self._label_by_curie[curie.upper()] = label
@@ -68,6 +71,10 @@ class BugSigDBVocabulary:
         if not curie:
             return None
         return self._label_by_curie.get(curie.strip().upper())
+
+    def prefixes(self) -> frozenset:
+        """Upper-cased CURIE prefixes BugSigDB's Condition vocabulary uses."""
+        return self._prefixes
 
     def contains(self, curie: str) -> bool:
         return self.label_for(curie) is not None

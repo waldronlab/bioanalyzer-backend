@@ -19,6 +19,7 @@ from .field_extraction import (
     _avg_confidence,
     _build_curation_summary,
     _field_results_from_unified_payload,
+    _refresh_primary_tag,
     _parse_json_object,
     _postprocess_field_results,
     _resolve_diff_abundance,
@@ -181,6 +182,8 @@ async def analyze_paper_with_rag(
                 pmid=pmid,
                 context=analysis_text,
             )
+        for _tag_key in ("condition", "host_species", "body_site"):
+            _refresh_primary_tag(field_results.get(_tag_key))
         has_diff_abund, diff_abund_conf = _resolve_diff_abundance(
             payload, analysis_text
         )

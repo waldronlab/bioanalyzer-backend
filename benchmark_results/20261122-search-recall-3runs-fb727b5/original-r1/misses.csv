@@ -1,0 +1,48 @@
+PMID,field,curated,predicted_tags
+26181352,body_site,UBERON:0000160; intestine,colorectal carcinoma tissue|
+27228093,condition,EFO:0001752; MONDO:0011122; obesity; sex design,Biological sex|PATO:0000047; Body mass index|EFO:0004340
+27884202,condition,EFO:0000688; sampling site,Sample collection protocol|EFO:0005518
+27884202,body_site,UBERON:0001159; sigmoid colon,colon|UBERON:0001155
+28624933,condition,EFO:0002755; diet,adherence to Southern European Atlantic Diet|; Body weight|EFO:0004338; Age|EFO:0000246
+28765474,body_site,UBERON:0000945; stomach,gastric mucosal|
+28852182,condition,HP:0012450; chronic constipation,Constipation|HP:0002019
+29133803,condition,EFO:0009010; MONDO:0005109; hiv infection; hsv2 virologic severity measurement,genital herpes|MONDO:0005770; HSV-2 detection in lesion|
+29133803,body_site,UBERON:0005056; external female genitalia,genital ulcers|
+29172724,condition,MONDO:0005148; type ii diabetes mellitus,Diabetes mellitus|MONDO:0005015
+29172724,body_site,UBERON:0010306; bulbar conjunctiva,conjunctival swabs|
+29665823,condition,ENVO:02500037; air pollution,PM 2.5 exposure|
+30007242,condition,EFO:0009372; response to ketogenic diet,Epilepsy|MONDO:0005027; Ketogenic diet|EFO:0009371
+30301893,condition,EFO:0006864; breastfeeding duration,exclusive breastfeeding|
+31067473,condition,EFO:0000651; phenotype,co-housing|; F2-generation littermates|
+31502207,body_site,UBERON:0000004; UBERON:0008803; nose; skin of cheek,skin|UBERON:0002097; bilateral cheeks|
+31583533,condition,CHEBI:33281; antimicrobial agent,lactulose|
+31794002,condition,EFO:0004318; MONDO:0008575; nicotine dependence; smoking behavior,Smoking status measurement|EFO:0006527
+32024079,condition,EFO:0005199; renal transplant outcome measurement,Kidney transplant|EFO:0010134
+32844256,body_site,UBERON:0000310; breast,breast tissue|
+33220709,condition,EFO:0005757; vaginal inflammation,FGT inflammation|
+33220709,body_site,UBERON:0036523; wall of vagina,female reproductive system|UBERON:0000474
+33708251,condition,BTO:0001616; colorectal cancer cell line,Colorectal cancer|MONDO:0005575; AOM/DSS treatment|
+34233092,body_site,UBERON:0006956; UBERON:0034772; buccal mucosa; margin of eyelid,cheek|UBERON:0001567; eyelid|UBERON:0001711
+34722781,condition,MONDO:0005593; chronic periodontitis,Periodontitis|MONDO:0005076; Biological sex|PATO:0000047
+34809575,condition,EFO:0003809; sample treatment protocol,Sample collection protocol|EFO:0005518; storage duration|
+35188868,body_site,UBERON:0000160; intestine,feces|UBERON:0001988
+35291914,condition,MONDO:0016642; MONDO:0100342; OBA:2045271; brain growth measurement; malignant glioma; meningioma,Brain neoplasm|MONDO:0021211; Cancer|MONDO:0004992
+35849580,body_site,UBERON:0001003; UBERON:0002067; dermis; skin epidermis,scalp and biopsy layers|; scalp|UBERON:0000403; biopsy layers|
+36539569,condition,MONDO:0005649; appendicitis,appendectomy|EFO:0600086
+37750731,body_site,UBERON:0015474; axilla skin,skin|UBERON:0002097
+37919319,condition,EFO:0006527; smoking status measurement,Smoking behavior|EFO:0004318
+37919319,body_site,UBERON:0000165; mouth,saliva|UBERON:0001836
+37978347,condition,HP:0001882; MONDO:0024331; colorectal carcinoma; leukopenia,Colorectal cancer|MONDO:0005575; leukopenia after chemotherapy|
+38113233,condition,MONDO:0002269; gastroenteritis,Ethnic group|EFO:0001799
+38381714,condition,EFO:0010130; health study participation,Response to exercise|EFO:0007768
+38424099,condition,EFO:0002755; diet,prebiotic|
+38481313,host_species,NCBITAXON:9606; homo sapiens,
+38798019,condition,EFO:0020001; drug resistance,Gut microbiome measurement|EFO:0007874
+38942886,condition,EFO:0003961; hormone replacement therapy,ovarian response to controlled ovarian stimulation|
+38980075,condition,EFO:1001898; mucositis,Peri-Implantitis|EFO:1001390; Gingivitis|MONDO:0002508
+38980075,body_site,UBERON:0016484; subgingival dental plaque,submucosal plaques|
+39682194,body_site,UBERON:0001052; UBERON:0001155; UBERON:0001159; UBERON:0013067; colon; colorectal mucosa; rectum; sigmoid colon,tumor and non-tumor adjacent mucosal tissues|; tumor|; non-tumor adjacent mucosal tissues|
+39818212,condition,EFO:0003919; NCBITAXON:813; chlamydia trachomatis; risk factor,Chlamydia trachomatis infectious disease|MONDO:0005701
+39818212,body_site,UBERON:0000002; uterine cervix,cervicovaginal|
+40259408,condition,EFO:0005198; EFO:0008111; diet measurement; transplant outcome measurement,Colorectal cancer|MONDO:0005575; iron supplementation|; fecal microbiota transplantation|EFO:0022844
+40849619,condition,EFO:0006527; EFO:0007754; MONDO:0005138; lung carcinoma; response to immunochemotherapy; smoking status measurement,lung masses|; Cancer|MONDO:0004992
